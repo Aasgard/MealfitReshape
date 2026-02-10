@@ -1,0 +1,66 @@
+---
+alwaysApply: true
+---
+
+You are an expert in TypeScript, Node.js, NuxtJS, Vue 3, Shadcn Vue, Radix Vue, VueUse, and Tailwind.
+
+## Code style and structure
+- Write concise, technical TypeScript code with accurate examples.
+- Use the Composition API and declarative patterns; avoid the Options API.
+- Prefer iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g. `isLoading`, `hasError`).
+- Structure files as: exported component, composables, helpers, static content, types.
+
+## Naming conventions
+- Use lowercase with dashes for directories (e.g. `components/auth-wizard`).
+- Use PascalCase for component names (e.g. `AuthWizard.vue`).
+- Use camelCase for composables (e.g. `useAuthState.ts`).
+
+## TypeScript usage
+- Use TypeScript for all code; prefer `type` aliases over `interface`.
+- Avoid enums; use `as const` objects instead.
+- Use Vue 3 with TypeScript, leveraging `defineComponent`, `defineProps`, `defineEmits`, and `PropType` when needed.
+
+## Syntax and formatting
+- Use arrow functions for methods, computed properties, and callbacks.
+- Avoid unnecessary curly braces in simple conditionals; keep expressions concise.
+- Use template syntax for declarative rendering.
+
+## UI and styling
+- Use Shadcn Vue, Radix Vue, and Tailwind for components and styling where appropriate.
+- Implement responsive design with Tailwind CSS using a mobile‑first approach.
+
+## Performance optimization
+- Leverage Nuxt's built‑in performance optimizations.
+- Use Suspense for asynchronous components when it improves UX.
+- Implement lazy loading for routes and heavy components.
+- Optimize images: prefer WebP, include intrinsic sizes, and use lazy loading.
+
+## Key conventions
+- Use VueUse for common composables and utilities.
+- Use Pinia for state management.
+- Pay attention to Web Vitals (LCP, CLS, FID).
+- Utilize Nuxt's auto‑imports for components and composables.
+
+## Nuxt‑specific guidelines
+- Follow Nuxt 3/4 directory structure (e.g. `pages/`, `components/`, `composables/`).
+- Use Nuxt's built‑in features:
+  - Auto‑imports for components and composables.
+  - File‑based routing in the `pages/` directory.
+  - Server routes in the `server/` directory.
+  - Nuxt plugins for global functionality.
+- Use `useFetch` and `useAsyncData` for data fetching.
+- Implement SEO best practices with `useHead` and `useSeoMeta`.
+
+## Données et récupération avec VueFire / Firebase
+- Pour toute récupération de données depuis Firestore ou Realtime Database, **privilégie toujours VueFire** (composables comme `useCollection`, `useDocument`, etc.) pour bénéficier de la réactivité et de l’intégration Nuxt/Vue.
+- N’utilise le SDK Firebase "pur" (appels directs via `getDocs`, `onSnapshot`, etc.) **qu’en second recours**, lorsqu’un cas d’usage n’est pas couvert proprement par VueFire.
+- Centralise si possible la logique Firebase/VueFire dans des `composables` dédiés (`useUserData`, `useMeals`, etc.) afin d’éviter la duplication et de simplifier les tests.
+
+## Vue 3 and Composition API best practices
+- Use `<script setup>` syntax for concise component definitions.
+- Leverage `ref`, `reactive`, and `computed` for reactive state management.
+- Use `provide` / `inject` for dependency injection when appropriate.
+- Extract reusable logic into custom composables.
+
+Always follow the official Nuxt.js and Vue.js documentation for up‑to‑date best practices on data fetching, rendering, and routing.

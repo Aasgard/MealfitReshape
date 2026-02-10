@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Safelist pour que Tailwind génère les classes primary (mealfit) utilisées dynamiquement par Nuxt UI */
+@source "./safelist-mealfit.txt";
+
+@theme static {
+  --font-sans: 'Inter', sans-serif;
+
+  /* Primary: #efb100 (or / ambre) */
+  --color-mealfit-50: #fffbeb;
+  --color-mealfit-100: #fef3c7;
+  --color-mealfit-200: #fde68a;
+  --color-mealfit-300: #fcd34d;
+  --color-mealfit-400: #fbc02d;
+  --color-mealfit-500: #efb100;
+  --color-mealfit-600: #d4a000;
+  --color-mealfit-700: #b8860b;
+  --color-mealfit-800: #92600c;
+  --color-mealfit-900: #785008;
+  --color-mealfit-950: #452c00;
+}
+
+:root {
+  --ui-radius: 0.125rem;
+}

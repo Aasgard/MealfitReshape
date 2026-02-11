@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
 
-const route = useRoute()
-const toast = useToast()
 const appConfig = useAppConfig()
-
-console.log(appConfig)
-
-const open = ref(false)
 
 const links = [[{
   label: 'Accueil',
@@ -23,6 +17,12 @@ const links = [[{
   }, {
     label: 'Recettes',
     icon: 'i-lucide-book-open',
+  }, {
+    label: 'Menus de la semaine',
+    icon: 'i-lucide-calendar-days',
+  }, {
+    label: 'Liste de courses',
+    icon: 'i-lucide-shopping-cart',
   }]
 }, {
   label: 'Activité physique',
@@ -45,39 +45,14 @@ const links = [[{
   to: 'https://github.com/nuxt-ui-templates/dashboard',
   target: '_blank'
 }]] satisfies NavigationMenuItem[][]
-
-onMounted(async () => {
-  const cookie = useCookie('cookie-consent')
-  if (cookie.value === 'accepted') {
-    return
-  }
-
-  toast.add({
-    title: 'We use first-party cookies to enhance your experience on our website.',
-    duration: 0,
-    close: false,
-    actions: [{
-      label: 'Accept',
-      color: 'neutral',
-      variant: 'outline',
-      onClick: () => {
-        cookie.value = 'accepted'
-      }
-    }, {
-      label: 'Opt out',
-      color: 'neutral',
-      variant: 'ghost'
-    }]
-  })
-})
 </script>
 
 <template>
   <UDashboardGroup>
     <UDashboardSidebar
       id="default"
-      v-model:open="open"
       collapsible
+      resizable
       class="bg-elevated/25"
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
@@ -113,5 +88,6 @@ onMounted(async () => {
     </UDashboardSidebar>
 
     <slot />
+
   </UDashboardGroup>
 </template>

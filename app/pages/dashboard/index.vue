@@ -31,7 +31,7 @@ const items = [[{
     </template>
 
     <template #body>
-      <UButton to="/dashboard/settings" color="primary">Settings</UButton>
+      <UButton to="/dashboard" color="neutral" class="w-fit">Settings</UButton>
     </template>
   </UDashboardPanel>
 </template>

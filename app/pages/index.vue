@@ -1,3 +1,3 @@
 <template>
-  <UButton to="/login" color="primary">Login</UButton>
+  <UButton to="/dashboard" color="primary">Login</UButton>
 </template>

@@ -1,15 +1,3 @@
-<script setup lang="ts">
-import type { DropdownMenuItem } from '@nuxt/ui'
-
-const items = [[{
-  label: 'New mail',
-  icon: 'i-lucide-send',
-}, {
-  label: 'New customer',
-  icon: 'i-lucide-user-plus',
-}]] satisfies DropdownMenuItem[][]
-</script>
-
 <template>
   <UDashboardPanel id="home">
     <template #header>

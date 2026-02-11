@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
+import { collection } from 'firebase/firestore'
 
 const appConfig = useAppConfig()
+
+const db = useFirestore()
+const recipes = useCollection(collection(db, 'recipes'))
+provide('recipes', recipes)
 
 const links = [[{
   label: 'Accueil',
@@ -14,6 +19,7 @@ const links = [[{
   children: [{
     label: 'Ingrédients',
     icon: 'i-lucide-carrot',
+    to: '/dashboard/ingredients',
   }, {
     label: 'Recettes',
     icon: 'i-lucide-book-open',

@@ -46,22 +46,6 @@ const links = [[{
   target: '_blank'
 }]] satisfies NavigationMenuItem[][]
 
-const groups = computed(() => [{
-  id: 'links',
-  label: 'Go to',
-  items: links.flat()
-}, {
-  id: 'code',
-  label: 'Code',
-  items: [{
-    id: 'source',
-    label: 'View page source',
-    icon: 'i-simple-icons-github',
-    to: `https://github.com/nuxt-ui-templates/dashboard/blob/main/app/pages${route.path === '/' ? '/index' : route.path}.vue`,
-    target: '_blank'
-  }]
-}])
-
 onMounted(async () => {
   const cookie = useCookie('cookie-consent')
   if (cookie.value === 'accepted') {
@@ -94,7 +78,6 @@ onMounted(async () => {
       id="default"
       v-model:open="open"
       collapsible
-      resizable
       class="bg-elevated/25"
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
@@ -129,10 +112,6 @@ onMounted(async () => {
       </template>
     </UDashboardSidebar>
 
-    <UDashboardSearch :groups="groups" />
-
     <slot />
-
-    <NotificationsSlideover />
   </UDashboardGroup>
 </template>

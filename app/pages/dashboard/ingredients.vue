@@ -19,13 +19,6 @@ const ingredients = useCollection<Ingredient>(
 
 const { formatDate } = useDateFormat()
 
-// Liste d'aliments aléatoires
-const randomFoods = [
-  'Pomme', 'Banane', 'Orange', 'Fraise', 'Tomate', 'Carotte', 'Brocoli', 'Épinard',
-  'Poulet', 'Saumon', 'Thon', 'Œuf', 'Riz', 'Pâtes', 'Pain', 'Fromage',
-  'Yaourt', 'Lait', 'Avocat', 'Noix', 'Amande', 'Chocolat', 'Miel', 'Huile d\'olive'
-]
-
 const addRandomIngredient = async () => {
   if (!user.value) {
     toast.add({
@@ -37,6 +30,13 @@ const addRandomIngredient = async () => {
   }
 
   try {
+    // Liste d'aliments aléatoires
+    const randomFoods = [
+      'Pomme', 'Banane', 'Orange', 'Fraise', 'Tomate', 'Carotte', 'Brocoli', 'Épinard',
+      'Poulet', 'Saumon', 'Thon', 'Œuf', 'Riz', 'Pâtes', 'Pain', 'Fromage',
+      'Yaourt', 'Lait', 'Avocat', 'Noix', 'Amande', 'Chocolat', 'Miel', 'Huile d\'olive'
+    ]
+    
     // Sélectionner un aliment aléatoire
     const randomFood = randomFoods[Math.floor(Math.random() * randomFoods.length)]
     

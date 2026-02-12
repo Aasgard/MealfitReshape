@@ -9,7 +9,7 @@ export interface Ingredient {
   /** Mois actifs / de saison (1 = janvier, 12 = décembre) */
   activeMonths: number[]
   /** Référence Firestore vers la catégorie de l'ingrédient */
-  category: DocumentReference<IngredientCategory>
+  category: IngredientCategory
   /** Commentaire ou note sur l'ingrédient */
   comment: string
   /** Nom de l'ingrédient */

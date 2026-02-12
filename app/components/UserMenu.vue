@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { signOut } from 'firebase/auth'
+import { useFirebaseAuth } from 'vuefire'
 import type { DropdownMenuItem } from '@nuxt/ui'
 
 defineProps<{
@@ -7,6 +9,9 @@ defineProps<{
 
 const colorMode = useColorMode()
 const appConfig = useAppConfig()
+const router = useRouter()
+const toast = useToast()
+const auth = useFirebaseAuth()
 
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone']
@@ -42,7 +47,7 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       collisionPadding: 16
     },
     children: colors.map(color => ({
-      label: color,
+      label: color.charAt(0).toUpperCase() + color.slice(1),
       chip: color,
       slot: 'chip',
       checked: appConfig.ui.colors.primary === color,
@@ -61,7 +66,7 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       collisionPadding: 16
     },
     children: neutrals.map(color => ({
-      label: color,
+      label: color.charAt(0).toUpperCase() + color.slice(1),
       chip: color === 'neutral' ? 'old-neutral' : color,
       slot: 'chip',
       type: 'checkbox',
@@ -104,6 +109,35 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
   label: 'Log out',
   icon: 'i-lucide-log-out',
   color: 'error',
+  onSelect: async (e: Event) => {
+    e.preventDefault()
+    
+    if (!auth) {
+      toast.add({
+        title: 'Erreur',
+        description: 'Service d\'authentification non disponible',
+        color: 'error'
+      })
+      return
+    }
+    
+    try {
+      await signOut(auth)
+      toast.add({
+        title: 'Déconnexion réussie',
+        description: 'Vous avez été déconnecté avec succès',
+        color: 'success'
+      })
+      await router.push('/login')
+    } catch (error: any) {
+      console.error('Erreur lors de la déconnexion:', error)
+      toast.add({
+        title: 'Erreur de déconnexion',
+        description: error.message || 'Une erreur est survenue lors de la déconnexion',
+        color: 'error'
+      })
+    }
+  }
 }]]))
 </script>
 

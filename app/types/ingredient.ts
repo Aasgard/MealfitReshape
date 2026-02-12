@@ -15,5 +15,7 @@ export interface Ingredient {
   /** Nom de l'ingrédient */
   label: string
   /** Identifiant du document (présent quand lu depuis une collection via VueFire) */
-  id?: string
+  id: string
+  /** Propriétaire de l'ingrédient */
+  owner: string | null
 }

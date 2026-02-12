@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { collection } from 'firebase/firestore'
-import { useCollection, useFirestore } from 'vuefire'
+import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
+import { collection, or, query, where } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 
-const ingredientsRef = collection(useFirestore(), 'ingredients')
-const ingredients = useCollection<Ingredient>(ingredientsRef)
+const db = useFirestore()
+const user = useCurrentUser()
+
+const ingredients = useCollection<Ingredient>(
+  () => query(
+    collection(db, 'ingredients'),
+    or(
+      where('owner', '==', user.value!.uid),
+      where('owner', '==', null)
+    )
+  )
+)
 </script>
 
 <template>
@@ -25,13 +35,13 @@ const ingredients = useCollection<Ingredient>(ingredientsRef)
     </template>
 
     <template #body>
-      <UEmpty
-        v-if="ingredients.length === 0"
-        icon="i-lucide-carrot"
-        title="Aucun ingrédient"
-        description="Vous n'avez pas encore ajouté d'ingrédient. Ajoutez-en un pour commencer."
-      />
-      <pre v-else>{{ ingredients }}</pre>
+      <UEmpty v-if="ingredients.length === 0" icon="i-lucide-carrot" title="Aucun ingrédient"
+        description="Vous n'avez pas encore ajouté d'ingrédient. Ajoutez-en un pour commencer." />
+      <UList>
+        <UCard v-for="ingredient in ingredients" :key="ingredient.id">
+          <template #header>{{ ingredient.label }} - {{ ingredient.owner }}</template>
+        </UCard>
+      </UList>
     </template>
   </UDashboardPanel>
 </template>

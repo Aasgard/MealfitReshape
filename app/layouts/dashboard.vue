@@ -23,6 +23,7 @@ const links = [[{
   }, {
     label: 'Recettes',
     icon: 'i-lucide-book-open',
+    to: '/dashboard/recipes',
   }, {
     label: 'Menus de la semaine',
     icon: 'i-lucide-calendar-days',

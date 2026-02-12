@@ -7,6 +7,9 @@ const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
 
+/** Génère une URL Picsum différente selon la clé (évite la même image partout) */
+const getPicsumImageUrl = (seed: string) => `https://picsum.photos/400/300?random=${seed}`
+
 const ingredients = useCollection<Ingredient>(
   () => query(
     collection(db, 'ingredients'),
@@ -66,7 +69,8 @@ const addRandomIngredient = async () => {
       owner: user.value.uid,
       createdAt: now,
       updatedAt: now,
-      isPublic: false
+      isPublic: false,
+      imageUrl: getPicsumImageUrl(Date.now().toString())
     })
 
     toast.add({
@@ -103,9 +107,23 @@ const addRandomIngredient = async () => {
     </template>
 
     <template #body>
-      <UEmpty v-if="ingredients.length === 0" icon="i-lucide-carrot" title="Aucun ingrédient"
-        description="Vous n'avez pas encore ajouté d'ingrédient. Ajoutez-en un pour commencer." />
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <template v-if="ingredients.length === 0">
+          <div
+            v-for="i in 12"
+            :key="`skeleton-${i}`"
+            class="rounded-lg border border-default bg-card p-4"
+          >
+            <USkeleton class="h-48 w-full rounded-lg mb-4" />
+            <USkeleton class="h-6 w-3/4 mb-2" />
+            <USkeleton class="h-4 w-full mb-2" />
+            <USkeleton class="h-4 w-2/3 mb-4" />
+            <div class="flex items-center justify-between">
+              <USkeleton class="h-4 w-24" />
+              <USkeleton class="h-5 w-16 rounded-full" />
+            </div>
+          </div>
+        </template>
         <UBlogPost
           v-for="ingredient in ingredients"
           :key="ingredient.id"
@@ -113,7 +131,7 @@ const addRandomIngredient = async () => {
           :description="ingredient.comment"
           :date="formatDate(ingredient.updatedAt)"
           :badge="ingredient.isPublic ? 'Public' : 'Privé'"
-          image="https://hips.hearstapps.com/hmg-prod/images/fuel-hiit-workout-refuel-1565799893.jpg?crop=0.668xw:1.00xh;0.187xw,0"
+          :image="ingredient.imageUrl || getPicsumImageUrl(ingredient.id)"
         />
       </div>
     </template>

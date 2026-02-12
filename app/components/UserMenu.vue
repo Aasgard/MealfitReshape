@@ -16,17 +16,25 @@ const auth = useFirebaseAuth()
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone']
 
-const currentUser = useCurrentUser()
+const currentUser = await useCurrentUser()
 
-const user = computed(() => ({
-  name: currentUser.value!.displayName,
-  avatar: {
-    src: currentUser.value!.photoURL,
-    alt: currentUser.value!.displayName
+if (!currentUser.value) {
+  // Handle the case where the user is not logged in, e.g.:
+  // You might want to redirect or show a login prompt
+  // For now, log and return
+  console.warn('User is not logged in.')
+}
+
+const user = computed(() => {
+  const val = currentUser.value
+  return {
+    name: val?.displayName || val?.email || '',
+    avatar: {
+      src: val?.photoURL || '',
+      alt: val?.displayName || val?.email || '',
+    }
   }
-}))
-
-console.log(currentUser)
+})
 
 const items = computed<DropdownMenuItem[][]>(() => ([[{
   type: 'label',
@@ -145,7 +153,7 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
 </script>
 
 <template>
-  <UDropdownMenu :items="items" :content="{ align: 'center', collisionPadding: 12 }" :ui="{ content: 'w-48' }">
+  <UDropdownMenu :items="items" :content="{ align: 'center', collisionPadding: 12 }" :ui="{ content: 'w-65' }">
     <UButton v-bind="{
       ...user,
       label: collapsed ? undefined : user?.name,

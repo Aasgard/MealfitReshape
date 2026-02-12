@@ -1,4 +1,4 @@
-import type { DocumentReference } from 'firebase/firestore'
+import type { DocumentReference, Timestamp } from 'firebase/firestore'
 import type { IngredientCategory } from './ingredientCategory'
 
 /**
@@ -18,4 +18,10 @@ export interface Ingredient {
   id: string
   /** Propriétaire de l'ingrédient */
   owner: string | null
+  /** Date de dernière mise à jour */
+  updatedAt: Timestamp
+  /** Date de création */
+  createdAt: Timestamp
+  /** Indique si l'ingrédient est public */
+  isPublic: boolean
 }

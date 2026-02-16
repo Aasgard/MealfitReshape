@@ -22,3 +22,6 @@ logs
 .env
 .env.*
 !.env.example
+
+# Firebase service account
+mealfitreshape-firebase-adminsdk-fbsvc-fa4bd1fdf9.json

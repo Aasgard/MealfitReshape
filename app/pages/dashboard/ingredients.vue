@@ -110,7 +110,7 @@ const addRandomIngredient = async () => {
           v-for="ingredient in ingredients"
           :key="ingredient.id"
           :title="ingredient.label"
-          :description="ingredient.comment"
+          :description="ingredient.category?.label"
           :date="formatDate(ingredient.updatedAt)"
           :badge="ingredient.isPublic ? 'Public' : 'Privé'"
           image="https://hips.hearstapps.com/hmg-prod/images/fuel-hiit-workout-refuel-1565799893.jpg?crop=0.668xw:1.00xh;0.187xw,0"

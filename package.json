@@ -7,12 +7,14 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "seed:ingredient-categories": "node scripts/seed-data/ingredientCategories.cjs"
   },
   "dependencies": {
     "@nuxt/ui": "^4.4.0",
     "date-fns": "^4.1.0",
     "firebase": "^12.9.0",
+    "firebase-admin": "^13.6.1",
     "nuxt": "^4.3.1",
     "nuxt-vuefire": "^1.1.0",
     "tailwindcss": "^4.1.18",

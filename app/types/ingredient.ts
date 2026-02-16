@@ -24,4 +24,6 @@ export interface Ingredient {
   createdAt: Timestamp
   /** Indique si l'ingrédient est public */
   isPublic: boolean
+  /** URL de l'image de l'ingrédient */
+  imageUrl?: string
 }

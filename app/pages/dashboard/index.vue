@@ -2,18 +2,19 @@
 import { useCollection, useFirestore } from 'vuefire'
 import { collection, query, orderBy } from 'firebase/firestore'
 import type { IngredientCategory } from '~/types/ingredientCategory'
+import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
-const db = useFirestore()
+const selectedCategory = ref<IngredientCategory | undefined>(undefined)
 
 const categories = useCollection<IngredientCategory>(
   () => query(
-    collection(db, 'ingredientCategories'),
+    collection(useFirestore(), 'ingredientCategories'),
     orderBy('order', 'asc')
   ), 
   { once: true }
 )
 
-const selectedCategory = ref<any>(undefined)
+const categoriesStore = useIngredientCategoriesStore()
 </script>
 
 <template>

@@ -1,13 +1,16 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxt/ui', 'nuxt-vuefire'],
+  modules: ['@nuxt/ui', 'nuxt-vuefire', '@pinia/nuxt'],
   css: ['~/assets/css/main.css'],
   ssr: false,
   routeRules: {
     '/': { ssr: true, appLayout: false },
     '/login': { ssr: true, appLayout: false },
     '/dashboard/**': { ssr: false, appLayout: 'dashboard' },
+  },
+  pinia: {
+    storesDirs: ['app/stores/**'],
   },
   vuefire: {
     auth: {

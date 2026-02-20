@@ -1,18 +1,8 @@
 <script setup lang="ts">
-import { useCollection, useFirestore } from 'vuefire'
-import { collection, query, orderBy } from 'firebase/firestore'
 import type { IngredientCategory } from '~/types/ingredientCategory'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
 const selectedCategory = ref<IngredientCategory | undefined>(undefined)
-
-const categories = useCollection<IngredientCategory>(
-  () => query(
-    collection(useFirestore(), 'ingredientCategories'),
-    orderBy('order', 'asc')
-  ), 
-  { once: true }
-)
 
 const categoriesStore = useIngredientCategoriesStore()
 </script>
@@ -40,16 +30,19 @@ const categoriesStore = useIngredientCategoriesStore()
         <h1 class="text-2xl font-bold">Catégories d'ingrédients</h1>
         
         <div class="max-w-xs">
-          <USelectMenu
-            v-model="selectedCategory"
-            :items="categories"
-            placeholder="Choisir une catégorie..."
-            :icon="selectedCategory?.icon ? `i-lucide-${selectedCategory.icon}` : 'i-lucide-list'"
-          >
-            <template #item-leading="{ item }">
-              <UIcon :name="`i-lucide-${item.icon}`" class="size-4" />
-            </template>
-          </USelectMenu>
+          <UFormField label="Choisir une catégorie" size="lg">
+            <USelectMenu
+              v-model="selectedCategory"
+              :items="categoriesStore.categories"
+              placeholder="Sélectionnez une catégorie"
+              class="w-full"
+              :icon="selectedCategory?.icon ? `i-lucide-${selectedCategory.icon}` : 'i-lucide-list'"
+            >
+              <template #item-leading="{ item }">
+                <UIcon :name="`i-lucide-${item.icon}`" class="size-4" />
+              </template>
+            </USelectMenu>
+          </UFormField>
         </div>
       </div>
     </template>

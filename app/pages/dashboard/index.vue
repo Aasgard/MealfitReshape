@@ -2,7 +2,10 @@
 import type { IngredientCategory } from '~/types/ingredientCategory'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
-
+useSeoMeta({
+  title: 'Dashboard - Accueil - Mealfit',
+  description: 'Dashboard - Accueil - Mealfit',
+})
 
 const selectedCategory = ref<IngredientCategory | undefined>(undefined)
 

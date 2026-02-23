@@ -3,6 +3,11 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { useFirebaseAuth } from 'vuefire'
 import type { ButtonProps } from '@nuxt/ui'
 
+useSeoMeta({
+  title: 'Connexion - Mealfit',
+  description: 'Connexion - Mealfit',
+})
+
 const router = useRouter()
 const toast = useToast()
 const auth = useFirebaseAuth()

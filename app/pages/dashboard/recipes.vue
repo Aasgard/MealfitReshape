@@ -6,6 +6,11 @@ import type { TableColumn } from '@nuxt/ui'
 import type { Recipe } from '~/types/recipe'
 import { fakeRecipes } from '~/data/fakeRecipes'
 
+useSeoMeta({
+  title: 'Dashboard - Recettes - Mealfit',
+  description: 'Dashboard - Recettes - Mealfit',
+})
+
 const db = useFirestore()
 const user = useCurrentUser()
 

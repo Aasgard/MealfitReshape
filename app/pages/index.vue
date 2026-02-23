@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { ButtonProps } from '@nuxt/ui'
 
+useSeoMeta({
+  title: 'Accueil - Mealfit',
+  description: 'Accueil - Mealfit',
+})
+
 const links = ref<ButtonProps[]>([
   {
     label: 'Dashboard',

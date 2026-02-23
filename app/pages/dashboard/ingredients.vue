@@ -3,6 +3,11 @@ import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, addDoc, doc, Timestamp } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 
+useSeoMeta({
+  title: 'Dashboard - Ingrédients - Mealfit',
+  description: 'Dashboard - Ingrédients - Mealfit',
+})
+
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()

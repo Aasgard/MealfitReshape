@@ -2,6 +2,8 @@
 import type { IngredientCategory } from '~/types/ingredientCategory'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
+
+
 const selectedCategory = ref<IngredientCategory | undefined>(undefined)
 
 const categoriesStore = useIngredientCategoriesStore()

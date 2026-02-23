@@ -4,6 +4,18 @@ export default defineNuxtConfig({
   modules: ['@nuxt/ui', 'nuxt-vuefire', '@pinia/nuxt'],
   css: ['~/assets/css/main.css'],
   ssr: false,
+  app: {
+    head: {
+      title: 'Mealfit',
+      meta: [{ name: 'description', content: 'Mealfit' }],
+      link: [{
+        rel: 'icon',
+        type: 'image/x-png',
+        href: '/logo.png'
+      }]
+    },
+    
+  },
   routeRules: {
     '/': { ssr: true, appLayout: false },
     '/login': { ssr: true, appLayout: false },

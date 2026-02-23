@@ -1,4 +1,4 @@
-import type { DocumentReference, Timestamp } from 'firebase/firestore'
+import type { Timestamp } from 'firebase/firestore'
 import type { IngredientCategory } from './ingredientCategory'
 
 /**

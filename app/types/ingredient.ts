@@ -26,4 +26,19 @@ export interface Ingredient {
   isPublic: boolean
   /** URL de l'image de l'ingrédient */
   imageUrl?: string
+  unit?: 'g' | 'ml'
+  /** Valeurs nutritionnelles par 100 unités de l'ingrédient */
+  valuesBy100?: {
+    calories: number
+    protein: number
+    carbohydrates: number
+    fat: number
+  }
+  /** Tailles disponibles pour l'ingrédient */
+  sizes?: Size[]
+}
+
+interface Size {
+  label: string
+  value: number
 }

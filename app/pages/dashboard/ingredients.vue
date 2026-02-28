@@ -102,16 +102,14 @@ const addRandomIngredient = async () => {
         carbohydrates: Math.floor(Math.random() * 10) + 10,
         fat: Math.floor(Math.random() * 10) + 10
       },
-      sizes: [
-        {
+      sizes: [{
           label: 'Tranche',
-          value: 100
+          value: Math.floor(Math.random() * 10) + 1
         },
         {
           label: 'Pot',
-          value: 200
-        }
-      ],
+          value: Math.floor(Math.random() * 10) + 1
+        }],
       imageUrl: getPicsumImageUrl(Date.now().toString())
     })
 
@@ -219,14 +217,19 @@ const addRandomIngredient = async () => {
             <div v-if="ingredient.sizes?.length" class="mt-1 pt-2 border-t border-default">
               <p class="text-xs text-dimmed mb-1.5">Portions</p>
               <div class="flex flex-wrap gap-1">
-                <span
+                <UTooltip
                   v-for="size in ingredient.sizes"
                   :key="size.label"
-                  class="inline-flex items-center gap-0.5 bg-accented rounded px-1.5 py-0.5 text-[10px] text-muted"
+                  :text="ingredient.valuesBy100
+                    ? `${Math.round(size.value * ingredient.valuesBy100.calories / 100)} kcal`
+                    : undefined"
+                  :disabled="!ingredient.valuesBy100"
                 >
-                  <span>{{ size.label }}</span>
-                  <span class="font-medium text-highlighted">{{ size.value }}{{ ingredient.unit ?? 'g' }}</span>
-                </span>
+                  <span class="inline-flex items-center gap-0.5 bg-accented rounded px-1.5 py-0.5 text-[10px] text-muted cursor-default">
+                    <span>{{ size.label }}</span>
+                    <span class="font-medium text-highlighted">{{ size.value }}{{ ingredient.unit ?? 'g' }}</span>
+                  </span>
+                </UTooltip>
               </div>
             </div>
 

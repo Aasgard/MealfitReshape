@@ -34,11 +34,4 @@ export interface Ingredient {
     carbohydrates: number
     fat: number
   }
-  /** Tailles disponibles pour l'ingrédient */
-  sizes?: Size[]
-}
-
-interface Size {
-  label: string
-  value: number
 }

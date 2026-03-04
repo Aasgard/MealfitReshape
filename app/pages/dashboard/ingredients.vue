@@ -9,10 +9,9 @@ useSeoMeta({
 })
 
 const db = useFirestore()
+const { formatDate } = useDateFormat()
 const user = useCurrentUser()
 const toast = useToast()
-
-const getPicsumImageUrl = (seed: string) => `https://picsum.photos/400/300?random=${seed}`
 
 const ingredients = useCollection<Ingredient>(
   () => query(
@@ -25,9 +24,21 @@ const ingredients = useCollection<Ingredient>(
 )
 await ingredients.promise.value
 
-console.log(ingredients.value)
+const slideoverOpen = ref(false)
+const selectedIngredient = ref<Ingredient | null>(null)
 
-const { formatDate } = useDateFormat()
+const editModalOpen = ref(false)
+const editingIngredient = ref<Ingredient | null>(null)
+
+const openEditModal = (ingredient: Ingredient) => {
+  editingIngredient.value = ingredient
+  editModalOpen.value = true
+}
+
+const selectIngredient = (ingredient: Ingredient) => {
+  selectedIngredient.value = ingredient
+  slideoverOpen.value = true
+}
 
 const deleteIngredient = async (id: string) => {
   try {
@@ -77,11 +88,11 @@ const addRandomIngredient = async () => {
         activeMonths.push(month)
       }
     }
-    activeMonths.sort((a, b) => a - b)
+    // activeMonths.sort((a, b) => a - b)
 
     // Créer une référence vers une catégorie par défaut (on utilise un ID fictif ou on crée une référence)
     // Pour simplifier, on crée une référence vers une catégorie "Autre"
-    const categoryRef = doc(db, 'ingredientCategories', 'bS7sl5nSoubEWgWTVqMl')
+    const categoryRef = doc(db, 'ingredientCategories', 'vegetables')
 
     const now = Timestamp.now()
     
@@ -91,26 +102,17 @@ const addRandomIngredient = async () => {
       comment: `Ingrédient ajouté aléatoirement`,
       activeMonths,
       category: categoryRef,
-      owner: user.value.uid,
+      owner: null,
       createdAt: now,
       updatedAt: now,
-      isPublic: false,
+      isPublic: true,
       unit: Math.random() > 0.5 ? 'g' : 'ml',
       valuesBy100: {
         calories: Math.floor(Math.random() * 100) + 100,
         protein: Math.floor(Math.random() * 10) + 10,
         carbohydrates: Math.floor(Math.random() * 10) + 10,
         fat: Math.floor(Math.random() * 10) + 10
-      },
-      sizes: [{
-          label: 'Tranche',
-          value: Math.floor(Math.random() * 10) + 1
-        },
-        {
-          label: 'Pot',
-          value: Math.floor(Math.random() * 10) + 1
-        }],
-      imageUrl: getPicsumImageUrl(Date.now().toString())
+      }
     })
 
     toast.add({
@@ -167,33 +169,31 @@ const addRandomIngredient = async () => {
         <div
           v-for="ingredient in ingredients"
           :key="ingredient.id"
-          class="rounded-xl border border-default bg-default overflow-hidden flex flex-col"
+          class="rounded-xl border border-default bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+          @click="selectIngredient(ingredient)"
         >
-          <!-- Image avec bouton supprimer -->
-          <div class="relative">
-            <img
-              :src="ingredient.imageUrl || getPicsumImageUrl(ingredient.id)"
-              :alt="ingredient.label"
-              class="w-full h-48 object-cover"
-            />
-            <UButton
-              color="error"
-              variant="solid"
-              size="xs"
-              class="absolute top-2 right-2 opacity-80 hover:opacity-100 transition-opacity"
-              icon="i-lucide-trash-2"
-              @click.stop="deleteIngredient(ingredient.id)"
-            />
-          </div>
-
           <!-- Contenu de la carte -->
           <div class="p-4 flex flex-col gap-2 flex-1">
             <div class="flex items-start justify-between gap-2">
               <p class="font-semibold text-highlighted truncate">{{ ingredient.label }}</p>
-              <UBadge :label="ingredient.isPublic ? 'Public' : 'Privé'" variant="subtle" size="sm" class="shrink-0" />
+              <div class="flex items-center gap-1.5 shrink-0">
+                <UBadge v-if="!ingredient.isPublic" label="Privé" variant="subtle" size="sm" />
+                <UDropdownMenu
+                  v-if="!ingredient.isPublic"
+                  :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteIngredient(ingredient.id) }]]"
+                  :ui="{ content: 'w-40' }"
+                >
+                  <UButton
+                    icon="i-lucide-ellipsis-vertical"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    @click.stop
+                  />
+                </UDropdownMenu>
+              </div>
             </div>
             <p v-if="ingredient.category?.label" class="text-sm text-muted">{{ ingredient.category.label }}</p>
-            <p class="text-xs text-dimmed">{{ formatDate(ingredient.updatedAt) }}</p>
 
             <!-- Disponibilité par mois -->
             <div class="mt-1">
@@ -213,51 +213,25 @@ const addRandomIngredient = async () => {
               </div>
             </div>
 
-            <!-- Tailles -->
-            <div v-if="ingredient.sizes?.length" class="mt-1 pt-2 border-t border-default">
-              <p class="text-xs text-dimmed mb-1.5">Portions</p>
-              <div class="flex flex-wrap gap-1">
-                <UTooltip
-                  v-for="size in ingredient.sizes"
-                  :key="size.label"
-                  :text="ingredient.valuesBy100
-                    ? `${Math.round(size.value * ingredient.valuesBy100.calories / 100)} kcal`
-                    : undefined"
-                  :disabled="!ingredient.valuesBy100"
-                >
-                  <span class="inline-flex items-center gap-0.5 bg-accented rounded px-1.5 py-0.5 text-[10px] text-muted cursor-default">
-                    <span>{{ size.label }}</span>
-                    <span class="font-medium text-highlighted">{{ size.value }}{{ ingredient.unit ?? 'g' }}</span>
-                  </span>
-                </UTooltip>
-              </div>
-            </div>
-
-            <!-- Valeurs nutritionnelles -->
-            <div v-if="ingredient.valuesBy100" class="mt-1 pt-2 border-t border-default">
-              <p class="text-xs text-dimmed mb-1.5">Pour 100{{ ingredient.unit ?? 'g' }}</p>
-              <div class="grid grid-cols-4 gap-1 text-center">
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-[11px] font-semibold text-highlighted">{{ ingredient.valuesBy100.calories }}</span>
-                  <span class="text-[10px] text-dimmed">kcal</span>
-                </div>
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-[11px] font-semibold text-highlighted">{{ ingredient.valuesBy100.protein }}g</span>
-                  <span class="text-[10px] text-dimmed">Prot.</span>
-                </div>
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-[11px] font-semibold text-highlighted">{{ ingredient.valuesBy100.carbohydrates }}g</span>
-                  <span class="text-[10px] text-dimmed">Gluc.</span>
-                </div>
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-[11px] font-semibold text-highlighted">{{ ingredient.valuesBy100.fat }}g</span>
-                  <span class="text-[10px] text-dimmed">Lip.</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </template>
   </UDashboardPanel>
+
+  <USlideover
+    v-model:open="slideoverOpen"
+    :title="selectedIngredient?.label"
+    :description="selectedIngredient ? `Modifié le ${formatDate(selectedIngredient.updatedAt)}` : undefined"
+  >
+    <template #body>
+      <pre class="text-xs text-muted whitespace-pre-wrap break-all">{{ JSON.stringify(selectedIngredient, null, 2) }}</pre>
+    </template>
+  </USlideover>
+
+  <UModal v-model:open="editModalOpen" :title="`Modifier — ${editingIngredient?.label}`">
+    <template #body>
+      <p class="text-sm text-muted">Formulaire de modification à venir.</p>
+    </template>
+  </UModal>
 </template>

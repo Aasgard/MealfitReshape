@@ -20,7 +20,7 @@ const ingredients = useCollection<Ingredient>(
       where('owner', '==', user.value!.uid),
       where('owner', '==', null)
     )
-  )
+  ), { once: true }
 )
 await ingredients.promise.value
 
@@ -195,23 +195,6 @@ const addRandomIngredient = async () => {
             </div>
             <p v-if="ingredient.category?.label" class="text-sm text-muted">{{ ingredient.category.label }}</p>
 
-            <!-- Disponibilité par mois -->
-            <div class="mt-1">
-              <p class="text-xs text-dimmed mb-1.5">Disponibilité</p>
-              <div class="grid grid-cols-12 gap-0.5">
-                <div
-                  v-for="(label, idx) in ['J','F','M','A','M','J','J','A','S','O','N','D']"
-                  :key="idx"
-                  :title="['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][idx]"
-                  class="flex items-center justify-center rounded text-[10px] font-medium h-5 transition-colors"
-                  :class="ingredient.activeMonths?.includes(idx + 1)
-                    ? 'bg-primary text-white'
-                    : 'bg-accented text-dimmed'"
-                >
-                  {{ label }}
-                </div>
-              </div>
-            </div>
 
           </div>
         </div>
@@ -225,7 +208,69 @@ const addRandomIngredient = async () => {
     :description="selectedIngredient ? `Modifié le ${formatDate(selectedIngredient.updatedAt)}` : undefined"
   >
     <template #body>
-      <pre class="text-xs text-muted whitespace-pre-wrap break-all">{{ JSON.stringify(selectedIngredient, null, 2) }}</pre>
+      <div class="flex flex-col gap-6">
+        <!-- Disponibilité par mois -->
+        <div>
+          <p class="text-xs text-dimmed mb-2">Disponibilité</p>
+          <div class="grid grid-cols-12 gap-1">
+            <div
+              v-for="(label, idx) in ['J','F','M','A','M','J','J','A','S','O','N','D']"
+              :key="idx"
+              :title="['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][idx]"
+              class="flex items-center justify-center rounded text-[10px] font-medium h-6 transition-colors"
+              :class="selectedIngredient?.activeMonths?.includes(idx + 1)
+                ? 'bg-primary text-white'
+                : 'bg-accented text-dimmed'"
+            >
+              {{ label }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Commentaire -->
+        <div v-if="selectedIngredient?.comment">
+          <p class="text-xs text-dimmed mb-1">Commentaire</p>
+          <p class="text-sm text-muted">{{ selectedIngredient.comment }}</p>
+        </div>
+
+        <!-- Valeurs nutritionnelles -->
+        <div v-if="selectedIngredient?.valuesBy100">
+          <p class="text-xs text-dimmed mb-2">Pour 100{{ selectedIngredient.unit ?? 'g' }}</p>
+          <div class="grid grid-cols-4 gap-2 text-center">
+            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
+              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.calories }}</span>
+              <span class="text-[10px] text-dimmed">kcal</span>
+            </div>
+            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
+              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.protein }}g</span>
+              <span class="text-[10px] text-dimmed">Protéines</span>
+            </div>
+            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
+              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.carbohydrates }}g</span>
+              <span class="text-[10px] text-dimmed">Glucides</span>
+            </div>
+            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
+              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.fat }}g</span>
+              <span class="text-[10px] text-dimmed">Lipides</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Debug -->
+        <UCollapsible>
+          <UButton
+            label="Debug"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            trailing-icon="i-lucide-chevron-down"
+            class="w-full justify-between text-dimmed"
+          />
+          <template #content>
+            <pre class="text-xs text-muted whitespace-pre-wrap break-all mt-2 p-3 rounded-lg">{{ JSON.stringify(selectedIngredient, null, 2) }}</pre>
+          </template>
+        </UCollapsible>
+      </div>
     </template>
   </USlideover>
 

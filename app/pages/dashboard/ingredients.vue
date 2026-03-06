@@ -88,7 +88,6 @@ const addRandomIngredient = async () => {
         activeMonths.push(month)
       }
     }
-    // activeMonths.sort((a, b) => a - b)
 
     // Créer une référence vers une catégorie par défaut (on utilise un ID fictif ou on crée une référence)
     // Pour simplifier, on crée une référence vers une catégorie "Autre"
@@ -108,10 +107,10 @@ const addRandomIngredient = async () => {
       isPublic: true,
       unit: Math.random() > 0.5 ? 'g' : 'ml',
       valuesBy100: {
-        calories: Math.floor(Math.random() * 100) + 100,
-        protein: Math.floor(Math.random() * 10) + 10,
-        carbohydrates: Math.floor(Math.random() * 10) + 10,
-        fat: Math.floor(Math.random() * 10) + 10
+        calories: Math.floor(Math.random() * 250) + 100,
+        protein: Math.floor(Math.random() * 100) + 10,
+        carbohydrates: Math.floor(Math.random() * 100) + 10,
+        fat: Math.floor(Math.random() * 100) + 10
       }
     })
 
@@ -209,6 +208,64 @@ const addRandomIngredient = async () => {
   >
     <template #body>
       <div class="flex flex-col gap-6">
+        <!-- Catégorie -->
+        <div v-if="selectedIngredient?.category?.label">
+          <p class="text-xs text-dimmed mb-1">Catégorie</p>
+          <p class="text-sm text-muted">{{ selectedIngredient.category.label }}</p>
+        </div>
+
+        <!-- Valeurs nutritionnelles -->
+        <div v-if="selectedIngredient?.valuesBy100">
+          <div class="flex items-baseline justify-between mb-4">
+            <p class="text-xs text-dimmed">Pour 100{{ selectedIngredient.unit ?? 'g' }}</p>
+            <div class="flex items-baseline gap-1">
+              <span class="text-2xl font-bold text-highlighted">{{ selectedIngredient.valuesBy100.calories }}</span>
+              <span class="text-xs text-dimmed">kcal</span>
+            </div>
+          </div>
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5 w-24 shrink-0">
+                <UIcon name="i-lucide-wheat" class="size-3.5 text-muted shrink-0" />
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">Glucides</span>
+              </div>
+              <div class="flex-1 h-2 rounded-full bg-accented overflow-hidden">
+                <div
+                  class="h-full rounded-full bg-primary transition-all duration-500"
+                  :style="{ width: `${Math.min(100, (selectedIngredient.valuesBy100.carbohydrates / 100) * 100)}%` }"
+                />
+              </div>
+              <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.carbohydrates }}g</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5 w-24 shrink-0">
+                <UIcon name="i-lucide-dumbbell" class="size-3.5 text-muted shrink-0" />
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">Protéines</span>
+              </div>
+              <div class="flex-1 h-2 rounded-full bg-accented overflow-hidden">
+                <div
+                  class="h-full rounded-full bg-primary/60 transition-all duration-500"
+                  :style="{ width: `${Math.min(100, (selectedIngredient.valuesBy100.protein / 100) * 100)}%` }"
+                />
+              </div>
+              <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.protein }}g</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5 w-24 shrink-0">
+                <UIcon name="i-lucide-droplets" class="size-3.5 text-muted shrink-0" />
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">Lipides</span>
+              </div>
+              <div class="flex-1 h-2 rounded-full bg-accented overflow-hidden">
+                <div
+                  class="h-full rounded-full bg-primary/30 transition-all duration-500"
+                  :style="{ width: `${Math.min(100, (selectedIngredient.valuesBy100.fat / 100) * 100)}%` }"
+                />
+              </div>
+              <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.fat }}g</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Disponibilité par mois -->
         <div>
           <p class="text-xs text-dimmed mb-2">Disponibilité</p>
@@ -231,29 +288,6 @@ const addRandomIngredient = async () => {
         <div v-if="selectedIngredient?.comment">
           <p class="text-xs text-dimmed mb-1">Commentaire</p>
           <p class="text-sm text-muted">{{ selectedIngredient.comment }}</p>
-        </div>
-
-        <!-- Valeurs nutritionnelles -->
-        <div v-if="selectedIngredient?.valuesBy100">
-          <p class="text-xs text-dimmed mb-2">Pour 100{{ selectedIngredient.unit ?? 'g' }}</p>
-          <div class="grid grid-cols-4 gap-2 text-center">
-            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
-              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.calories }}</span>
-              <span class="text-[10px] text-dimmed">kcal</span>
-            </div>
-            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
-              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.protein }}g</span>
-              <span class="text-[10px] text-dimmed">Protéines</span>
-            </div>
-            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
-              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.carbohydrates }}g</span>
-              <span class="text-[10px] text-dimmed">Glucides</span>
-            </div>
-            <div class="flex flex-col gap-0.5 bg-accented rounded-lg p-2">
-              <span class="text-sm font-semibold text-highlighted">{{ selectedIngredient.valuesBy100.fat }}g</span>
-              <span class="text-[10px] text-dimmed">Lipides</span>
-            </div>
-          </div>
         </div>
 
         <!-- Debug -->

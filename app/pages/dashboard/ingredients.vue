@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, or, query, where, addDoc, deleteDoc, doc, Timestamp, collectionGroup } from 'firebase/firestore'
+import { collection, or, query, where, addDoc, deleteDoc, doc, Timestamp, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 
 useSeoMeta({
@@ -8,8 +8,8 @@ useSeoMeta({
   description: 'Dashboard - Ingrédients - Mealfit',
 })
 
-const db = useFirestore()
 const { formatDate } = useDateFormat()
+const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
 
@@ -19,8 +19,9 @@ const ingredients = useCollection<Ingredient>(
     or(
       where('owner', '==', user.value!.uid),
       where('owner', '==', null)
-    )
-  ), { once: true }
+    ),
+    orderBy('label', 'asc')
+  )
 )
 await ingredients.promise.value
 
@@ -101,10 +102,10 @@ const addRandomIngredient = async () => {
       comment: `Ingrédient ajouté aléatoirement`,
       activeMonths,
       category: categoryRef,
-      owner: null,
+      owner: user.value!.uid,
       createdAt: now,
       updatedAt: now,
-      isPublic: true,
+      isPublic: false,
       unit: Math.random() > 0.5 ? 'g' : 'ml',
       valuesBy100: {
         calories: Math.floor(Math.random() * 250) + 100,

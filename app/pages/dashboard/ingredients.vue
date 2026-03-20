@@ -25,6 +25,14 @@ const ingredients = useCollection<Ingredient>(
 )
 await ingredients.promise.value
 
+const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
+
+const variationEntries = (ing: Ingredient | null) => {
+  if (!ing?.variations) return []
+  return Object.entries(ing.variations).map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+}
+
 const slideoverOpen = ref(false)
 const selectedIngredient = ref<Ingredient | null>(null)
 
@@ -112,6 +120,12 @@ const addRandomIngredient = async () => {
         protein: Math.floor(Math.random() * 100) + 10,
         carbohydrates: Math.floor(Math.random() * 100) + 10,
         fat: Math.floor(Math.random() * 100) + 10
+      },
+      variations: {
+        "ubUZGYEAEaybEe": {
+          label: "Pomme de terre",
+          value: 150
+        }
       }
     })
 
@@ -175,7 +189,11 @@ const addRandomIngredient = async () => {
           <!-- Contenu de la carte -->
           <div class="p-4 flex flex-col gap-2 flex-1">
             <div class="flex items-start justify-between gap-2">
-              <p class="font-semibold text-highlighted truncate">{{ ingredient.label }}</p>
+              <div class="min-w-0 flex-1">
+                <p class="font-semibold text-highlighted truncate">
+                  {{ ingredient.label }}
+                </p>
+              </div>
               <div class="flex items-center gap-1.5 shrink-0">
                 <UBadge v-if="!ingredient.isPublic" label="Privé" variant="subtle" size="sm" />
                 <UDropdownMenu
@@ -265,6 +283,29 @@ const addRandomIngredient = async () => {
               <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.fat }}g</span>
             </div>
           </div>
+        </div>
+
+        <!-- Variations / équivalents -->
+        <div v-if="selectedIngredient && variationEntries(selectedIngredient).length">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
+            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Variations</p>
+          </div>
+          <p class="text-xs text-dimmed mb-3">
+            Autres aliments équivalents pour des portions comparables ({{ unitLabel(selectedIngredient.unit) }}).
+          </p>
+          <ul class="flex flex-col gap-2">
+            <li
+              v-for="v in variationEntries(selectedIngredient)"
+              :key="v.id"
+              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-elevated/30 px-3 py-2.5"
+            >
+              <span class="text-sm font-medium text-highlighted truncate">{{ v.label }}</span>
+              <span class="text-sm tabular-nums text-muted shrink-0">
+                {{ v.value }}&nbsp;{{ unitLabel(selectedIngredient.unit) }}
+              </span>
+            </li>
+          </ul>
         </div>
 
         <!-- Disponibilité par mois -->

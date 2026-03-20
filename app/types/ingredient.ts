@@ -34,4 +34,6 @@ export interface Ingredient {
     carbohydrates: number
     fat: number
   }
+  /** Variantes ou équivalents (clé = identifiant de référence) */
+  variations?: Record<string, { label: string; value: number }>
 }

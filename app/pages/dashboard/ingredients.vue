@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toRaw } from 'vue'
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, addDoc, deleteDoc, doc, Timestamp, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
@@ -12,6 +13,15 @@ const { formatDate } = useDateFormat()
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
+
+const { generate: generateFirestoreId } = useFirestoreId()
+
+/** ID pré-généré (ex. clé de variation à la création d’un ingrédient). */
+const generatedIngredientId = ref('')
+
+onMounted(() => {
+  generatedIngredientId.value = generateFirestoreId()
+})
 
 const ingredients = useCollection<Ingredient>(
   () => query(
@@ -33,8 +43,41 @@ const variationEntries = (ing: Ingredient | null) => {
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
 }
 
+/**
+ * Valeurs nutritionnelles pour la quantité indiquée par la variation.
+ * La base `valuesBy100` est pour 100 unités ; on applique le ratio valeur / 100
+ * (ex. 50 ml → 50 % des macros « pour 100 »).
+ */
+const variationNutritionForQuantity = (ing: Ingredient, variationValue: number) => {
+  const base = ing.valuesBy100
+  if (!base || variationValue == null || variationValue <= 0) return null
+  const factor = variationValue / 100
+  return {
+    calories: Math.round(base.calories * factor),
+    protein: Math.round(base.protein * factor),
+    carbohydrates: Math.round(base.carbohydrates * factor),
+    fat: Math.round(base.fat * factor),
+  }
+}
+
 const slideoverOpen = ref(false)
 const selectedIngredient = ref<Ingredient | null>(null)
+
+/** Pour le debug JSON : `JSON.stringify` ignore les props non énumérables (ex. `id` ajouté par VueFire). */
+const selectedIngredientForDebug = computed(() => {
+  const ing = selectedIngredient.value
+  if (!ing) return null
+  return { ...toRaw(ing), id: ing.id }
+})
+
+const selectedVariationRows = computed(() => {
+  const ing = selectedIngredient.value
+  if (!ing) return []
+  return variationEntries(ing).map((v) => ({
+    ...v,
+    scaled: variationNutritionForQuantity(ing, v.value),
+  }))
+})
 
 const editModalOpen = ref(false)
 const editingIngredient = ref<Ingredient | null>(null)
@@ -84,9 +127,12 @@ const addRandomIngredient = async () => {
       'Poulet', 'Saumon', 'Thon', 'Œuf', 'Riz', 'Pâtes', 'Pain', 'Fromage',
       'Yaourt', 'Lait', 'Avocat', 'Noix', 'Amande', 'Chocolat', 'Miel', 'Huile d\'olive'
     ]
+
+    const randomVariations = ['Tranche', 'Slice', 'Pot', 'Bowl', 'Cup', 'Glass', 'Bottle', 'Jar', 'Bag', 'Box', 'Packet', 'Can', 'Carton', 'Bottle', 'Jar', 'Bag', 'Box', 'Packet', 'Can', 'Carton']
     
     // Sélectionner un aliment aléatoire
     const randomFood = randomFoods[Math.floor(Math.random() * randomFoods.length)]
+
     
     // Générer des mois actifs aléatoires (1-3 mois)
     const activeMonths: number[] = []
@@ -122,9 +168,9 @@ const addRandomIngredient = async () => {
         fat: Math.floor(Math.random() * 100) + 10
       },
       variations: {
-        "ubUZGYEAEaybEe": {
-          label: "Pomme de terre",
-          value: 150
+        [generatedIngredientId.value]: {
+          label: randomVariations[Math.floor(Math.random() * randomVariations.length)],
+          value: Math.floor(Math.random() * 100) + 10
         }
       }
     })
@@ -222,7 +268,7 @@ const addRandomIngredient = async () => {
 
   <USlideover
     v-model:open="slideoverOpen"
-    :title="selectedIngredient?.label"
+    :title="selectedIngredient?.label + ' (' + selectedIngredient?.id + ')'"
     :description="selectedIngredient ? `Modifié le ${formatDate(selectedIngredient.updatedAt)}` : undefined"
   >
     <template #body>
@@ -294,16 +340,61 @@ const addRandomIngredient = async () => {
           <p class="text-xs text-dimmed mb-3">
             Autres aliments équivalents pour des portions comparables ({{ unitLabel(selectedIngredient.unit) }}).
           </p>
-          <ul class="flex flex-col gap-2">
+          <ul class="flex flex-col gap-3">
             <li
-              v-for="v in variationEntries(selectedIngredient)"
+              v-for="v in selectedVariationRows"
               :key="v.id"
-              class="flex items-center justify-between gap-3 rounded-lg border border-default bg-elevated/30 px-3 py-2.5"
+              class="rounded-lg border border-default bg-elevated/30 overflow-hidden"
             >
-              <span class="text-sm font-medium text-highlighted truncate">{{ v.label }}</span>
-              <span class="text-sm tabular-nums text-muted shrink-0">
-                {{ v.value }}&nbsp;{{ unitLabel(selectedIngredient.unit) }}
-              </span>
+              <div class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default/60">
+                <span class="text-sm font-medium text-highlighted truncate">{{ v.label }}</span>
+                <span class="text-sm tabular-nums text-muted shrink-0">
+                  {{ v.value }}&nbsp;{{ unitLabel(selectedIngredient!.unit) }}
+                </span>
+              </div>
+              <div
+                v-if="v.scaled"
+                class="p-3"
+              >
+                <div class="flex items-baseline justify-between mb-3">
+                  <p class="text-xs text-dimmed">
+                    Pour {{ v.value }}{{ unitLabel(selectedIngredient!.unit) }}
+                  </p>
+                  <div class="flex items-baseline gap-1">
+                    <span class="text-xl font-bold text-highlighted">{{ v.scaled.calories }}</span>
+                    <span class="text-xs text-dimmed">kcal</span>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <UIcon name="i-lucide-wheat" class="size-3.5 text-muted shrink-0" />
+                      <span class="text-[10px] font-medium text-muted uppercase tracking-wide leading-tight">Glucides</span>
+                    </div>
+                    <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.carbohydrates }}g</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <UIcon name="i-lucide-dumbbell" class="size-3.5 text-muted shrink-0" />
+                      <span class="text-[10px] font-medium text-muted uppercase tracking-wide leading-tight">Protéines</span>
+                    </div>
+                    <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.protein }}g</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <UIcon name="i-lucide-droplets" class="size-3.5 text-muted shrink-0" />
+                      <span class="text-[10px] font-medium text-muted uppercase tracking-wide leading-tight">Lipides</span>
+                    </div>
+                    <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.fat }}g</span>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-else
+                class="px-3 py-2 text-xs text-dimmed"
+              >
+                Ajoutez des valeurs nutritionnelles sur l’ingrédient pour afficher l’équivalent pour cette variation.
+              </div>
             </li>
           </ul>
         </div>
@@ -343,7 +434,7 @@ const addRandomIngredient = async () => {
             class="w-full justify-between text-dimmed"
           />
           <template #content>
-            <pre class="text-xs text-muted whitespace-pre-wrap break-all mt-2 p-3 rounded-lg">{{ JSON.stringify(selectedIngredient, null, 2) }}</pre>
+            <pre class="text-xs text-muted whitespace-pre-wrap break-all mt-2 p-3 rounded-lg">{{ JSON.stringify(selectedIngredientForDebug, null, 2) }}</pre>
           </template>
         </UCollapsible>
       </div>

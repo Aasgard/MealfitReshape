@@ -16,11 +16,10 @@ const toast = useToast()
 
 const { generate: generateFirestoreId } = useFirestoreId()
 
-/** ID pré-généré (ex. clé de variation à la création d’un ingrédient). */
-const generatedIngredientId = ref('')
-
 onMounted(() => {
-  generatedIngredientId.value = generateFirestoreId()
+  for (let i = 0; i < 5; i++) {
+    console.log(generateFirestoreId())
+  }
 })
 
 const ingredients = useCollection<Ingredient>(
@@ -34,6 +33,22 @@ const ingredients = useCollection<Ingredient>(
   )
 )
 await ingredients.promise.value
+
+const searchQuery = ref('')
+
+const filteredIngredients = computed(() => {
+  const list = [...(ingredients.value ?? [])]
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return list
+  return list.filter(i => i.label.toLowerCase().includes(q))
+})
+
+const ingredientCountLabel = computed(() => {
+  const n = filteredIngredients.value.length
+  if (n === 0) return 'Aucun ingrédient'
+  if (n === 1) return '1 Ingrédient'
+  return `${n} Ingrédients`
+})
 
 const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
 
@@ -63,7 +78,6 @@ const variationNutritionForQuantity = (ing: Ingredient, variationValue: number) 
 const slideoverOpen = ref(false)
 const selectedIngredient = ref<Ingredient | null>(null)
 
-/** Pour le debug JSON : `JSON.stringify` ignore les props non énumérables (ex. `id` ajouté par VueFire). */
 const selectedIngredientForDebug = computed(() => {
   const ing = selectedIngredient.value
   if (!ing) return null
@@ -168,7 +182,7 @@ const addRandomIngredient = async () => {
         fat: Math.floor(Math.random() * 100) + 10
       },
       variations: {
-        [generatedIngredientId.value]: {
+        [generateFirestoreId()]: {
           label: randomVariations[Math.floor(Math.random() * randomVariations.length)],
           value: Math.floor(Math.random() * 100) + 10
         }
@@ -209,7 +223,25 @@ const addRandomIngredient = async () => {
     </template>
 
     <template #body>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="flex flex-col gap-4 p-4 sm:p-6">
+        <div class="flex flex-col gap-3">
+          <p
+            v-if="filteredIngredients.length > 0"
+            class="text-sm font-medium text-highlighted"
+          >
+            {{ ingredientCountLabel }}
+          </p>
+          <UInput
+            v-model="searchQuery"
+            icon="i-lucide-search"
+            size="md"
+            variant="outline"
+            placeholder="Rechercher un ingrédient..."
+            class="w-full"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <template v-if="ingredients.length === 0">
           <div
             v-for="i in 12"
@@ -226,41 +258,51 @@ const addRandomIngredient = async () => {
             </div>
           </div>
         </template>
-        <div
-          v-for="ingredient in ingredients"
-          :key="ingredient.id"
-          class="rounded-xl border border-default bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
-          @click="selectIngredient(ingredient)"
-        >
-          <!-- Contenu de la carte -->
-          <div class="p-4 flex flex-col gap-2 flex-1">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <p class="font-semibold text-highlighted truncate">
-                  {{ ingredient.label }}
-                </p>
+        <UEmpty
+          v-else-if="filteredIngredients.length === 0"
+          class="col-span-full py-12"
+          icon="i-lucide-search-x"
+          title="Aucun ingrédient trouvé"
+          description="Essayez un autre terme de recherche ou ajoutez un nouvel ingrédient."
+        />
+        <template v-else>
+          <div
+            v-for="ingredient in filteredIngredients"
+            :key="ingredient.id"
+            class="rounded-xl border border-default bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+            @click="selectIngredient(ingredient)"
+          >
+            <!-- Contenu de la carte -->
+            <div class="p-4 flex flex-col gap-2 flex-1">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <p class="font-semibold text-highlighted truncate">
+                    {{ ingredient.label }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <UBadge v-if="!ingredient.isPublic" label="Privé" variant="subtle" size="sm" />
+                  <UDropdownMenu
+                    v-if="!ingredient.isPublic"
+                    :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteIngredient(ingredient.id) }]]"
+                    :ui="{ content: 'w-40' }"
+                  >
+                    <UButton
+                      icon="i-lucide-ellipsis-vertical"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      @click.stop
+                    />
+                  </UDropdownMenu>
+                </div>
               </div>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <UBadge v-if="!ingredient.isPublic" label="Privé" variant="subtle" size="sm" />
-                <UDropdownMenu
-                  v-if="!ingredient.isPublic"
-                  :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteIngredient(ingredient.id) }]]"
-                  :ui="{ content: 'w-40' }"
-                >
-                  <UButton
-                    icon="i-lucide-ellipsis-vertical"
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    @click.stop
-                  />
-                </UDropdownMenu>
-              </div>
+              <p v-if="ingredient.category?.label" class="text-sm text-muted">{{ ingredient.category.label }}</p>
+
+
             </div>
-            <p v-if="ingredient.category?.label" class="text-sm text-muted">{{ ingredient.category.label }}</p>
-
-
           </div>
+        </template>
         </div>
       </div>
     </template>

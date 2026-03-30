@@ -43,9 +43,10 @@ const filteredIngredients = computed(() => {
   return list.filter(i => i.label.toLowerCase().includes(q))
 })
 
-const ingredientCountLabel = computed(() => {
+const ingredientListHeaderLabel = computed(() => {
   const n = filteredIngredients.value.length
-  if (n === 0) return 'Aucun ingrédient'
+  const q = searchQuery.value.trim()
+  if (n === 0) return q ? 'Aucun résultat' : 'Aucun ingrédient'
   if (n === 1) return '1 Ingrédient'
   return `${n} Ingrédients`
 })
@@ -225,11 +226,8 @@ const addRandomIngredient = async () => {
     <template #body>
       <div class="flex flex-col gap-4 p-4 sm:p-6">
         <div class="flex flex-col gap-3">
-          <p
-            v-if="filteredIngredients.length > 0"
-            class="text-sm font-medium text-highlighted"
-          >
-            {{ ingredientCountLabel }}
+          <p class="text-sm font-medium text-highlighted">
+            {{ ingredientListHeaderLabel }}
           </p>
           <UInput
             v-model="searchQuery"

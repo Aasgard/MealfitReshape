@@ -1,0 +1,20 @@
+{
+    "id": "aezaeuhIUHZEzziea",
+    "title": "Salade de fruits",
+    "description": "Une salade de fruits frais et healthy",
+    "owner": "aezaeuhIUHZEzziea",
+    "createdAt": "2026-03-30T12:00:00.000Z",
+    "updatedAt": "2026-03-30T12:00:00.000Z",
+    "isPublic": false,
+    "cookTime": 30,
+    "prepTime": 10,
+    "type": "breakfast",
+    "isFavorite": true,
+    "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/98/Ishihara_2.svg/960px-Ishihara_2.svg.png",
+    "source": "John Doe",
+    "ingredients": [{
+        "id": "9AXfGrZkjzEgNx73wCp6",
+        "quantity": 4,
+        "variation": "A1qhysgoMiEwKtw2XB8H"
+    }]
+}

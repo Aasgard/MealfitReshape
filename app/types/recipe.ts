@@ -1,5 +1,12 @@
 import type { Timestamp } from 'firebase/firestore'
 
+/** Ligne d’ingrédient dans une recette (réf. + quantité + variation) */
+export interface RecipeIngredientLine {
+  id: string
+  quantity: number
+  variation: string
+}
+
 /**
  * Représente une recette.
  * En lecture depuis une collection Firestore (VueFire), chaque document a aussi un `id`.
@@ -18,4 +25,14 @@ export interface Recipe {
   isPublic?: boolean
   /** Propriétaire (uid utilisateur) */
   owner?: string | null
+  /** Durée de préparation (minutes) */
+  prepTime?: number
+  /** Durée de cuisson (minutes) */
+  cookTime?: number
+  /** Type de repas (ex. breakfast, lunch) */
+  type?: string
+  isFavorite?: boolean
+  imageUrl?: string
+  source?: string
+  ingredients?: RecipeIngredientLine[]
 }

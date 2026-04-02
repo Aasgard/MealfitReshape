@@ -4,7 +4,8 @@ import type { Timestamp } from 'firebase/firestore'
 export interface RecipeIngredientLine {
   id: string
   quantity: number
-  variation: string
+  /** Référence à une entrée de `ingredient.variations`, ou `null` si non renseignée */
+  variation: string | null
 }
 
 /**

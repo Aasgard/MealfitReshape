@@ -3,6 +3,7 @@ import { toRaw } from 'vue'
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, addDoc, deleteDoc, doc, Timestamp, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
+import { macrosForVariation } from '~/utils/ingredientNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -16,11 +17,6 @@ const toast = useToast()
 
 const { generate: generateFirestoreId } = useFirestoreId()
 
-onMounted(() => {
-  for (let i = 0; i < 5; i++) {
-    console.log(generateFirestoreId())
-  }
-})
 
 const ingredients = useCollection<Ingredient>(
   () => query(
@@ -33,6 +29,8 @@ const ingredients = useCollection<Ingredient>(
   )
 )
 await ingredients.promise.value
+
+console.log(ingredients.value)
 
 const searchQuery = ref('')
 
@@ -59,23 +57,6 @@ const variationEntries = (ing: Ingredient | null) => {
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
 }
 
-/**
- * Valeurs nutritionnelles pour la quantité indiquée par la variation.
- * La base `valuesBy100` est pour 100 unités ; on applique le ratio valeur / 100
- * (ex. 50 ml → 50 % des macros « pour 100 »).
- */
-const variationNutritionForQuantity = (ing: Ingredient, variationValue: number) => {
-  const base = ing.valuesBy100
-  if (!base || variationValue == null || variationValue <= 0) return null
-  const factor = variationValue / 100
-  return {
-    calories: Math.round(base.calories * factor),
-    protein: Math.round(base.protein * factor),
-    carbohydrates: Math.round(base.carbohydrates * factor),
-    fat: Math.round(base.fat * factor),
-  }
-}
-
 const slideoverOpen = ref(false)
 const selectedIngredient = ref<Ingredient | null>(null)
 
@@ -90,7 +71,7 @@ const selectedVariationRows = computed(() => {
   if (!ing) return []
   return variationEntries(ing).map((v) => ({
     ...v,
-    scaled: variationNutritionForQuantity(ing, v.value),
+    scaled: macrosForVariation(ing, v.id),
   }))
 })
 

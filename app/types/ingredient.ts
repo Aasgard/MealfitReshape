@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore'
 import type { IngredientCategory } from './ingredientCategory'
+import type { IngredientMacros } from '~/utils/ingredientNutrition'
 
 /**
  * Représente un ingrédient ou aliment.
@@ -28,12 +29,7 @@ export interface Ingredient {
   imageUrl?: string
   unit?: 'g' | 'ml'
   /** Valeurs nutritionnelles par 100 unités de l'ingrédient */
-  valuesBy100?: {
-    calories: number
-    protein: number
-    carbohydrates: number
-    fat: number
-  }
+  valuesBy100?: IngredientMacros
   /** Variantes ou équivalents (clé = identifiant de référence) */
   variations?: Record<string, { label: string; value: number }>
 }

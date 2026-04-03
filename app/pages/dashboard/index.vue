@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { addDoc, collection, getDocs, or, orderBy, query, Timestamp, where } from 'firebase/firestore'
+import { addDoc, collection, doc, getDocs, or, orderBy, query, Timestamp, where } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 import fakeRecipe from '~/data/fakeRecipe.json'
 
@@ -66,14 +66,14 @@ async function seedFakeRecipe() {
     const picked = shuffle(fromDb).slice(0, targetCount)
 
     /** Parfois `null` à la place de l’id de variation (pas de portion précise). */
-    const nullVariationProbability = 0.35
+    const nullVariationProbability = 0.9
 
     const ingredients = picked.map((ing) => {
       const keys = variationKeys(ing)
       const useId = keys.length > 0 && Math.random() >= nullVariationProbability
       const variation = useId ? keys[Math.floor(Math.random() * keys.length)]! : null
-      const quantity = Math.floor(Math.random() * 290) + 10
-      return { id: ing.id, quantity, variation }
+      const quantity = Math.floor(Math.random() * 5) + 1
+      return { ingredientRef: doc(db, 'ingredients', ing.id), quantity, variation }
     })
 
     const now = Timestamp.now()

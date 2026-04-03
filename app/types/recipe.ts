@@ -1,8 +1,9 @@
-import type { Timestamp } from 'firebase/firestore'
+import type { DocumentReference, Timestamp } from 'firebase/firestore'
 
-/** Ligne d’ingrédient dans une recette (réf. + quantité + variation) */
+/** Ligne d’ingrédient dans une recette (réf. document `ingredients` + quantité + variation) */
 export interface RecipeIngredientLine {
-  id: string
+  /** Référence Firestore vers le document dans la collection `ingredients` */
+  ingredientRef: DocumentReference
   quantity: number
   /** Référence à une entrée de `ingredient.variations`, ou `null` si non renseignée */
   variation: string | null

@@ -2,7 +2,8 @@
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
-import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
+import type { Recipe } from '~/types/recipe'
+import { macrosForVariation, type IngredientMacros } from '~/utils/ingredientNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -12,13 +13,6 @@ useSeoMeta({
 const { formatDate } = useDateFormat()
 const db = useFirestore()
 const user = useCurrentUser()
-
-const recipeTypeLabels: Record<string, string> = {
-  breakfast: 'Petit-déjeuner',
-  lunch: 'Déjeuner',
-  dinner: 'Dîner',
-  snack: 'Collation',
-}
 
 const recipes = useCollection<Recipe>(
   () => query(
@@ -42,6 +36,8 @@ const ingredients = useCollection<Ingredient>(
 )
 
 await Promise.all([recipes.promise.value, ingredients.promise.value])
+
+console.log(recipes.value)
 
 const recipeList = computed(() => {
   const list = [...(recipes.value ?? [])]
@@ -89,28 +85,13 @@ const ingredientsById = computed(() => {
 
 const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
 
-/**
- * `quantity` = nombre de portions ; la variation indique la masse d’une portion (g ou ml).
- * Masse totale = quantity × variation.value, puis ratio sur valuesBy100 : × (masse / 100).
- * Sans variation valide, on traite `quantity` comme la masse totale déjà.
- */
-function nutritionForRecipeLine(
-  ing: Ingredient,
-  line: RecipeIngredientLine,
-  portionGrams: number | undefined,
-) {
-  const base = ing.valuesBy100
-  if (!base) return null
-  let effectiveGrams = line.quantity
-  if (portionGrams != null && portionGrams > 0)
-    effectiveGrams = line.quantity * portionGrams
-  if (effectiveGrams <= 0) return null
-  const factor = effectiveGrams / 100
+function scaleMacros(m: IngredientMacros, factor: number): IngredientMacros {
+  const v = (n: number) => Math.round(n * factor)
   return {
-    calories: Math.round(base.calories * factor),
-    protein: Math.round(base.protein * factor),
-    carbohydrates: Math.round(base.carbohydrates * factor),
-    fat: Math.round(base.fat * factor),
+    calories: v(m.calories),
+    protein: v(m.protein),
+    carbohydrates: v(m.carbohydrates),
+    fat: v(m.fat),
   }
 }
 
@@ -118,11 +99,18 @@ const resolvedRecipeIngredients = computed(() => {
   const recipe = selectedRecipe.value
   const lines = recipe?.ingredients ?? []
   return lines.map((line) => {
-    const doc = ingredientsById.value.get(line.id)
+    const ingId = line.ingredientRef.id
+    const doc = ingredientsById.value.get(ingId)
     const varEntry = line.variation != null ? doc?.variations?.[line.variation] : undefined
-    const nutrition = doc ? nutritionForRecipeLine(doc, line, varEntry?.value) : null
+    let nutrition: IngredientMacros | null = null
+    if (doc) {
+      const per = macrosForVariation(doc, line.variation)
+      if (per && line.quantity > 0) {
+        nutrition = per
+      }
+    }
     return {
-      refId: line.id,
+      refId: ingId,
       quantity: line.quantity,
       ingredientLabel: doc?.label,
       variationLabel: varEntry?.label,
@@ -131,17 +119,6 @@ const resolvedRecipeIngredients = computed(() => {
       nutrition,
     }
   })
-})
-
-const typeLabel = computed(() => {
-  const t = selectedRecipe.value?.type
-  if (!t) return '—'
-  return recipeTypeLabels[t] ?? t
-})
-
-const totalMinutes = computed(() => {
-  const r = selectedRecipe.value
-  return (r?.prepTime ?? 0) + (r?.cookTime ?? 0)
 })
 
 const createdLabel = computed(() =>
@@ -228,6 +205,9 @@ const updatedLabel = computed(() =>
                   :class="{ 'text-amber-500': selectedRecipe.isFavorite }"
                 />
               </div>
+              <p class="text-xs text-muted">
+                Créée le {{ createdLabel }} · Mise à jour {{ updatedLabel }}
+              </p>
               <p
                 v-if="selectedRecipe.description"
                 class="text-sm text-muted"
@@ -236,7 +216,7 @@ const updatedLabel = computed(() =>
               </p>
               <div class="flex flex-wrap gap-2">
                 <UBadge color="neutral" variant="subtle">
-                  {{ typeLabel }}
+                  {{ selectedRecipe.type ?? '—' }}
                 </UBadge>
                 <UBadge
                   :color="selectedRecipe.isPublic ? 'success' : 'neutral'"
@@ -262,14 +242,6 @@ const updatedLabel = computed(() =>
                     {{ selectedRecipe.cookTime ?? 0 }} min
                   </dd>
                 </div>
-                <div>
-                  <dt class="text-muted">
-                    Total
-                  </dt>
-                  <dd class="font-medium text-highlighted">
-                    {{ totalMinutes }} min
-                  </dd>
-                </div>
                 <div class="col-span-2 sm:col-span-1">
                   <dt class="text-muted">
                     Source
@@ -282,9 +254,6 @@ const updatedLabel = computed(() =>
                   </dd>
                 </div>
               </dl>
-              <p class="text-xs text-muted">
-                Créée le {{ createdLabel }} · Mise à jour {{ updatedLabel }}
-              </p>
             </div>
           </div>
         </UCard>
@@ -320,12 +289,6 @@ const updatedLabel = computed(() =>
                       <template v-if="row.variationLabel">
                         <span class="text-muted">·</span>
                         <span class="text-muted">{{ row.variationLabel }}</span>
-                        <span
-                          v-if="row.variationValue != null"
-                          class="text-muted tabular-nums"
-                        >
-                          ({{ row.variationValue }}&nbsp;{{ row.unit }})
-                        </span>
                       </template>
                     </div>
                   </td>

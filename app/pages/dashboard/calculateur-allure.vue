@@ -9,14 +9,17 @@ const walkDuration = ref('00:00')
 const runPaceTarget = ref('06:30')
 const walkPaceTarget = ref('12:00')
 const targetDistanceKm = ref('1')
+const carbsPerHour = ref('50')
 
-const avgPaceLabel = ref('0\'00/km')
-const distanceLabel = ref('0 m')
-const speedLabel = ref('0 km/h')
-const targetDistanceTimeLabel = ref('')
-const targetDistanceLabel = ref('')
+const EMPTY_RESULT = '—'
+
+const avgPaceLabel = ref(EMPTY_RESULT)
+const distanceLabel = ref(EMPTY_RESULT)
+const speedLabel = ref(EMPTY_RESULT)
+const targetDistanceTimeLabel = ref(EMPTY_RESULT)
+const targetDistanceLabel = ref('1')
+const targetDistanceCarbsLabel = ref(EMPTY_RESULT)
 const hasCalculated = ref(false)
-const hasTargetDistanceResult = ref(false)
 
 function parseMmSs(value: string): number | null {
   const trimmed = value.trim()
@@ -36,6 +39,22 @@ function parseKmInput(value: string): number | null {
   const km = Number(normalized)
   if (!Number.isFinite(km) || km <= 0) return null
   return km
+}
+
+function parsePositiveNumber(value: string): number | null {
+  const trimmed = value.trim().replace(/\s/g, '')
+  if (!trimmed) return null
+  const normalized = trimmed.replace(',', '.')
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null
+  const n = Number(normalized)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n
+}
+
+function formatGrams(grams: number): string {
+  if (!Number.isFinite(grams) || grams < 0) return '0 g'
+  const rounded = Math.round(grams)
+  return `${rounded} g`
 }
 
 function formatKmFrench(km: number): string {
@@ -84,12 +103,11 @@ function formatDistance(meters: number): string {
 }
 
 function resetResults() {
-  avgPaceLabel.value = '0\'00/km'
-  distanceLabel.value = '0 m'
-  speedLabel.value = '0 km/h'
-  targetDistanceTimeLabel.value = ''
-  targetDistanceLabel.value = ''
-  hasTargetDistanceResult.value = false
+  avgPaceLabel.value = EMPTY_RESULT
+  distanceLabel.value = EMPTY_RESULT
+  speedLabel.value = EMPTY_RESULT
+  targetDistanceTimeLabel.value = EMPTY_RESULT
+  targetDistanceCarbsLabel.value = EMPTY_RESULT
 }
 
 function calculate() {
@@ -143,11 +161,17 @@ function calculate() {
     const timeSec = targetKm * (cycleSec / distanceKm)
     targetDistanceTimeLabel.value = formatDuration(timeSec)
     targetDistanceLabel.value = formatKmFrench(targetKm)
-    hasTargetDistanceResult.value = true
+
+    const carbsRate = parsePositiveNumber(carbsPerHour.value)
+    if (carbsRate !== null) {
+      const carbsGrams = carbsRate * (timeSec / 3600)
+      targetDistanceCarbsLabel.value = formatGrams(carbsGrams)
+    } else {
+      targetDistanceCarbsLabel.value = EMPTY_RESULT
+    }
   } else {
-    targetDistanceTimeLabel.value = ''
-    targetDistanceLabel.value = ''
-    hasTargetDistanceResult.value = false
+    targetDistanceTimeLabel.value = EMPTY_RESULT
+    targetDistanceCarbsLabel.value = EMPTY_RESULT
   }
 }
 </script>
@@ -166,133 +190,147 @@ function calculate() {
     </template>
 
     <template #body>
-      <div class="flex flex-1 flex-col items-center p-4 sm:p-6 overflow-auto">
-        <div class="w-full max-w-md flex flex-col gap-8 text-default">
-          <p class="text-sm text-muted">
-            Durées et allures cibles au format MM:SS (ex. 05:30 pour 5 min 30 s).
-            Kilométrage avec virgule (ex. 14,5 pour 14 km 500).
-          </p>
+      <div class="flex flex-1 flex-col p-4 sm:p-6 overflow-auto">
+        <div class="w-full flex flex-col gap-6 text-default">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            <div class="flex flex-col gap-6">
+              <div class="flex flex-col gap-3">
+                <p class="text-sm font-semibold text-highlighted">
+                  Course
+                </p>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="flex flex-col gap-1.5">
+                    <span class="text-sm text-muted">Durée (MM:SS)</span>
+                    <UInput
+                      v-model="runDuration"
+                      type="text"
+                      inputmode="numeric"
+                      placeholder="15:00"
+                      size="md"
+                      variant="outline"
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <span class="text-sm text-muted">Allure (MM:SS / km)</span>
+                    <UInput
+                      v-model="runPaceTarget"
+                      type="text"
+                      inputmode="numeric"
+                      placeholder="05:30"
+                      size="md"
+                      variant="outline"
+                    />
+                  </div>
+                </div>
+              </div>
 
-          <div class="flex flex-col gap-3">
-            <p class="text-sm font-semibold text-highlighted">
-              Course
-            </p>
+              <div class="flex flex-col gap-3">
+                <p class="text-sm font-semibold text-highlighted">
+                  Marche
+                </p>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="flex flex-col gap-1.5">
+                    <span class="text-sm text-muted">Durée (MM:SS)</span>
+                    <UInput
+                      v-model="walkDuration"
+                      type="text"
+                      inputmode="numeric"
+                      placeholder="00:00"
+                      size="md"
+                      variant="outline"
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <span class="text-sm text-muted">Allure (MM:SS / km)</span>
+                    <UInput
+                      v-model="walkPaceTarget"
+                      type="text"
+                      inputmode="numeric"
+                      placeholder="10:00"
+                      size="md"
+                      variant="outline"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <span class="text-sm font-semibold text-highlighted">Kilométrage (km)</span>
+                <UInput
+                  v-model="targetDistanceKm"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="14,5"
+                  size="md"
+                  variant="outline"
+                  class="w-full"
+                />
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <span class="text-sm font-semibold text-highlighted">Glucides (g/h)</span>
+                <UInput
+                  v-model="carbsPerHour"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="50"
+                  size="md"
+                  variant="outline"
+                  class="w-full"
+                />
+              </div>
+
+              <UButton
+                block
+                color="primary"
+                class="justify-center uppercase"
+                @click="calculate"
+              >
+                Calculer
+              </UButton>
+            </div>
+
             <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">Durée (MM:SS)</span>
-                <UInput
-                  v-model="runDuration"
-                  type="text"
-                  inputmode="numeric"
-                  placeholder="15:00"
-                  size="md"
-                  variant="outline"
-                />
+              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                <p class="text-xs text-muted uppercase tracking-wide">
+                  Allure moyenne
+                </p>
+                <p class="text-2xl font-semibold text-highlighted">
+                  {{ avgPaceLabel }}
+                </p>
               </div>
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">Allure (MM:SS / km)</span>
-                <UInput
-                  v-model="runPaceTarget"
-                  type="text"
-                  inputmode="numeric"
-                  placeholder="05:30"
-                  size="md"
-                  variant="outline"
-                />
+              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                <p class="text-xs text-muted uppercase tracking-wide">
+                  Distance sur le cycle
+                </p>
+                <p class="text-2xl font-semibold text-highlighted">
+                  {{ distanceLabel }}
+                </p>
               </div>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-3">
-            <p class="text-sm font-semibold text-highlighted">
-              Marche
-            </p>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">Durée (MM:SS)</span>
-                <UInput
-                  v-model="walkDuration"
-                  type="text"
-                  inputmode="numeric"
-                  placeholder="00:00"
-                  size="md"
-                  variant="outline"
-                />
+              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                <p class="text-xs text-muted uppercase tracking-wide">
+                  Vitesse moyenne
+                </p>
+                <p class="text-2xl font-semibold text-highlighted">
+                  {{ speedLabel }}
+                </p>
               </div>
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">Allure (MM:SS / km)</span>
-                <UInput
-                  v-model="walkPaceTarget"
-                  type="text"
-                  inputmode="numeric"
-                  placeholder="10:00"
-                  size="md"
-                  variant="outline"
-                />
+              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                <p class="text-xs text-muted uppercase tracking-wide">
+                  Temps pour {{ targetDistanceLabel }} km
+                </p>
+                <p class="text-2xl font-semibold text-highlighted">
+                  {{ targetDistanceTimeLabel }}
+                </p>
               </div>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <span class="text-sm font-semibold text-highlighted">Kilométrage (km)</span>
-            <UInput
-              v-model="targetDistanceKm"
-              type="text"
-              inputmode="decimal"
-              placeholder="14,5"
-              size="md"
-              variant="outline"
-              class="w-full"
-            />
-          </div>
-
-          <UButton
-            block
-            color="primary"
-            class="justify-center uppercase"
-            @click="calculate"
-          >
-            Calculer
-          </UButton>
-
-          <div
-            v-if="hasCalculated"
-            class="flex flex-col items-center gap-6 text-center"
-          >
-            <div class="flex flex-col gap-1">
-              <p class="text-sm font-semibold text-highlighted">
-                Allure moyenne de l'alternance :
-              </p>
-              <p class="text-base text-default">
-                {{ avgPaceLabel }}
-              </p>
-            </div>
-            <div class="flex flex-col gap-1">
-              <p class="text-sm font-semibold text-highlighted">
-                Distance parcourue sur le cycle :
-              </p>
-              <p class="text-base text-default">
-                {{ distanceLabel }}
-              </p>
-            </div>
-            <div class="flex flex-col gap-1">
-              <p class="text-sm font-semibold text-highlighted">
-                Vitesse moyenne :
-              </p>
-              <p class="text-base text-default">
-                {{ speedLabel }}
-              </p>
-            </div>
-            <div
-              v-if="hasTargetDistanceResult"
-              class="flex flex-col gap-1"
-            >
-              <p class="text-sm font-semibold text-highlighted">
-                Temps pour {{ targetDistanceLabel }} km :
-              </p>
-              <p class="text-base text-default">
-                {{ targetDistanceTimeLabel }}
-              </p>
+              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                <p class="text-xs text-muted uppercase tracking-wide">
+                  Glucides pour {{ targetDistanceLabel }} km
+                </p>
+                <p class="text-2xl font-semibold text-highlighted">
+                  {{ targetDistanceCarbsLabel }}
+                </p>
+              </div>
             </div>
           </div>
         </div>

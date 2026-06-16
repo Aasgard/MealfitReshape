@@ -41,6 +41,10 @@ const links = [[{
   children: [{
     label: 'Calculateur de besoins journaliers',
     icon: 'i-lucide-calculator',
+  }, {
+    label: 'Calculateur d\'allure',
+    icon: 'i-lucide-sport-shoe',
+    to: '/dashboard/calculateur-allure',
   }]
 }], [{
   label: 'Feedback',

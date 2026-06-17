@@ -1,7 +1,7 @@
 <script setup lang="ts">
 useSeoMeta({
-  title: 'Dashboard - Calculateur d\'allure - Mealfit',
-  description: 'Dashboard - Calculateur d\'allure - Mealfit',
+  title: 'Dashboard - Calculateur pour trail - Mealfit',
+  description: 'Dashboard - Calculateur pour trail - Mealfit',
 })
 
 const runDuration = ref('15:00')
@@ -182,7 +182,7 @@ function calculate() {
     :ui="{ body: 'min-h-0' }"
   >
     <template #header>
-      <UDashboardNavbar title="Calculateur d'allure">
+      <UDashboardNavbar title="Calculateur pour trail">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>

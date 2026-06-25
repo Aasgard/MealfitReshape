@@ -186,6 +186,17 @@ function calculate() {
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #right>
+          <a
+            href="https://docs.google.com/spreadsheets/d/1C_Is3g7vrgSWME_oYJwCnl8BJ3_9ya20tdKv2iNXBQs/edit?hl=fr&gid=1829754159#gid=1829754159"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-2 text-sm text-muted hover:text-highlighted transition-colors"
+          >
+            <UIcon name="i-heroicons-table-cells" class="w-4 h-4 shrink-0" />
+            Google Sheets
+          </a>
+        </template>
       </UDashboardNavbar>
     </template>
 

@@ -1,344 +1,299 @@
 <script setup lang="ts">
-import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, or, query, where, orderBy } from 'firebase/firestore'
-import type { Ingredient } from '~/types/ingredient'
-import type { Recipe } from '~/types/recipe'
-import { macrosForVariation, type IngredientMacros } from '~/utils/ingredientNutrition'
-
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
   description: 'Dashboard - Recettes - Mealfit',
 })
 
-const { formatDate } = useDateFormat()
-const db = useFirestore()
-const user = useCurrentUser()
+type Category = 'Petit-déjeuner' | 'Déjeuner' | 'Dîner' | 'Collation' | 'Dessert'
+type Difficulty = 'Facile' | 'Moyen' | 'Difficile'
 
-const recipes = useCollection<Recipe>(
-  () => query(
-    collection(db, 'recipes'),
-    or(
-      where('owner', '==', user.value!.uid),
-      where('owner', '==', null)
-    )
-  )
-)
-
-const ingredients = useCollection<Ingredient>(
-  () => query(
-    collection(db, 'ingredients'),
-    or(
-      where('owner', '==', user.value!.uid),
-      where('owner', '==', null)
-    ),
-    orderBy('label', 'asc')
-  )
-)
-
-await Promise.all([recipes.promise.value, ingredients.promise.value])
-
-console.log(recipes.value)
-
-const recipeList = computed(() => {
-  const list = [...(recipes.value ?? [])]
-  return list.sort((a, b) => {
-    const ta = a.updatedAt?.toMillis?.() ?? 0
-    const tb = b.updatedAt?.toMillis?.() ?? 0
-    return tb - ta
-  })
-})
-
-const selectedRecipeId = ref<string | undefined>(undefined)
-
-watch(recipeList, (list) => {
-  if (!list.length) {
-    selectedRecipeId.value = undefined
-    return
-  }
-  const id = selectedRecipeId.value
-  if (!id || !list.some(r => r.id === id)) {
-    selectedRecipeId.value = list[0]!.id
-  }
-}, { immediate: true })
-
-const selectedRecipe = computed(() => {
-  const id = selectedRecipeId.value
-  if (!id) return null
-  return recipeList.value.find(r => r.id === id) ?? null
-})
-
-/** Sans le champ `type` repas pour éviter le conflit avec SelectMenuItem.type */
-const recipeSelectItems = computed(() =>
-  recipeList.value.map(r => ({
-    label: r.title,
-    value: r.id,
-  }))
-)
-
-const ingredientsById = computed(() => {
-  const map = new Map<string, Ingredient>()
-  for (const ing of ingredients.value ?? []) {
-    map.set(ing.id, ing)
-  }
-  return map
-})
-
-const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
-
-function scaleMacros(m: IngredientMacros, factor: number): IngredientMacros {
-  const v = (n: number) => Math.round(n * factor)
-  return {
-    calories: v(m.calories),
-    protein: v(m.protein),
-    carbohydrates: v(m.carbohydrates),
-    fat: v(m.fat),
-  }
+interface TestRecipe {
+  id: string
+  title: string
+  ingredientsPreview: string
+  category: Category
+  prepTime: number
+  calories: number
+  difficulty: Difficulty
+  emoji: string
+  gradient: string
+  isFavorite: boolean
 }
 
-const resolvedRecipeIngredients = computed(() => {
-  const recipe = selectedRecipe.value
-  const lines = recipe?.ingredients ?? []
-  return lines.map((line) => {
-    const ingId = line.ingredientRef.id
-    const doc = ingredientsById.value.get(ingId)
-    const varEntry = line.variation != null ? doc?.variations?.[line.variation] : undefined
-    let nutrition: IngredientMacros | null = null
-    if (doc) {
-      const per = macrosForVariation(doc, line.variation)
-      if (per && line.quantity > 0) {
-        nutrition = per
-      }
-    }
-    return {
-      refId: ingId,
-      quantity: line.quantity,
-      ingredientLabel: doc?.label,
-      variationLabel: varEntry?.label,
-      variationValue: varEntry?.value,
-      unit: unitLabel(doc?.unit),
-      nutrition,
+const recipes = ref<TestRecipe[]>([
+  { id: '1', title: 'Banana bread', ingredientsPreview: 'banane, farine, noix', category: 'Collation', prepTime: 60, calories: 290, difficulty: 'Moyen', emoji: '🍌', gradient: 'from-amber-200 to-orange-100', isFavorite: false },
+  { id: '2', title: 'Bowl de saumon teriyaki', ingredientsPreview: 'saumon, riz, avocat', category: 'Dîner', prepTime: 30, calories: 540, difficulty: 'Moyen', emoji: '🍣', gradient: 'from-rose-200 to-orange-100', isFavorite: true },
+  { id: '3', title: 'Buddha bowl végétarien', ingredientsPreview: 'quinoa, avocat, pois chiche', category: 'Déjeuner', prepTime: 25, calories: 450, difficulty: 'Moyen', emoji: '🥗', gradient: 'from-emerald-200 to-teal-100', isFavorite: false },
+  { id: '4', title: 'Chili con carne', ingredientsPreview: 'bœuf, haricots, tomate', category: 'Dîner', prepTime: 50, calories: 560, difficulty: 'Moyen', emoji: '🌶️', gradient: 'from-rose-200 to-pink-100', isFavorite: false },
+  { id: '5', title: 'Curry de légumes', ingredientsPreview: 'carotte, brocoli, riz', category: 'Dîner', prepTime: 40, calories: 390, difficulty: 'Moyen', emoji: '🍛', gradient: 'from-orange-200 to-amber-100', isFavorite: false },
+  { id: '6', title: 'Lasagnes bolognaise', ingredientsPreview: 'bœuf, pâtes, tomate', category: 'Dîner', prepTime: 80, calories: 640, difficulty: 'Difficile', emoji: '🧀', gradient: 'from-pink-200 to-rose-100', isFavorite: false },
+  { id: '7', title: 'Mousse au chocolat', ingredientsPreview: 'chocolat, œuf, sucre', category: 'Dessert', prepTime: 25, calories: 320, difficulty: 'Moyen', emoji: '🍫', gradient: 'from-stone-300 to-amber-100', isFavorite: true },
+  { id: '8', title: 'Œufs brouillés & avocat', ingredientsPreview: 'œuf, avocat, pain', category: 'Petit-déjeuner', prepTime: 12, calories: 340, difficulty: 'Facile', emoji: '🥑', gradient: 'from-lime-200 to-emerald-100', isFavorite: false },
+  { id: '9', title: 'Pancakes protéinés', ingredientsPreview: 'avoine, œuf, banane', category: 'Petit-déjeuner', prepTime: 20, calories: 380, difficulty: 'Facile', emoji: '🥞', gradient: 'from-amber-200 to-yellow-100', isFavorite: false },
+  { id: '10', title: 'Smoothie bowl', ingredientsPreview: 'fruits rouges, yaourt, granola', category: 'Petit-déjeuner', prepTime: 10, calories: 260, difficulty: 'Facile', emoji: '🍓', gradient: 'from-fuchsia-200 to-pink-100', isFavorite: false },
+  { id: '11', title: 'Poke bowl thon', ingredientsPreview: 'thon, riz, edamame', category: 'Déjeuner', prepTime: 20, calories: 470, difficulty: 'Moyen', emoji: '🍥', gradient: 'from-cyan-200 to-sky-100', isFavorite: false },
+  { id: '12', title: 'Tiramisu', ingredientsPreview: 'mascarpone, café, cacao', category: 'Dessert', prepTime: 35, calories: 410, difficulty: 'Difficile', emoji: '🍮', gradient: 'from-amber-200 to-stone-100', isFavorite: true },
+])
+
+const categories: Array<'Toutes' | Category> = ['Toutes', 'Petit-déjeuner', 'Déjeuner', 'Dîner', 'Collation', 'Dessert']
+const difficultyOptions = ['Toutes difficultés', 'Facile', 'Moyen', 'Difficile']
+const sortOptions = ['Nom (A–Z)', 'Nom (Z–A)', 'Calories ↓', 'Calories ↑', 'Temps ↑']
+
+const searchQuery = ref('')
+const selectedCategory = ref<'Toutes' | Category>('Toutes')
+const selectedDifficulty = ref('Toutes difficultés')
+const selectedSort = ref('Nom (A–Z)')
+
+const difficultyColor = (d: Difficulty) =>
+  d === 'Facile' ? 'success' : d === 'Moyen' ? 'warning' : 'error'
+
+const filteredRecipes = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+
+  let list = recipes.value.filter((r) => {
+    const matchesQuery = !q
+      || r.title.toLowerCase().includes(q)
+      || r.ingredientsPreview.toLowerCase().includes(q)
+    const matchesCategory = selectedCategory.value === 'Toutes' || r.category === selectedCategory.value
+    const matchesDifficulty = selectedDifficulty.value === 'Toutes difficultés' || r.difficulty === selectedDifficulty.value
+    return matchesQuery && matchesCategory && matchesDifficulty
+  })
+
+  list = [...list].sort((a, b) => {
+    switch (selectedSort.value) {
+      case 'Nom (Z–A)': return b.title.localeCompare(a.title, 'fr')
+      case 'Calories ↓': return b.calories - a.calories
+      case 'Calories ↑': return a.calories - b.calories
+      case 'Temps ↑': return a.prepTime - b.prepTime
+      default: return a.title.localeCompare(b.title, 'fr')
     }
   })
+
+  return list
 })
 
-const createdLabel = computed(() =>
-  formatDate(selectedRecipe.value?.createdAt)
-)
+const countLabel = computed(() => {
+  const n = filteredRecipes.value.length
+  return n <= 1 ? `${n} recette` : `${n} recettes`
+})
 
-const updatedLabel = computed(() =>
-  formatDate(selectedRecipe.value?.updatedAt)
-)
+const categoryCount = (cat: 'Toutes' | Category) =>
+  cat === 'Toutes' ? recipes.value.length : recipes.value.filter(r => r.category === cat).length
+
+const toggleFavorite = (recipe: TestRecipe) => {
+  recipe.isFavorite = !recipe.isFavorite
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  selectedCategory.value = 'Toutes'
+  selectedDifficulty.value = 'Toutes difficultés'
+}
+
+const recipeMenuItems = (recipe: TestRecipe) => [
+  [
+    { label: 'Voir la recette', icon: 'i-lucide-eye', onSelect: () => console.log('Voir', recipe.title) },
+    { label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => console.log('Modifier', recipe.title) },
+    {
+      label: recipe.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+      icon: 'i-lucide-heart',
+      onSelect: () => toggleFavorite(recipe),
+    },
+  ],
+  [
+    { label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => console.log('Supprimer', recipe.title) },
+  ],
+]
+
+const addRecipe = () => {
+  console.log('Ajouter une recette')
+}
 </script>
 
 <template>
-  <UDashboardPanel
-    id="recipes"
-    :ui="{ body: 'min-h-0' }"
-  >
+  <UDashboardPanel id="recipes">
     <template #header>
       <UDashboardNavbar title="Recettes">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+
+        <template #right>
+          <UButton color="primary" @click="addRecipe">
+            <UIcon name="i-lucide-plus" class="size-5 shrink-0" />
+            Ajouter une recette
+          </UButton>
+        </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <div
-        v-if="!recipeList.length"
-        class="flex flex-1 flex-col items-center justify-center min-h-0 w-full"
-      >
-        <UEmpty
-          class="max-w-md"
-          icon="i-lucide-book-open"
-          title="Aucune recette"
-          description="Ajoutez une recette depuis l’accueil (bouton de test) ou créez-en une dans Firestore."
-        />
-      </div>
+      <div class="flex flex-col gap-5 p-4 sm:p-6">
+        <p class="text-sm font-medium text-highlighted">
+          {{ countLabel }}
+        </p>
 
-      <div
-        v-else
-        class="flex flex-col gap-6 max-w-3xl w-full"
-      >
-        <div
-          v-if="recipeList.length > 1"
-          class="max-w-md"
+        <UInput
+          v-model="searchQuery"
+          icon="i-lucide-search"
+          size="lg"
+          variant="outline"
+          placeholder="Rechercher une recette, un ingrédient…"
+          class="w-full"
         >
-            <UFormField label="Recette">
-              <USelectMenu
-                v-model="selectedRecipeId"
-                :items="recipeSelectItems"
-                value-key="value"
-                placeholder="Choisir une recette"
-                class="w-full"
-              />
-            </UFormField>
+          <template v-if="searchQuery" #trailing>
+            <UButton
+              color="neutral"
+              variant="link"
+              size="sm"
+              icon="i-lucide-x"
+              aria-label="Effacer la recherche"
+              @click="() => { searchQuery = '' }"
+            />
+          </template>
+        </UInput>
+
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex flex-wrap items-center gap-2">
+            <UButton
+              v-for="cat in categories"
+              :key="cat"
+              :color="selectedCategory === cat ? 'primary' : 'neutral'"
+              :variant="selectedCategory === cat ? 'solid' : 'outline'"
+              size="sm"
+              class="rounded-full"
+              @click="() => { selectedCategory = cat }"
+            >
+              {{ cat }}
+              <UBadge
+                :color="selectedCategory === cat ? 'primary' : 'neutral'"
+                variant="subtle"
+                size="sm"
+              >
+                {{ categoryCount(cat) }}
+              </UBadge>
+            </UButton>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <USelectMenu
+              v-model="selectedDifficulty"
+              :items="difficultyOptions"
+              :search-input="false"
+              icon="i-lucide-gauge"
+              class="w-44"
+            />
+            <USelectMenu
+              v-model="selectedSort"
+              :items="sortOptions"
+              :search-input="false"
+              icon="i-lucide-arrow-up-down"
+              class="w-40"
+            />
+          </div>
         </div>
 
-        <UCard
-          v-if="selectedRecipe"
-          :ui="{ body: 'p-0 sm:p-0' }"
-        >
-          <div class="flex flex-col sm:flex-row gap-0 sm:gap-6">
-            <div class="shrink-0 sm:w-48 aspect-video sm:aspect-square bg-muted">
-              <img
-                v-if="selectedRecipe.imageUrl"
-                :src="selectedRecipe.imageUrl"
-                :alt="selectedRecipe.title"
-                class="h-full w-full object-cover rounded-t-lg sm:rounded-l-lg sm:rounded-tr-none"
-              >
-              <div
-                v-else
-                class="h-full w-full flex items-center justify-center rounded-t-lg sm:rounded-l-lg sm:rounded-tr-none"
-              >
-                <UIcon name="i-lucide-image-off" class="size-12 text-muted" />
-              </div>
-            </div>
-            <div class="flex flex-col gap-3 p-4 sm:py-4 sm:pr-4 sm:pl-0 flex-1 min-w-0">
-              <div class="flex flex-wrap items-start gap-2 justify-between">
-                <h1 class="text-xl font-semibold text-highlighted">
-                  {{ selectedRecipe.title }}
-                </h1>
-                <UIcon
-                  :name="selectedRecipe.isFavorite ? 'i-lucide-star' : 'i-lucide-star-off'"
-                  class="size-5 shrink-0 text-muted"
-                  :class="{ 'text-amber-500': selectedRecipe.isFavorite }"
-                />
-              </div>
-              <p class="text-xs text-muted">
-                Créée le {{ createdLabel }} · Mise à jour {{ updatedLabel }}
-              </p>
-              <p
-                v-if="selectedRecipe.description"
-                class="text-sm text-muted"
-              >
-                {{ selectedRecipe.description }}
-              </p>
-              <div class="flex flex-wrap gap-2">
-                <UBadge color="neutral" variant="subtle">
-                  {{ selectedRecipe.type ?? '—' }}
-                </UBadge>
-                <UBadge
-                  :color="selectedRecipe.isPublic ? 'success' : 'neutral'"
-                  variant="subtle"
-                >
-                  {{ selectedRecipe.isPublic ? 'Publique' : 'Privée' }}
-                </UBadge>
-              </div>
-              <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                <div>
-                  <dt class="text-muted">
-                    Préparation
-                  </dt>
-                  <dd class="font-medium text-highlighted">
-                    {{ selectedRecipe.prepTime ?? 0 }} min
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-muted">
-                    Cuisson
-                  </dt>
-                  <dd class="font-medium text-highlighted">
-                    {{ selectedRecipe.cookTime ?? 0 }} min
-                  </dd>
-                </div>
-                <div class="col-span-2 sm:col-span-1">
-                  <dt class="text-muted">
-                    Source
-                  </dt>
-                  <dd
-                    class="font-medium text-highlighted truncate"
-                    :title="selectedRecipe.source ?? ''"
-                  >
-                    {{ selectedRecipe.source ?? '—' }}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-        </UCard>
+        <USeparator />
 
-        <UCard v-if="selectedRecipe">
-          <template #header>
-            <h2 class="text-base font-semibold text-highlighted">
-              Ingrédients
-            </h2>
+        <UEmpty
+          v-if="!filteredRecipes.length"
+          class="py-16"
+          icon="i-lucide-search-x"
+          title="Aucune recette trouvée"
+          description="Essayez un autre terme de recherche ou réinitialisez les filtres."
+        >
+          <template #actions>
+            <UButton
+              label="Réinitialiser les filtres"
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-rotate-ccw"
+              @click="resetFilters"
+            />
           </template>
-          <div
-            v-if="resolvedRecipeIngredients.length"
-            class="overflow-x-auto -mx-1 px-1"
+        </UEmpty>
+
+        <div
+          v-else
+          class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        >
+          <UCard
+            v-for="recipe in filteredRecipes"
+            :key="recipe.id"
+            class="overflow-hidden transition-shadow hover:shadow-lg"
+            :ui="{ header: 'p-0 sm:px-0', body: 'flex flex-col gap-3' }"
           >
-            <table class="w-full border-collapse text-sm table-fixed">
-              <colgroup>
-                <col class="min-w-0">
-                <col class="w-19">
-                <col class="w-19">
-                <col class="w-19">
-                <col class="w-19">
-              </colgroup>
-              <tbody>
-                <tr
-                  v-for="(row, index) in resolvedRecipeIngredients"
-                  :key="`${row.refId}-${index}`"
-                  class="border-b border-default last:border-0"
-                >
-                  <td class="py-2 pr-3 align-baseline min-w-0">
-                    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span class="font-medium text-highlighted tabular-nums">{{ row.quantity }}×</span>
-                      <span class="font-medium text-highlighted">{{ row.ingredientLabel ?? 'Ingrédient introuvable' }}</span>
-                      <template v-if="row.variationLabel">
-                        <span class="text-muted">·</span>
-                        <span class="text-muted">{{ row.variationLabel }}</span>
-                      </template>
-                    </div>
-                  </td>
-                  <td class="py-2 pl-1 align-baseline text-right text-xs tabular-nums text-muted">
-                    <span
-                      v-if="row.nutrition"
-                      class="inline-flex w-full min-w-0 items-center justify-end gap-0.5"
-                    >
-                      <UIcon name="i-lucide-flame" class="size-3.5 shrink-0 opacity-80" />
-                      <span>{{ row.nutrition.calories }}</span>
-                    </span>
-                  </td>
-                  <td class="py-2 pl-1 align-baseline text-right text-xs tabular-nums text-muted">
-                    <span
-                      v-if="row.nutrition"
-                      class="inline-flex w-full min-w-0 items-center justify-end gap-0.5"
-                    >
-                      <UIcon name="i-lucide-wheat" class="size-3.5 shrink-0 opacity-80" />
-                      <span>{{ row.nutrition.carbohydrates }}g</span>
-                    </span>
-                  </td>
-                  <td class="py-2 pl-1 align-baseline text-right text-xs tabular-nums text-muted">
-                    <span
-                      v-if="row.nutrition"
-                      class="inline-flex w-full min-w-0 items-center justify-end gap-0.5"
-                    >
-                      <UIcon name="i-lucide-dumbbell" class="size-3.5 shrink-0 opacity-80" />
-                      <span>{{ row.nutrition.protein }}g</span>
-                    </span>
-                  </td>
-                  <td class="py-2 pl-1 align-baseline text-right text-xs tabular-nums text-muted">
-                    <span
-                      v-if="row.nutrition"
-                      class="inline-flex w-full min-w-0 items-center justify-end gap-0.5"
-                    >
-                      <UIcon name="i-lucide-droplets" class="size-3.5 shrink-0 opacity-80" />
-                      <span>{{ row.nutrition.fat }}g</span>
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p
-            v-else
-            class="text-sm text-muted"
-          >
-            Aucun ingrédient renseigné pour cette recette.
-          </p>
-        </UCard>
+            <template #header>
+              <div
+                class="relative flex h-32 items-center justify-center bg-linear-to-br"
+                :class="recipe.gradient"
+              >
+                <span class="text-5xl drop-shadow-sm">{{ recipe.emoji }}</span>
+
+                <UBadge
+                  :label="recipe.category"
+                  variant="solid"
+                  size="sm"
+                  class="absolute left-3 top-3 bg-white/95 text-highlighted shadow-sm ring-1 ring-black/5"
+                />
+
+                <UTooltip :text="recipe.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'">
+                  <UButton
+                    icon="i-lucide-heart"
+                    color="neutral"
+                    variant="solid"
+                    size="sm"
+                    :aria-label="recipe.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'"
+                    class="absolute right-3 top-3 rounded-full bg-white/95 shadow-sm hover:bg-white"
+                    :class="recipe.isFavorite ? 'text-red-500' : 'text-gray-500'"
+                    :ui="{ leadingIcon: recipe.isFavorite ? 'fill-current' : '' }"
+                    @click="toggleFavorite(recipe)"
+                  />
+                </UTooltip>
+              </div>
+            </template>
+
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold text-highlighted">
+                  {{ recipe.title }}
+                </p>
+                <p class="truncate text-sm text-muted">
+                  {{ recipe.ingredientsPreview }}
+                </p>
+              </div>
+              <UDropdownMenu :items="recipeMenuItems(recipe)" :ui="{ content: 'w-48' }">
+                <UButton
+                  icon="i-lucide-ellipsis-vertical"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                />
+              </UDropdownMenu>
+            </div>
+
+            <USeparator />
+
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-3 text-sm text-muted">
+                <span class="inline-flex items-center gap-1">
+                  <UIcon name="i-lucide-clock" class="size-4 shrink-0" />
+                  <span class="tabular-nums">{{ recipe.prepTime }} min</span>
+                </span>
+                <span class="inline-flex items-center gap-1">
+                  <UIcon name="i-lucide-flame" class="size-4 shrink-0" />
+                  <span class="tabular-nums">{{ recipe.calories }}</span>
+                </span>
+              </div>
+              <UBadge
+                :label="recipe.difficulty"
+                :color="difficultyColor(recipe.difficulty)"
+                variant="subtle"
+                size="sm"
+              />
+            </div>
+          </UCard>
+        </div>
       </div>
     </template>
   </UDashboardPanel>

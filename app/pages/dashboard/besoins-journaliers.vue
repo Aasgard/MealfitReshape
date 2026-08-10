@@ -583,7 +583,7 @@ function handleChartPointerLeave() {
                   :x="CHART_PADDING.left - 8"
                   :y="tick.y + 3"
                   text-anchor="end"
-                  font-size="10"
+                  font-size="9"
                   fill="var(--ui-text-muted)"
                 >{{ tick.weight.toFixed(1).replace('.', ',') }}</text>
 
@@ -593,7 +593,7 @@ function handleChartPointerLeave() {
                   :x="tick.x"
                   :y="CHART_HEIGHT - 8"
                   text-anchor="middle"
-                  font-size="10"
+                  font-size="9"
                   fill="var(--ui-text-muted)"
                 >{{ tick.label }}</text>
 
@@ -625,7 +625,7 @@ function handleChartPointerLeave() {
                     :x="chartEndPoint.x - 8"
                     :y="chartEndPoint.y - 10"
                     text-anchor="end"
-                    font-size="11"
+                    font-size="10"
                     font-weight="600"
                     fill="var(--ui-text-highlighted)"
                   >{{ formatKg(chartEndPoint.weightKg) }}</text>
@@ -657,8 +657,8 @@ function handleChartPointerLeave() {
                       stroke="var(--ui-border)"
                       stroke-width="1"
                     />
-                    <text x="8" y="14" font-size="10" fill="var(--ui-text-muted)">{{ dayToLabel(hoverPoint.day) }}</text>
-                    <text x="8" y="27" font-size="12" font-weight="600" fill="var(--ui-text-highlighted)">{{ formatKg(hoverPoint.weightKg) }}</text>
+                    <text x="8" y="14" font-size="9" fill="var(--ui-text-muted)">{{ dayToLabel(hoverPoint.day) }}</text>
+                    <text x="8" y="27" font-size="11" font-weight="600" fill="var(--ui-text-highlighted)">{{ formatKg(hoverPoint.weightKg) }}</text>
                   </g>
                 </g>
               </svg>

@@ -41,6 +41,7 @@ const links = [[{
   children: [{
     label: 'Calculateur de besoins journaliers',
     icon: 'i-lucide-calculator',
+    to: '/dashboard/besoins-journaliers',
   }, {
     label: 'Calculateur pour trail',
     icon: 'i-lucide-sport-shoe',

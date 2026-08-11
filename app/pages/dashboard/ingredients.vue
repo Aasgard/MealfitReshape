@@ -352,6 +352,24 @@ const addRandomIngredient = async () => {
           </div>
         </div>
 
+        <!-- Disponibilité par mois -->
+        <div>
+          <p class="text-xs text-dimmed mb-2">Disponibilité</p>
+          <div class="grid grid-cols-12 gap-1">
+            <div
+              v-for="(label, idx) in ['J','F','M','A','M','J','J','A','S','O','N','D']"
+              :key="idx"
+              :title="['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][idx]"
+              class="flex items-center justify-center rounded text-[10px] font-medium h-6 transition-colors"
+              :class="selectedIngredient?.activeMonths?.includes(idx + 1)
+                ? 'bg-primary text-white'
+                : 'bg-accented text-dimmed'"
+            >
+              {{ label }}
+            </div>
+          </div>
+        </div>
+
         <!-- Variations / équivalents -->
         <div v-if="selectedIngredient && variationEntries(selectedIngredient).length">
           <div class="flex items-center gap-2 mb-3">
@@ -418,24 +436,6 @@ const addRandomIngredient = async () => {
               </div>
             </li>
           </ul>
-        </div>
-
-        <!-- Disponibilité par mois -->
-        <div>
-          <p class="text-xs text-dimmed mb-2">Disponibilité</p>
-          <div class="grid grid-cols-12 gap-1">
-            <div
-              v-for="(label, idx) in ['J','F','M','A','M','J','J','A','S','O','N','D']"
-              :key="idx"
-              :title="['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][idx]"
-              class="flex items-center justify-center rounded text-[10px] font-medium h-6 transition-colors"
-              :class="selectedIngredient?.activeMonths?.includes(idx + 1)
-                ? 'bg-primary text-white'
-                : 'bg-accented text-dimmed'"
-            >
-              {{ label }}
-            </div>
-          </div>
         </div>
 
         <!-- Commentaire -->

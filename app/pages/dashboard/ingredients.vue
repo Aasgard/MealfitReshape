@@ -4,6 +4,7 @@ import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, addDoc, deleteDoc, doc, Timestamp, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 import { macrosForVariation } from '~/utils/ingredientNutrition'
+import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -34,11 +35,35 @@ console.log(ingredients.value)
 
 const searchQuery = ref('')
 
+const ingredientCategoriesStore = useIngredientCategoriesStore()
+const selectedCategoryIds = ref<string[]>([])
+
+const categoryOptions = computed(() =>
+  ingredientCategoriesStore.categories.map(c => ({ id: c.id, label: c.label, icon: c.icon }))
+)
+
+const visibilityOptions = [
+  { value: 'all', label: 'Tous' },
+  { value: 'private', label: 'Privés' },
+  { value: 'public', label: 'Publics' },
+]
+const selectedVisibility = ref<'all' | 'private' | 'public'>('all')
+const seasonOnly = ref(false)
+const variationsOnly = ref(false)
+
 const filteredIngredients = computed(() => {
   const list = [...(ingredients.value ?? [])]
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return list
-  return list.filter(i => i.label.toLowerCase().includes(q))
+  return list.filter((i) => {
+    const matchesQuery = !q || i.label.toLowerCase().includes(q)
+    const matchesCategory = selectedCategoryIds.value.length === 0
+      || (!!i.category?.id && selectedCategoryIds.value.includes(i.category.id))
+    const matchesVisibility = selectedVisibility.value === 'all'
+      || (selectedVisibility.value === 'public' ? i.isPublic : !i.isPublic)
+    const matchesSeason = !seasonOnly.value || isInSeason(i)
+    const matchesVariations = !variationsOnly.value || variationEntries(i).length > 0
+    return matchesQuery && matchesCategory && matchesVisibility && matchesSeason && matchesVariations
+  })
 })
 
 const ingredientListHeaderLabel = computed(() => {
@@ -50,6 +75,9 @@ const ingredientListHeaderLabel = computed(() => {
 })
 
 const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
+
+const currentMonth = new Date().getMonth() + 1
+const isInSeason = (ingredient: Ingredient) => !!ingredient.activeMonths?.includes(currentMonth)
 
 const variationEntries = (ing: Ingredient | null) => {
   if (!ing?.variations) return []
@@ -210,14 +238,50 @@ const addRandomIngredient = async () => {
           <p class="text-sm font-medium text-highlighted">
             {{ ingredientListHeaderLabel }}
           </p>
-          <UInput
-            v-model="searchQuery"
-            icon="i-lucide-search"
-            size="md"
-            variant="outline"
-            placeholder="Rechercher un ingrédient..."
-            class="w-full"
-          />
+          <div class="flex flex-col sm:flex-row gap-3">
+            <UInput
+              v-model="searchQuery"
+              icon="i-lucide-search"
+              size="md"
+              variant="outline"
+              placeholder="Rechercher un ingrédient..."
+              class="w-full"
+            />
+            <USelectMenu
+              v-model="selectedCategoryIds"
+              :items="categoryOptions"
+              value-key="id"
+              multiple
+              placeholder="Toutes les catégories"
+              :search-input="{ placeholder: 'Rechercher une catégorie...' }"
+              icon="i-lucide-shapes"
+              class="w-full sm:w-56 shrink-0"
+            />
+            <USelectMenu
+              v-model="selectedVisibility"
+              :items="visibilityOptions"
+              value-key="value"
+              :search-input="false"
+              icon="i-lucide-eye"
+              class="w-full sm:w-40 shrink-0"
+            />
+            <UButton
+              :color="seasonOnly ? 'primary' : 'neutral'"
+              :variant="seasonOnly ? 'solid' : 'outline'"
+              icon="i-lucide-leaf"
+              aria-label="Filtrer les ingrédients de saison"
+              class="shrink-0 justify-center"
+              @click="seasonOnly = !seasonOnly"
+            />
+            <UButton
+              :color="variationsOnly ? 'primary' : 'neutral'"
+              :variant="variationsOnly ? 'solid' : 'outline'"
+              icon="i-lucide-git-branch"
+              aria-label="Filtrer les ingrédients avec variations"
+              class="shrink-0 justify-center"
+              @click="variationsOnly = !variationsOnly"
+            />
+          </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -248,16 +312,22 @@ const addRandomIngredient = async () => {
           <div
             v-for="ingredient in filteredIngredients"
             :key="ingredient.id"
-            class="rounded-xl border border-default bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+            class="rounded-xl border bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+            :class="isInSeason(ingredient) ? 'border-primary' : 'border-default'"
             @click="selectIngredient(ingredient)"
           >
             <!-- Contenu de la carte -->
             <div class="p-4 flex flex-col gap-2 flex-1">
               <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0 flex-1">
+                <div class="min-w-0 flex-1 flex items-center gap-1.5">
                   <p class="font-semibold text-highlighted truncate">
                     {{ ingredient.label }}
                   </p>
+                  <UIcon
+                    v-if="variationEntries(ingredient).length"
+                    name="i-lucide-git-branch"
+                    class="size-3.5 text-muted shrink-0"
+                  />
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
                   <UBadge v-if="!ingredient.isPublic" label="Privé" variant="subtle" size="sm" />

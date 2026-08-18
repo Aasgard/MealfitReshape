@@ -34,8 +34,6 @@ const ingredients = useCollection<Ingredient>(() => {
 })
 await ingredients.promise.value
 
-console.log(ingredients.value)
-
 const searchQuery = ref('')
 
 const ingredientCategoriesStore = useIngredientCategoriesStore()
@@ -123,12 +121,40 @@ const selectIngredient = (ingredient: Ingredient) => {
   slideoverOpen.value = true
 }
 
-const deleteIngredient = async (id: string) => {
+const ingredientToDelete = ref<Ingredient | null>(null)
+const deleteDialogOpen = ref(false)
+const deleting = ref(false)
+
+const askDeleteIngredient = (ingredient: Ingredient) => {
+  ingredientToDelete.value = ingredient
+  deleteDialogOpen.value = true
+}
+
+const deleteConfirmDescription = computed(() => {
+  const label = ingredientToDelete.value?.label
+  return label
+    ? `« ${label} » sera définitivement supprimé. Cette action est irréversible.`
+    : undefined
+})
+
+const confirmDeleteIngredient = async () => {
+  const ingredient = ingredientToDelete.value
+  if (!ingredient) return
+
+  deleting.value = true
   try {
-    await deleteDoc(doc(db, 'ingredients', id))
+    await deleteDoc(doc(db, 'ingredients', ingredient.id))
+
+    // Le slideover afficherait sinon un ingrédient qui n'existe plus.
+    if (selectedIngredient.value?.id === ingredient.id) {
+      slideoverOpen.value = false
+      selectedIngredient.value = null
+    }
+
+    deleteDialogOpen.value = false
     toast.add({
       title: 'Supprimé',
-      description: 'L\'ingrédient a été supprimé',
+      description: `« ${ingredient.label} » a été supprimé`,
       color: 'success'
     })
   } catch (error: any) {
@@ -138,6 +164,8 @@ const deleteIngredient = async (id: string) => {
       description: error.message || 'Une erreur est survenue lors de la suppression',
       color: 'error'
     })
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -339,7 +367,7 @@ const addRandomIngredient = async () => {
                   <UBadge v-if="isOwnedByUser(ingredient)" label="Privé" variant="subtle" size="sm" />
                   <UDropdownMenu
                     v-if="isOwnedByUser(ingredient)"
-                    :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteIngredient(ingredient.id) }]]"
+                    :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDeleteIngredient(ingredient) }]]"
                     :ui="{ content: 'w-40' }"
                   >
                     <UButton
@@ -543,4 +571,15 @@ const addRandomIngredient = async () => {
       <p class="text-sm text-muted">Formulaire de modification à venir.</p>
     </template>
   </UModal>
+
+  <ConfirmDialog
+    v-model:open="deleteDialogOpen"
+    title="Supprimer cet ingrédient ?"
+    :description="deleteConfirmDescription"
+    confirm-label="Supprimer"
+    confirm-color="error"
+    confirm-icon="i-lucide-trash-2"
+    :loading="deleting"
+    @confirm="confirmDeleteIngredient"
+  />
 </template>

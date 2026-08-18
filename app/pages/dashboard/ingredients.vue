@@ -19,16 +19,19 @@ const toast = useToast()
 const { generate: generateFirestoreId } = useFirestoreId()
 
 
-const ingredients = useCollection<Ingredient>(
-  () => query(
+const ingredients = useCollection<Ingredient>(() => {
+  const uid = user.value?.uid
+  if (!uid) return null
+
+  return query(
     collection(db, 'ingredients'),
     or(
-      where('owner', '==', user.value!.uid),
+      where('owner', '==', uid),
       where('owner', '==', null)
     ),
     orderBy('label', 'asc')
   )
-)
+})
 await ingredients.promise.value
 
 console.log(ingredients.value)
@@ -51,6 +54,10 @@ const selectedVisibility = ref<'all' | 'private' | 'public'>('all')
 const seasonOnly = ref(false)
 const variationsOnly = ref(false)
 
+/** Un ingrédient sans `owner` appartient au catalogue public : il n'est ni privé, ni modifiable. */
+const isOwnedByUser = (ingredient: Ingredient) =>
+  !!ingredient.owner && ingredient.owner === user.value?.uid
+
 const filteredIngredients = computed(() => {
   const list = [...(ingredients.value ?? [])]
   const q = searchQuery.value.trim().toLowerCase()
@@ -59,7 +66,7 @@ const filteredIngredients = computed(() => {
     const matchesCategory = selectedCategoryIds.value.length === 0
       || (!!i.category?.id && selectedCategoryIds.value.includes(i.category.id))
     const matchesVisibility = selectedVisibility.value === 'all'
-      || (selectedVisibility.value === 'public' ? i.isPublic : !i.isPublic)
+      || (selectedVisibility.value === 'public' ? !isOwnedByUser(i) : isOwnedByUser(i))
     const matchesSeason = !seasonOnly.value || isInSeason(i)
     const matchesVariations = !variationsOnly.value || variationEntries(i).length > 0
     return matchesQuery && matchesCategory && matchesVisibility && matchesSeason && matchesVariations
@@ -183,7 +190,6 @@ const addRandomIngredient = async () => {
       owner: user.value!.uid,
       createdAt: now,
       updatedAt: now,
-      isPublic: false,
       unit: Math.random() > 0.5 ? 'g' : 'ml',
       valuesBy100: {
         calories: Math.floor(Math.random() * 250) + 100,
@@ -330,9 +336,9 @@ const addRandomIngredient = async () => {
                   />
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                  <UBadge v-if="!ingredient.isPublic" label="Privé" variant="subtle" size="sm" />
+                  <UBadge v-if="isOwnedByUser(ingredient)" label="Privé" variant="subtle" size="sm" />
                   <UDropdownMenu
-                    v-if="!ingredient.isPublic"
+                    v-if="isOwnedByUser(ingredient)"
                     :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteIngredient(ingredient.id) }]]"
                     :ui="{ content: 'w-40' }"
                   >

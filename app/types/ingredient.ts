@@ -17,14 +17,12 @@ export interface Ingredient {
   label: string
   /** Identifiant du document (présent quand lu depuis une collection via VueFire) */
   id: string
-  /** Propriétaire de l'ingrédient */
+  /** Propriétaire de l'ingrédient ; `null` pour un ingrédient public du catalogue */
   owner: string | null
   /** Date de dernière mise à jour */
   updatedAt: Timestamp
   /** Date de création */
   createdAt: Timestamp
-  /** Indique si l'ingrédient est public */
-  isPublic: boolean
   /** URL de l'image de l'ingrédient */
   imageUrl?: string
   unit?: 'g' | 'ml'

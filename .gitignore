@@ -30,5 +30,6 @@ mealfitreshape-firebase-adminsdk-fbsvc-f99ab57374.json
 # Claude Code local settings
 .claude/settings.local.json
 
-# Impeccable skill local state (cache, critique reports, consent)
+# Impeccable skill (vendored plugin) and its local state (cache, critique reports, consent)
+.claude/skills/impeccable
 .impeccable

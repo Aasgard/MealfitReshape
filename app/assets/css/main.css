@@ -272,3 +272,21 @@
 :root {
   --ui-radius: 0.125rem;
 }
+
+/* Transition partagée pour l'apparition d'un contenu calculé/chargé (voir calculateurs du dashboard). */
+.reveal-enter-active {
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

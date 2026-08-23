@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { parsePositiveNumber, formatGrams } from '~/utils/numberInput'
+
 useSeoMeta({
   title: 'Dashboard - Calculateur pour trail - Mealfit',
   description: 'Dashboard - Calculateur pour trail - Mealfit',
@@ -19,7 +21,6 @@ const speedLabel = ref(EMPTY_RESULT)
 const targetDistanceTimeLabel = ref(EMPTY_RESULT)
 const targetDistanceLabel = ref('1')
 const targetDistanceCarbsLabel = ref(EMPTY_RESULT)
-const hasCalculated = ref(false)
 
 function parseMmSs(value: string): number | null {
   const trimmed = value.trim()
@@ -39,22 +40,6 @@ function parseKmInput(value: string): number | null {
   const km = Number(normalized)
   if (!Number.isFinite(km) || km <= 0) return null
   return km
-}
-
-function parsePositiveNumber(value: string): number | null {
-  const trimmed = value.trim().replace(/\s/g, '')
-  if (!trimmed) return null
-  const normalized = trimmed.replace(',', '.')
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null
-  const n = Number(normalized)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return n
-}
-
-function formatGrams(grams: number): string {
-  if (!Number.isFinite(grams) || grams < 0) return '0 g'
-  const rounded = Math.round(grams)
-  return `${rounded} g`
 }
 
 function formatKmFrench(km: number): string {
@@ -102,6 +87,43 @@ function formatDistance(meters: number): string {
   return `${Math.round(meters)} m`
 }
 
+const runDurationSec = computed(() => parseMmSs(runDuration.value))
+const walkDurationSec = computed(() => parseMmSs(walkDuration.value))
+const runPaceSec = computed(() => parseMmSs(runPaceTarget.value))
+const walkPaceSec = computed(() => parseMmSs(walkPaceTarget.value))
+const targetKm = computed(() => (targetDistanceKm.value.trim() ? parseKmInput(targetDistanceKm.value) : null))
+const carbsRate = computed(() => (carbsPerHour.value.trim() ? parsePositiveNumber(carbsPerHour.value) : null))
+
+function durationError(value: string, seconds: number | null) {
+  if (!value.trim()) return 'Requis — utilisez 00:00 si aucun'
+  return seconds === null ? 'Format MM:SS attendu' : undefined
+}
+
+function paceError(value: string, seconds: number | null, segmentDurationSec: number | null) {
+  if (!segmentDurationSec) return undefined
+  if (!value.trim()) return 'Requis pour ce segment'
+  if (seconds === null || seconds <= 0) return 'Format MM:SS attendu'
+  return undefined
+}
+
+const runDurationError = computed(() => durationError(runDuration.value, runDurationSec.value))
+const walkDurationError = computed(() => durationError(walkDuration.value, walkDurationSec.value))
+const runPaceError = computed(() => paceError(runPaceTarget.value, runPaceSec.value, runDurationSec.value))
+const walkPaceError = computed(() => paceError(walkPaceTarget.value, walkPaceSec.value, walkDurationSec.value))
+const targetDistanceError = computed(() => (targetDistanceKm.value.trim() && targetKm.value === null ? 'Entrez un nombre valide' : undefined))
+const carbsRateError = computed(() => (carbsPerHour.value.trim() && carbsRate.value === null ? 'Entrez un nombre valide' : undefined))
+
+const canCalculate = computed(() => {
+  if (runDurationSec.value === null || walkDurationSec.value === null) return false
+  if (runDurationSec.value + walkDurationSec.value <= 0) return false
+  if (runDurationError.value || walkDurationError.value || runPaceError.value || walkPaceError.value) return false
+  if (targetDistanceError.value || carbsRateError.value) return false
+  return true
+})
+
+const hasCalculated = computed(() => avgPaceLabel.value !== EMPTY_RESULT)
+const hasTargetResult = computed(() => targetDistanceTimeLabel.value !== EMPTY_RESULT)
+
 function resetResults() {
   avgPaceLabel.value = EMPTY_RESULT
   distanceLabel.value = EMPTY_RESULT
@@ -111,41 +133,18 @@ function resetResults() {
 }
 
 function calculate() {
-  hasCalculated.value = true
-
-  const runSec = parseMmSs(runDuration.value)
-  const walkSec = parseMmSs(walkDuration.value)
-  const runPaceSec = parseMmSs(runPaceTarget.value)
-  const walkPaceSec = parseMmSs(walkPaceTarget.value)
-
-  if (runSec === null || walkSec === null) {
+  if (!canCalculate.value) {
     resetResults()
     return
   }
 
+  const runSec = runDurationSec.value!
+  const walkSec = walkDurationSec.value!
   const cycleSec = runSec + walkSec
-  if (cycleSec <= 0) {
-    resetResults()
-    return
-  }
 
   let distanceKm = 0
-
-  if (runSec > 0) {
-    if (runPaceSec === null || runPaceSec <= 0) {
-      resetResults()
-      return
-    }
-    distanceKm += runSec / runPaceSec
-  }
-
-  if (walkSec > 0) {
-    if (walkPaceSec === null || walkPaceSec <= 0) {
-      resetResults()
-      return
-    }
-    distanceKm += walkSec / walkPaceSec
-  }
+  if (runSec > 0) distanceKm += runSec / runPaceSec.value!
+  if (walkSec > 0) distanceKm += walkSec / walkPaceSec.value!
 
   if (distanceKm <= 0) {
     resetResults()
@@ -156,19 +155,11 @@ function calculate() {
   distanceLabel.value = formatDistance(distanceKm * 1000)
   speedLabel.value = formatSpeed((distanceKm / cycleSec) * 3600)
 
-  const targetKm = parseKmInput(targetDistanceKm.value)
-  if (targetKm !== null) {
-    const timeSec = targetKm * (cycleSec / distanceKm)
+  if (targetKm.value !== null) {
+    const timeSec = targetKm.value * (cycleSec / distanceKm)
     targetDistanceTimeLabel.value = formatDuration(timeSec)
-    targetDistanceLabel.value = formatKmFrench(targetKm)
-
-    const carbsRate = parsePositiveNumber(carbsPerHour.value)
-    if (carbsRate !== null) {
-      const carbsGrams = carbsRate * (timeSec / 3600)
-      targetDistanceCarbsLabel.value = formatGrams(carbsGrams)
-    } else {
-      targetDistanceCarbsLabel.value = EMPTY_RESULT
-    }
+    targetDistanceLabel.value = formatKmFrench(targetKm.value)
+    targetDistanceCarbsLabel.value = carbsRate.value !== null ? formatGrams(carbsRate.value * (timeSec / 3600)) : EMPTY_RESULT
   } else {
     targetDistanceTimeLabel.value = EMPTY_RESULT
     targetDistanceCarbsLabel.value = EMPTY_RESULT
@@ -204,14 +195,13 @@ function calculate() {
       <div class="flex flex-1 flex-col p-4 sm:p-6 overflow-auto">
         <div class="w-full flex flex-col gap-6 text-default">
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            <div class="flex flex-col gap-6">
+            <form class="flex flex-col gap-6" @submit.prevent="calculate">
               <div class="flex flex-col gap-3">
                 <p class="text-sm font-semibold text-highlighted">
                   Course
                 </p>
                 <div class="grid grid-cols-2 gap-4">
-                  <div class="flex flex-col gap-1.5">
-                    <span class="text-sm text-muted">Durée (MM:SS)</span>
+                  <UFormField label="Durée (MM:SS)" :error="runDurationError">
                     <UInput
                       v-model="runDuration"
                       type="text"
@@ -219,10 +209,10 @@ function calculate() {
                       placeholder="15:00"
                       size="md"
                       variant="outline"
+                      class="w-full"
                     />
-                  </div>
-                  <div class="flex flex-col gap-1.5">
-                    <span class="text-sm text-muted">Allure (MM:SS / km)</span>
+                  </UFormField>
+                  <UFormField label="Allure (MM:SS / km)" :error="runPaceError">
                     <UInput
                       v-model="runPaceTarget"
                       type="text"
@@ -230,8 +220,9 @@ function calculate() {
                       placeholder="05:30"
                       size="md"
                       variant="outline"
+                      class="w-full"
                     />
-                  </div>
+                  </UFormField>
                 </div>
               </div>
 
@@ -240,8 +231,7 @@ function calculate() {
                   Marche
                 </p>
                 <div class="grid grid-cols-2 gap-4">
-                  <div class="flex flex-col gap-1.5">
-                    <span class="text-sm text-muted">Durée (MM:SS)</span>
+                  <UFormField label="Durée (MM:SS)" :error="walkDurationError">
                     <UInput
                       v-model="walkDuration"
                       type="text"
@@ -249,10 +239,10 @@ function calculate() {
                       placeholder="00:00"
                       size="md"
                       variant="outline"
+                      class="w-full"
                     />
-                  </div>
-                  <div class="flex flex-col gap-1.5">
-                    <span class="text-sm text-muted">Allure (MM:SS / km)</span>
+                  </UFormField>
+                  <UFormField label="Allure (MM:SS / km)" :error="walkPaceError">
                     <UInput
                       v-model="walkPaceTarget"
                       type="text"
@@ -260,13 +250,13 @@ function calculate() {
                       placeholder="10:00"
                       size="md"
                       variant="outline"
+                      class="w-full"
                     />
-                  </div>
+                  </UFormField>
                 </div>
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-semibold text-highlighted">Kilométrage (km)</span>
+              <UFormField label="Kilométrage (km)" :error="targetDistanceError">
                 <UInput
                   v-model="targetDistanceKm"
                   type="text"
@@ -276,10 +266,9 @@ function calculate() {
                   variant="outline"
                   class="w-full"
                 />
-              </div>
+              </UFormField>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-semibold text-highlighted">Glucides (g/h)</span>
+              <UFormField label="Glucides (g/h)" :error="carbsRateError">
                 <UInput
                   v-model="carbsPerHour"
                   type="text"
@@ -289,60 +278,87 @@ function calculate() {
                   variant="outline"
                   class="w-full"
                 />
-              </div>
+              </UFormField>
 
               <UButton
+                type="submit"
                 block
                 color="primary"
                 class="justify-center uppercase"
-                @click="calculate"
+                :disabled="!canCalculate"
               >
                 Calculer
               </UButton>
-            </div>
+            </form>
 
-            <div class="grid grid-cols-2 gap-4">
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Allure moyenne
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ avgPaceLabel }}
-                </p>
+            <Transition name="reveal" mode="out-in">
+              <div v-if="hasCalculated" key="results" class="flex flex-col gap-4">
+                <div class="flex flex-col gap-3">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Sur le cycle
+                  </p>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                      <p class="text-xs text-muted uppercase tracking-wide">
+                        Allure moyenne
+                      </p>
+                      <p class="text-2xl font-semibold text-highlighted">
+                        {{ avgPaceLabel }}
+                      </p>
+                    </div>
+                    <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                      <p class="text-xs text-muted uppercase tracking-wide">
+                        Distance sur le cycle
+                      </p>
+                      <p class="text-2xl font-semibold text-highlighted">
+                        {{ distanceLabel }}
+                      </p>
+                    </div>
+                    <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                      <p class="text-xs text-muted uppercase tracking-wide">
+                        Vitesse moyenne
+                      </p>
+                      <p class="text-2xl font-semibold text-highlighted">
+                        {{ speedLabel }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="hasTargetResult" class="flex flex-col gap-3 border-t border-default pt-4">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Sur {{ targetDistanceLabel }} km
+                  </p>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                      <p class="text-xs text-muted uppercase tracking-wide">
+                        Temps
+                      </p>
+                      <p class="text-2xl font-semibold text-highlighted">
+                        {{ targetDistanceTimeLabel }}
+                      </p>
+                    </div>
+                    <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                      <p class="text-xs text-muted uppercase tracking-wide">
+                        Glucides
+                      </p>
+                      <p class="text-2xl font-semibold text-highlighted">
+                        {{ targetDistanceCarbsLabel }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Distance sur le cycle
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ distanceLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Vitesse moyenne
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ speedLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Temps pour {{ targetDistanceLabel }} km
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ targetDistanceTimeLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Glucides pour {{ targetDistanceLabel }} km
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ targetDistanceCarbsLabel }}
-                </p>
-              </div>
-            </div>
+
+              <UEmpty
+                v-else
+                key="empty"
+                icon="i-lucide-footprints"
+                title="Aucun résultat pour l'instant"
+                description="Renseignez au moins une durée de course ou de marche avec son allure, puis validez pour voir l'allure moyenne, la distance et la vitesse."
+                class="h-full justify-center"
+              />
+            </Transition>
           </div>
         </div>
       </div>

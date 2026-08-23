@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { parsePositiveNumber, formatGrams } from '~/utils/numberInput'
+
 useSeoMeta({
   title: 'Dashboard - Calculateur de besoins journaliers - Mealfit',
   description: 'Dashboard - Calculateur de besoins journaliers - Mealfit',
@@ -51,30 +53,41 @@ const carbsLabel = ref(EMPTY_RESULT)
 const bodyFatUsedLabel = ref(EMPTY_RESULT)
 const lastCalculatedGoal = ref<string | null>(null)
 
-function parsePositiveNumber(value: string): number | null {
-  const trimmed = value.trim().replace(/\s/g, '')
-  if (!trimmed) return null
-  const normalized = trimmed.replace(',', '.')
-  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null
-  const n = Number(normalized)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return n
-}
-
 function formatKcal(value: number): string {
   if (!Number.isFinite(value)) return EMPTY_RESULT
   return `${Math.round(value)} kcal`
-}
-
-function formatGrams(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return '0 g'
-  return `${Math.round(value)} g`
 }
 
 function formatKg(value: number): string {
   if (!Number.isFinite(value)) return EMPTY_RESULT
   return `${(Math.round(value * 10) / 10).toFixed(1).replace('.', ',')} kg`
 }
+
+const ageValue = computed(() => parsePositiveNumber(age.value))
+const heightValue = computed(() => parsePositiveNumber(heightCm.value))
+const weightValue = computed(() => parsePositiveNumber(weightKg.value))
+const bodyFatValue = computed(() => (bodyFatPercent.value.trim() ? parsePositiveNumber(bodyFatPercent.value) : null))
+
+function requiredNumberError(value: string, parsed: number | null) {
+  if (!value.trim()) return 'Requis'
+  return parsed === null ? 'Entrez un nombre valide' : undefined
+}
+
+const ageError = computed(() => requiredNumberError(age.value, ageValue.value))
+const heightError = computed(() => requiredNumberError(heightCm.value, heightValue.value))
+const weightError = computed(() => requiredNumberError(weightKg.value, weightValue.value))
+const bodyFatError = computed(() => {
+  if (!bodyFatPercent.value.trim()) return undefined
+  if (bodyFatValue.value === null) return 'Entrez un nombre valide'
+  if (bodyFatValue.value >= 70) return 'Doit être inférieur à 70 % — estimation utilisée à la place'
+  return undefined
+})
+
+const canCalculate = computed(() =>
+  ageValue.value !== null && heightValue.value !== null && weightValue.value !== null,
+)
+
+const hasCalculated = computed(() => lastCalculatedGoal.value !== null)
 
 function resetResults() {
   bmrLabel.value = EMPTY_RESULT
@@ -184,29 +197,28 @@ function simulateTrajectory(params: {
 }
 
 function calculate() {
-  const ageYears = parsePositiveNumber(age.value)
-  const heightValue = parsePositiveNumber(heightCm.value)
-  const weightValue = parsePositiveNumber(weightKg.value)
+  const ageYears = ageValue.value
+  const height = heightValue.value
+  const weight = weightValue.value
 
-  if (ageYears === null || heightValue === null || weightValue === null) {
+  if (ageYears === null || height === null || weight === null) {
     resetResults()
     return
   }
 
-  const measuredBodyFat = bodyFatPercent.value.trim() ? parsePositiveNumber(bodyFatPercent.value) : null
-  const bodyFatIsMeasured = measuredBodyFat !== null && measuredBodyFat < 70
-  const bodyFatPct = bodyFatIsMeasured ? measuredBodyFat! : estimateBodyFatPercent(sexe.value, ageYears, heightValue, weightValue)
+  const bodyFatIsMeasured = bodyFatValue.value !== null && bodyFatValue.value < 70
+  const bodyFatPct = bodyFatIsMeasured ? bodyFatValue.value! : estimateBodyFatPercent(sexe.value, ageYears, height, weight)
   bodyFatUsedLabel.value = `${bodyFatPct.toFixed(1).replace('.', ',')} % ${bodyFatIsMeasured ? '(mesurée)' : '(estimée — formule de Deurenberg)'}`
 
   let bmr: number
   if (bodyFatIsMeasured) {
-    const leanMassKg = weightValue * (1 - bodyFatPct / 100)
+    const leanMassKg = weight * (1 - bodyFatPct / 100)
     bmr = 370 + 21.6 * leanMassKg
     formulaLabel.value = 'Katch-McArdle'
   } else {
     bmr = sexe.value === 'Homme'
-      ? 10 * weightValue + 6.25 * heightValue - 5 * ageYears + 5
-      : 10 * weightValue + 6.25 * heightValue - 5 * ageYears - 161
+      ? 10 * weight + 6.25 * height - 5 * ageYears + 5
+      : 10 * weight + 6.25 * height - 5 * ageYears - 161
     formulaLabel.value = 'Mifflin-St Jeor'
   }
 
@@ -217,7 +229,7 @@ function calculate() {
   const targetCalories = tdee * goalFactor
 
   // Répartition simple : protéines 1.8 g/kg (ISSN, 1.6-2.2 g/kg pour préserver la masse maigre), lipides 25 % des kcal, glucides le reste.
-  const proteinGrams = 1.8 * weightValue
+  const proteinGrams = 1.8 * weight
   const proteinKcal = proteinGrams * 4
   const fatKcal = targetCalories * 0.25
   const fatGrams = fatKcal / 9
@@ -233,14 +245,14 @@ function calculate() {
 
   lastCalculatedGoal.value = goal.value
 
-  const initialFmKg = weightValue * (bodyFatPct / 100)
-  const initialFfmKg = weightValue - initialFmKg
+  const initialFmKg = weight * (bodyFatPct / 100)
+  const initialFfmKg = weight - initialFmKg
 
   const projection = simulateTrajectory({
     formula: formulaLabel.value,
     sexeVal: sexe.value,
     ageYears,
-    heightValue,
+    heightValue: height,
     initialFmKg,
     initialFfmKg,
     pal,
@@ -393,18 +405,17 @@ function handleChartPointerLeave() {
           </p>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            <div class="flex flex-col gap-6">
+            <form class="flex flex-col gap-6" @submit.prevent="calculate">
               <div class="grid grid-cols-2 gap-4">
-                <div class="flex flex-col gap-1.5">
-                  <span class="text-sm text-muted">Sexe</span>
+                <UFormField label="Sexe">
                   <USelectMenu
                     v-model="sexe"
                     :items="sexeOptions"
                     :search-input="false"
+                    class="w-full"
                   />
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <span class="text-sm text-muted">Âge (années)</span>
+                </UFormField>
+                <UFormField label="Âge (années)" :error="ageError">
                   <UInput
                     v-model="age"
                     type="text"
@@ -412,13 +423,13 @@ function handleChartPointerLeave() {
                     placeholder="30"
                     size="md"
                     variant="outline"
+                    class="w-full"
                   />
-                </div>
+                </UFormField>
               </div>
 
               <div class="grid grid-cols-2 gap-4">
-                <div class="flex flex-col gap-1.5">
-                  <span class="text-sm text-muted">Taille (cm)</span>
+                <UFormField label="Taille (cm)" :error="heightError">
                   <UInput
                     v-model="heightCm"
                     type="text"
@@ -426,10 +437,10 @@ function handleChartPointerLeave() {
                     placeholder="175"
                     size="md"
                     variant="outline"
+                    class="w-full"
                   />
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <span class="text-sm text-muted">Poids (kg)</span>
+                </UFormField>
+                <UFormField label="Poids (kg)" :error="weightError">
                   <UInput
                     v-model="weightKg"
                     type="text"
@@ -437,12 +448,12 @@ function handleChartPointerLeave() {
                     placeholder="70"
                     size="md"
                     variant="outline"
+                    class="w-full"
                   />
-                </div>
+                </UFormField>
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">% masse grasse mesuré (optionnel — active Katch-McArdle)</span>
+              <UFormField label="% masse grasse mesuré (optionnel — active Katch-McArdle)" :error="bodyFatError">
                 <UInput
                   v-model="bodyFatPercent"
                   type="text"
@@ -450,92 +461,103 @@ function handleChartPointerLeave() {
                   placeholder="ex : 18"
                   size="md"
                   variant="outline"
+                  class="w-full"
                 />
-              </div>
+              </UFormField>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">Niveau d'activité</span>
+              <UFormField label="Niveau d'activité">
                 <USelectMenu
                   v-model="activityLevel"
                   :items="activityOptions"
                   :search-input="false"
                   class="w-full"
                 />
-              </div>
+              </UFormField>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm text-muted">Objectif</span>
+              <UFormField label="Objectif">
                 <USelectMenu
                   v-model="goal"
                   :items="goalOptions"
                   :search-input="false"
                   class="w-full"
                 />
-              </div>
+              </UFormField>
 
               <UButton
+                type="submit"
                 block
                 color="primary"
                 class="justify-center uppercase"
-                @click="calculate"
+                :disabled="!canCalculate"
               >
                 Calculer
               </UButton>
-            </div>
+            </form>
 
-            <div class="grid grid-cols-2 gap-4">
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Métabolisme de base
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ bmrLabel }}
-                </p>
-                <p class="text-xs text-muted">
-                  {{ formulaLabel }}
-                </p>
+            <Transition name="reveal" mode="out-in">
+              <div v-if="hasCalculated" key="results" class="grid grid-cols-2 gap-4">
+                <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Métabolisme de base
+                  </p>
+                  <p class="text-2xl font-semibold text-highlighted">
+                    {{ bmrLabel }}
+                  </p>
+                  <p class="text-xs text-muted">
+                    {{ formulaLabel }}
+                  </p>
+                </div>
+                <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Maintien (TDEE)
+                  </p>
+                  <p class="text-2xl font-semibold text-highlighted">
+                    {{ tdeeLabel }}
+                  </p>
+                </div>
+                <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1 col-span-2">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Objectif calorique
+                  </p>
+                  <p class="text-2xl font-semibold text-highlighted">
+                    {{ targetCaloriesLabel }}
+                  </p>
+                </div>
+                <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Protéines
+                  </p>
+                  <p class="text-2xl font-semibold text-highlighted">
+                    {{ proteinLabel }}
+                  </p>
+                </div>
+                <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Lipides
+                  </p>
+                  <p class="text-2xl font-semibold text-highlighted">
+                    {{ fatLabel }}
+                  </p>
+                </div>
+                <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1 col-span-2">
+                  <p class="text-xs text-muted uppercase tracking-wide">
+                    Glucides
+                  </p>
+                  <p class="text-2xl font-semibold text-highlighted">
+                    {{ carbsLabel }}
+                  </p>
+                </div>
               </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Maintien (TDEE)
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ tdeeLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1 col-span-2">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Objectif calorique
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ targetCaloriesLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Protéines
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ proteinLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Lipides
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ fatLabel }}
-                </p>
-              </div>
-              <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1 col-span-2">
-                <p class="text-xs text-muted uppercase tracking-wide">
-                  Glucides
-                </p>
-                <p class="text-2xl font-semibold text-highlighted">
-                  {{ carbsLabel }}
-                </p>
-              </div>
-            </div>
+
+              <UEmpty
+                v-else
+                key="empty"
+                icon="i-lucide-calculator"
+                title="Aucun résultat pour l'instant"
+                description="Renseignez au moins l'âge, la taille et le poids, puis validez pour voir le métabolisme de base, le maintien et la répartition calorique."
+                class="h-full justify-center"
+              />
+            </Transition>
           </div>
 
           <div v-if="chartPoints.length > 1 && lastCalculatedGoal !== 'Maintien'" class="flex flex-col gap-4 border-t border-default pt-6">

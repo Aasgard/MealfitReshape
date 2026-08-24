@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { collection, addDoc, updateDoc, doc, Timestamp, deleteField } from 'firebase/firestore'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Ingredient } from '~/types/ingredient'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
+import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { categoryIconName } from '~/utils/categoryIcon'
 
@@ -20,6 +22,7 @@ const user = useCurrentUser()
 const toast = useToast()
 const { generate: generateFirestoreId } = useFirestoreId()
 const ingredientCategoriesStore = useIngredientCategoriesStore()
+const ingredientDefaultUnitsStore = useIngredientDefaultUnitsStore()
 
 const isEditMode = computed(() => props.ingredient !== null)
 const title = computed(() => isEditMode.value ? `Modifier ${props.ingredient?.label}` : 'Ajouter un ingrédient')
@@ -88,9 +91,30 @@ function addVariationRow() {
   variationRows.value.push({ key: generateFirestoreId(), label: '', value: '', unit: 'g' })
 }
 
+function addPredefinedVariationRow(unit: { label: string; value: number; unit: 'g' | 'ml' }) {
+  variationRows.value.push({ key: generateFirestoreId(), label: unit.label, value: String(unit.value), unit: unit.unit })
+}
+
 function removeVariationRow(key: string) {
   variationRows.value = variationRows.value.filter(r => r.key !== key)
 }
+
+const addVariationMenuItems = computed<DropdownMenuItem[][]>(() => {
+  const measureItems: DropdownMenuItem[] = ingredientDefaultUnitsStore.units.map(unit => ({
+    label: unit.label,
+    slot: 'measure' as const,
+    unitValue: unit.value,
+    unitLabel: unit.unit,
+    onSelect: () => addPredefinedVariationRow(unit)
+  }))
+
+  const groups: DropdownMenuItem[][] = []
+  if (measureItems.length) {
+    groups.push([{ type: 'label', label: 'Mesures courantes' }], measureItems)
+  }
+  groups.push([{ label: 'Variation vide...', icon: 'i-lucide-plus', onSelect: addVariationRow }])
+  return groups
+})
 
 const labelError = computed(() => (submitted.value && !label.value.trim()) ? 'Requis' : undefined)
 const categoryError = computed(() => (submitted.value && !categoryId.value) ? 'Requis' : undefined)
@@ -299,7 +323,16 @@ async function handleSubmit() {
               <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
               <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Variations (optionnel)</p>
             </div>
-            <UButton label="Ajouter" icon="i-lucide-plus" size="xs" color="neutral" variant="outline" @click="addVariationRow" />
+            <UDropdownMenu :items="addVariationMenuItems" :ui="{ content: 'w-56' }">
+              <UButton label="Ajouter" icon="i-lucide-plus" trailing-icon="i-lucide-chevron-down" size="xs" color="neutral" variant="outline" />
+
+              <template #measure-label="{ item }">
+                <div class="flex items-center justify-between gap-3 w-full">
+                  <span>{{ (item as any).label }}</span>
+                  <span class="text-dimmed text-xs">{{ (item as any).unitValue }} {{ (item as any).unitLabel }}</span>
+                </div>
+              </template>
+            </UDropdownMenu>
           </div>
           <p v-if="variationRows.length === 0" class="text-xs text-dimmed">
             Aucune portion alternative.

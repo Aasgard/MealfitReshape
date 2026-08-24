@@ -152,6 +152,13 @@ const openEditForm = (ingredient: Ingredient) => {
   formSlideoverOpen.value = true
 }
 
+const openEditFromDetail = () => {
+  if (!selectedIngredient.value) return
+  const ingredient = selectedIngredient.value
+  slideoverOpen.value = false
+  openEditForm(ingredient)
+}
+
 const selectIngredient = (ingredient: Ingredient) => {
   selectedIngredient.value = ingredient
   slideoverOpen.value = true
@@ -413,9 +420,23 @@ const confirmDeleteIngredient = () => {
 
   <USlideover
     v-model:open="slideoverOpen"
-    :title="selectedIngredient?.label ?? ''"
     :description="selectedIngredient ? `Modifié le ${formatDate(selectedIngredient.updatedAt)}` : undefined"
   >
+    <template #title>
+      <div class="flex items-center gap-2">
+        <span>{{ selectedIngredient?.label }}</span>
+        <UButton
+          v-if="selectedIngredient && isOwnedByUser(selectedIngredient)"
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :aria-label="`Modifier ${selectedIngredient.label}`"
+          @click="openEditFromDetail"
+        />
+      </div>
+    </template>
+
     <template #body>
       <div class="flex flex-col gap-6">
         <!-- Catégorie -->

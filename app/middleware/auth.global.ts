@@ -1,6 +1,8 @@
 import { collection, doc, getDoc, orderBy, query, setDoc } from 'firebase/firestore'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
+import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import type { IngredientCategory } from '~/types/ingredientCategory'
+import type { IngredientDefaultUnit } from '~/types/ingredientDefaultUnit'
 
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path.startsWith('/dashboard')) {
@@ -42,6 +44,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
       )
       await categories.promise.value
       categoriesStore.setCategories(categories.value)
+
+      const defaultUnitsStore = useIngredientDefaultUnitsStore()
+      const defaultUnits = useCollection<IngredientDefaultUnit>(
+        () => query(
+          collection(db, 'ingredientDefaultUnits'),
+          orderBy('label', 'asc')
+        ),
+        { once: true }
+      )
+      await defaultUnits.promise.value
+      defaultUnitsStore.setUnits(defaultUnits.value)
     }
   }
 })

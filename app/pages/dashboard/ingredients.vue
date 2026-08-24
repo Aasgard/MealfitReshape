@@ -5,6 +5,7 @@ import { collection, or, query, where, deleteDoc, doc, orderBy } from 'firebase/
 import type { Ingredient } from '~/types/ingredient'
 import { macrosForVariation } from '~/utils/ingredientNutrition'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
+import { categoryIconName } from '~/utils/categoryIcon'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -37,7 +38,7 @@ const ingredientCategoriesStore = useIngredientCategoriesStore()
 const selectedCategoryIds = ref<string[]>([])
 
 const categoryOptions = computed(() =>
-  ingredientCategoriesStore.categories.map(c => ({ id: c.id, label: c.label, icon: c.icon }))
+  ingredientCategoriesStore.categories.map(c => ({ id: c.id, label: c.label, icon: categoryIconName(c.icon) }))
 )
 
 const visibilityOptions = [
@@ -112,8 +113,6 @@ watch([searchQuery, selectedCategoryIds, selectedVisibility, seasonOnly, variati
 const showMoreIngredients = () => {
   visibleCount.value += PAGE_SIZE
 }
-
-const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
 
 const currentMonth = new Date().getMonth() + 1
 const isInSeason = (ingredient: Ingredient) => !!ingredient.activeMonths?.includes(currentMonth)
@@ -390,7 +389,10 @@ const confirmDeleteIngredient = () => {
                   </UDropdownMenu>
                 </div>
               </div>
-              <p v-if="ingredient.category?.label" class="text-sm text-muted">{{ ingredient.category.label }}</p>
+              <p v-if="ingredient.category?.label" class="text-sm text-muted flex items-center gap-1.5">
+                <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-3.5 shrink-0" />
+                {{ ingredient.category.label }}
+              </p>
 
 
             </div>
@@ -419,13 +421,16 @@ const confirmDeleteIngredient = () => {
         <!-- Catégorie -->
         <div v-if="selectedIngredient?.category?.label">
           <p class="text-xs text-dimmed mb-1">Catégorie</p>
-          <p class="text-sm text-muted">{{ selectedIngredient.category.label }}</p>
+          <p class="text-sm text-muted flex items-center gap-1.5">
+            <UIcon v-if="categoryIconName(selectedIngredient.category.icon)" :name="categoryIconName(selectedIngredient.category.icon)!" class="size-3.5 shrink-0" />
+            {{ selectedIngredient.category.label }}
+          </p>
         </div>
 
         <!-- Valeurs nutritionnelles -->
         <div v-if="selectedIngredient?.valuesBy100">
           <div class="flex items-baseline justify-between mb-4">
-            <p class="text-xs text-dimmed">Pour 100{{ selectedIngredient.unit ?? 'g' }}</p>
+            <p class="text-xs text-dimmed">Pour 100 g</p>
             <div class="flex items-baseline gap-1">
               <span class="text-2xl font-bold text-highlighted">{{ selectedIngredient.valuesBy100.calories }}</span>
               <span class="text-xs text-dimmed">kcal</span>
@@ -501,7 +506,7 @@ const confirmDeleteIngredient = () => {
             <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Variations</p>
           </div>
           <p class="text-xs text-dimmed mb-3">
-            Autres aliments équivalents pour des portions comparables ({{ unitLabel(selectedIngredient.unit) }}).
+            Autres portions équivalentes.
           </p>
           <ul class="flex flex-col gap-3">
             <li
@@ -512,7 +517,7 @@ const confirmDeleteIngredient = () => {
               <div class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default/60">
                 <span class="text-sm font-medium text-highlighted truncate">{{ v.label }}</span>
                 <span class="text-sm tabular-nums text-muted shrink-0">
-                  {{ v.value }}&nbsp;{{ unitLabel(selectedIngredient!.unit) }}
+                  {{ v.value }}&nbsp;{{ v.unit }}
                 </span>
               </div>
               <div
@@ -521,7 +526,7 @@ const confirmDeleteIngredient = () => {
               >
                 <div class="flex items-baseline justify-between mb-3">
                   <p class="text-xs text-dimmed">
-                    Pour {{ v.value }}{{ unitLabel(selectedIngredient!.unit) }}
+                    Pour {{ v.value }}&nbsp;{{ v.unit }}
                   </p>
                   <div class="flex items-baseline gap-1">
                     <span class="text-xl font-bold text-highlighted">{{ v.scaled.calories }}</span>
@@ -556,7 +561,7 @@ const confirmDeleteIngredient = () => {
                 v-else
                 class="px-3 py-2 text-xs text-dimmed"
               >
-                Ajoutez des valeurs nutritionnelles sur l’ingrédient pour afficher l’équivalent pour cette variation.
+                Ajoutez les valeurs nutritionnelles et, si cette variation est en ml, la densité de l’ingrédient pour afficher l’équivalent.
               </div>
             </li>
           </ul>

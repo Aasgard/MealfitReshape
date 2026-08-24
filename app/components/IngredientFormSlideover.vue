@@ -2,7 +2,8 @@
 import { collection, addDoc, updateDoc, doc, Timestamp, deleteField } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
-import { parsePositiveNumber } from '~/utils/numberInput'
+import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
+import { categoryIconName } from '~/utils/categoryIcon'
 
 /**
  * Slideover d'ajout/modification d'ingrédient — un seul composant pour les deux modes.
@@ -24,7 +25,7 @@ const isEditMode = computed(() => props.ingredient !== null)
 const title = computed(() => isEditMode.value ? `Modifier ${props.ingredient?.label}` : 'Ajouter un ingrédient')
 
 const categoryOptions = computed(() =>
-  ingredientCategoriesStore.categories.map(c => ({ id: c.id, label: c.label, icon: c.icon }))
+  ingredientCategoriesStore.categories.map(c => ({ id: c.id, label: c.label, icon: categoryIconName(c.icon) }))
 )
 
 const monthAbbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
@@ -34,11 +35,12 @@ interface VariationRow {
   key: string
   label: string
   value: string
+  unit: 'g' | 'ml'
 }
 
 const label = ref('')
 const categoryId = ref<string | null>(null)
-const unit = ref<'g' | 'ml'>('g')
+const density = ref('')
 const calories = ref('')
 const protein = ref('')
 const carbohydrates = ref('')
@@ -53,14 +55,14 @@ function resetForm() {
   const ing = props.ingredient
   label.value = ing?.label ?? ''
   categoryId.value = ing?.category?.id ?? null
-  unit.value = ing?.unit ?? 'g'
+  density.value = ing?.density != null ? String(ing.density) : ''
   calories.value = ing?.valuesBy100 ? String(ing.valuesBy100.calories) : ''
   protein.value = ing?.valuesBy100 ? String(ing.valuesBy100.protein) : ''
   carbohydrates.value = ing?.valuesBy100 ? String(ing.valuesBy100.carbohydrates) : ''
   fat.value = ing?.valuesBy100 ? String(ing.valuesBy100.fat) : ''
   activeMonths.value = ing?.activeMonths ? [...ing.activeMonths] : []
   variationRows.value = ing?.variations
-    ? Object.entries(ing.variations).map(([key, v]) => ({ key, label: v.label, value: String(v.value) }))
+    ? Object.entries(ing.variations).map(([key, v]) => ({ key, label: v.label, value: String(v.value), unit: v.unit }))
     : []
   comment.value = ing?.comment ?? ''
   submitted.value = false
@@ -76,8 +78,14 @@ function toggleMonth(month: number) {
   else activeMonths.value.splice(i, 1)
 }
 
+const allMonthsSelected = computed(() => activeMonths.value.length === 12)
+
+function toggleAllMonths() {
+  activeMonths.value = allMonthsSelected.value ? [] : Array.from({ length: 12 }, (_, i) => i + 1)
+}
+
 function addVariationRow() {
-  variationRows.value.push({ key: generateFirestoreId(), label: '', value: '' })
+  variationRows.value.push({ key: generateFirestoreId(), label: '', value: '', unit: 'g' })
 }
 
 function removeVariationRow(key: string) {
@@ -87,6 +95,11 @@ function removeVariationRow(key: string) {
 const labelError = computed(() => (submitted.value && !label.value.trim()) ? 'Requis' : undefined)
 const categoryError = computed(() => (submitted.value && !categoryId.value) ? 'Requis' : undefined)
 
+const densityError = computed(() => {
+  if (!submitted.value || !density.value.trim()) return undefined
+  return parsePositiveNumber(density.value) === null ? 'Nombre invalide' : undefined
+})
+
 const macrosStarted = computed(() =>
   [calories.value, protein.value, carbohydrates.value, fat.value].some(v => v.trim() !== '')
 )
@@ -94,7 +107,7 @@ const macrosStarted = computed(() =>
 function macroFieldError(raw: string) {
   if (!submitted.value) return undefined
   if (!raw.trim()) return macrosStarted.value ? 'Requis si une valeur nutritionnelle est renseignée' : undefined
-  return parsePositiveNumber(raw) === null ? 'Nombre invalide' : undefined
+  return parseNonNegativeNumber(raw) === null ? 'Nombre invalide' : undefined
 }
 
 const caloriesError = computed(() => macroFieldError(calories.value))
@@ -115,7 +128,8 @@ function variationValueError(row: VariationRow) {
 const isValid = computed(() => {
   if (!label.value.trim()) return false
   if (!categoryId.value) return false
-  if (macrosStarted.value && [calories.value, protein.value, carbohydrates.value, fat.value].some(v => parsePositiveNumber(v) === null)) {
+  if (density.value.trim() && parsePositiveNumber(density.value) === null) return false
+  if (macrosStarted.value && [calories.value, protein.value, carbohydrates.value, fat.value].some(v => parseNonNegativeNumber(v) === null)) {
     return false
   }
   if (variationRows.value.some(r => !r.label.trim() || parsePositiveNumber(r.value) === null)) return false
@@ -136,9 +150,9 @@ async function handleSubmit() {
     const now = Timestamp.now()
     const categoryRef = doc(db, 'ingredientCategories', categoryId.value!)
 
-    const variations: Record<string, { label: string; value: number }> = {}
+    const variations: Record<string, { label: string; value: number; unit: 'g' | 'ml' }> = {}
     for (const row of variationRows.value) {
-      variations[row.key] = { label: row.label.trim(), value: parsePositiveNumber(row.value)! }
+      variations[row.key] = { label: row.label.trim(), value: parsePositiveNumber(row.value)!, unit: row.unit }
     }
 
     const trimmedLabel = label.value.trim()
@@ -146,19 +160,24 @@ async function handleSubmit() {
     const payload: Record<string, unknown> = {
       label: trimmedLabel,
       category: categoryRef,
-      unit: unit.value,
       activeMonths: activeMonths.value,
       comment: comment.value.trim(),
       variations,
       updatedAt: now,
     }
 
+    if (density.value.trim()) {
+      payload.density = parsePositiveNumber(density.value)!
+    } else if (isEditMode.value) {
+      payload.density = deleteField()
+    }
+
     if (macrosStarted.value) {
       payload.valuesBy100 = {
-        calories: parsePositiveNumber(calories.value)!,
-        protein: parsePositiveNumber(protein.value)!,
-        carbohydrates: parsePositiveNumber(carbohydrates.value)!,
-        fat: parsePositiveNumber(fat.value)!,
+        calories: parseNonNegativeNumber(calories.value)!,
+        protein: parseNonNegativeNumber(protein.value)!,
+        carbohydrates: parseNonNegativeNumber(carbohydrates.value)!,
+        fat: parseNonNegativeNumber(fat.value)!,
       }
     } else if (isEditMode.value) {
       // L'utilisateur a vidé les 4 champs alors que l'ingrédient avait des valeurs : on les retire.
@@ -215,32 +234,18 @@ async function handleSubmit() {
                 class="w-full"
               />
             </UFormField>
-            <UFormField label="Unité">
-              <div class="flex gap-2">
-                <UButton
-                  label="g"
-                  :color="unit === 'g' ? 'primary' : 'neutral'"
-                  :variant="unit === 'g' ? 'solid' : 'outline'"
-                  :aria-pressed="unit === 'g'"
-                  class="flex-1 justify-center"
-                  @click="unit = 'g'"
-                />
-                <UButton
-                  label="ml"
-                  :color="unit === 'ml' ? 'primary' : 'neutral'"
-                  :variant="unit === 'ml' ? 'solid' : 'outline'"
-                  :aria-pressed="unit === 'ml'"
-                  class="flex-1 justify-center"
-                  @click="unit = 'ml'"
-                />
-              </div>
+            <UFormField label="Densité (g/ml)" :error="densityError">
+              <UInput v-model="density" type="text" inputmode="decimal" placeholder="ex : 0.92" size="md" variant="outline" class="w-full" />
             </UFormField>
           </div>
+          <p class="text-xs text-dimmed -mt-2">
+            La densité sert à convertir une variation exprimée en ml vers des grammes ; utile seulement si une variation ci-dessous est en ml.
+          </p>
         </div>
 
         <!-- Valeurs nutritionnelles -->
         <div>
-          <p class="text-xs text-dimmed mb-2">Valeurs pour 100{{ unit }} (optionnel)</p>
+          <p class="text-xs text-dimmed mb-2">Valeurs pour 100 g (optionnel)</p>
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Calories (kcal)" :error="caloriesError">
               <UInput v-model="calories" type="text" inputmode="decimal" placeholder="ex : 52" size="md" variant="outline" class="w-full" />
@@ -259,7 +264,17 @@ async function handleSubmit() {
 
         <!-- Disponibilité par mois -->
         <div>
-          <p class="text-xs text-dimmed mb-2">Disponibilité (optionnel)</p>
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs text-dimmed">Disponibilité (optionnel)</p>
+            <UButton
+              :label="allMonthsSelected ? 'Tout désélectionner' : 'Tout sélectionner'"
+              color="neutral"
+              variant="link"
+              size="xs"
+              class="p-0"
+              @click="toggleAllMonths"
+            />
+          </div>
           <div class="grid grid-cols-12 gap-1">
             <button
               v-for="(monthLabel, idx) in monthAbbreviations"
@@ -294,9 +309,27 @@ async function handleSubmit() {
               <UFormField class="flex-1" :error="variationLabelError(row)">
                 <UInput v-model="row.label" placeholder="ex : Tranche" size="md" variant="outline" class="w-full" />
               </UFormField>
-              <UFormField class="w-24 shrink-0" :error="variationValueError(row)">
-                <UInput v-model="row.value" type="text" inputmode="decimal" :placeholder="unit" size="md" variant="outline" class="w-full" />
+              <UFormField class="w-20 shrink-0" :error="variationValueError(row)">
+                <UInput v-model="row.value" type="text" inputmode="decimal" placeholder="qté" size="md" variant="outline" class="w-full" />
               </UFormField>
+              <div class="flex gap-1 shrink-0 mt-0.5">
+                <UButton
+                  label="g"
+                  size="xs"
+                  :color="row.unit === 'g' ? 'primary' : 'neutral'"
+                  :variant="row.unit === 'g' ? 'solid' : 'outline'"
+                  :aria-pressed="row.unit === 'g'"
+                  @click="row.unit = 'g'"
+                />
+                <UButton
+                  label="ml"
+                  size="xs"
+                  :color="row.unit === 'ml' ? 'primary' : 'neutral'"
+                  :variant="row.unit === 'ml' ? 'solid' : 'outline'"
+                  :aria-pressed="row.unit === 'ml'"
+                  @click="row.unit = 'ml'"
+                />
+              </div>
               <UButton
                 icon="i-lucide-trash-2"
                 color="neutral"

@@ -25,9 +25,10 @@ export interface Ingredient {
   createdAt: Timestamp
   /** URL de l'image de l'ingrédient */
   imageUrl?: string
-  unit?: 'g' | 'ml'
-  /** Valeurs nutritionnelles par 100 unités de l'ingrédient */
+  /** Densité en g/ml, utilisée pour convertir une variation exprimée en ml vers des grammes. */
+  density?: number
+  /** Valeurs nutritionnelles pour 100 grammes de l'ingrédient (toujours en grammes). */
   valuesBy100?: IngredientMacros
   /** Variantes ou équivalents (clé = identifiant de référence) */
-  variations?: Record<string, { label: string; value: number }>
+  variations?: Record<string, { label: string; value: number; unit: 'g' | 'ml' }>
 }

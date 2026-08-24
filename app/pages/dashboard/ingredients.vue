@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { toRaw } from 'vue'
+import { watch } from 'vue'
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, or, query, where, addDoc, deleteDoc, doc, Timestamp, orderBy } from 'firebase/firestore'
+import { collection, or, query, where, deleteDoc, doc, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 import { macrosForVariation } from '~/utils/ingredientNutrition'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
@@ -15,9 +15,6 @@ const { formatDate } = useDateFormat()
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
-
-const { generate: generateFirestoreId } = useFirestoreId()
-
 
 const ingredients = useCollection<Ingredient>(() => {
   const uid = user.value?.uid
@@ -56,8 +53,11 @@ const variationsOnly = ref(false)
 const isOwnedByUser = (ingredient: Ingredient) =>
   !!ingredient.owner && ingredient.owner === user.value?.uid
 
+/** Ingrédients masqués immédiatement pendant le délai d'annulation d'une suppression (voir confirmDeleteIngredient). */
+const pendingDeleteIds = ref(new Set<string>())
+
 const filteredIngredients = computed(() => {
-  const list = [...(ingredients.value ?? [])]
+  const list = [...(ingredients.value ?? [])].filter(i => !pendingDeleteIds.value.has(i.id))
   const q = searchQuery.value.trim().toLowerCase()
   return list.filter((i) => {
     const matchesQuery = !q || i.label.toLowerCase().includes(q)
@@ -79,10 +79,31 @@ const ingredientListHeaderLabel = computed(() => {
   return `${n} Ingrédients`
 })
 
+/**
+ * Le catalogue (public + privé) n'a pas de limite côté requête Firestore : les filtres
+ * (recherche, catégorie...) doivent porter sur l'ensemble des résultats déjà chargés.
+ * On limite donc le nombre de cartes montées dans le DOM plutôt que la requête elle-même.
+ */
+const PAGE_SIZE = 24
+const visibleCount = ref(PAGE_SIZE)
+const displayedIngredients = computed(() => filteredIngredients.value.slice(0, visibleCount.value))
+const hasMoreIngredients = computed(() => filteredIngredients.value.length > visibleCount.value)
+
+watch([searchQuery, selectedCategoryIds, selectedVisibility, seasonOnly, variationsOnly], () => {
+  visibleCount.value = PAGE_SIZE
+})
+
+const showMoreIngredients = () => {
+  visibleCount.value += PAGE_SIZE
+}
+
 const unitLabel = (unit: Ingredient['unit']) => unit ?? 'g'
 
 const currentMonth = new Date().getMonth() + 1
 const isInSeason = (ingredient: Ingredient) => !!ingredient.activeMonths?.includes(currentMonth)
+
+const monthAbbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 const variationEntries = (ing: Ingredient | null) => {
   if (!ing?.variations) return []
@@ -93,12 +114,6 @@ const variationEntries = (ing: Ingredient | null) => {
 const slideoverOpen = ref(false)
 const selectedIngredient = ref<Ingredient | null>(null)
 
-const selectedIngredientForDebug = computed(() => {
-  const ing = selectedIngredient.value
-  if (!ing) return null
-  return { ...toRaw(ing), id: ing.id }
-})
-
 const selectedVariationRows = computed(() => {
   const ing = selectedIngredient.value
   if (!ing) return []
@@ -108,12 +123,18 @@ const selectedVariationRows = computed(() => {
   }))
 })
 
-const editModalOpen = ref(false)
-const editingIngredient = ref<Ingredient | null>(null)
+/** Slideover d'ajout/modification (voir IngredientFormSlideover) : `formIngredient` nul = création. */
+const formSlideoverOpen = ref(false)
+const formIngredient = ref<Ingredient | null>(null)
 
-const openEditModal = (ingredient: Ingredient) => {
-  editingIngredient.value = ingredient
-  editModalOpen.value = true
+const openCreateForm = () => {
+  formIngredient.value = null
+  formSlideoverOpen.value = true
+}
+
+const openEditForm = (ingredient: Ingredient) => {
+  formIngredient.value = ingredient
+  formSlideoverOpen.value = true
 }
 
 const selectIngredient = (ingredient: Ingredient) => {
@@ -123,7 +144,6 @@ const selectIngredient = (ingredient: Ingredient) => {
 
 const ingredientToDelete = ref<Ingredient | null>(null)
 const deleteDialogOpen = ref(false)
-const deleting = ref(false)
 
 const askDeleteIngredient = (ingredient: Ingredient) => {
   ingredientToDelete.value = ingredient
@@ -133,120 +153,73 @@ const askDeleteIngredient = (ingredient: Ingredient) => {
 const deleteConfirmDescription = computed(() => {
   const label = ingredientToDelete.value?.label
   return label
-    ? `« ${label} » sera définitivement supprimé. Cette action est irréversible.`
+    ? `« ${label} » sera supprimé après un court délai, le temps d'annuler si besoin.`
     : undefined
 })
 
-const confirmDeleteIngredient = async () => {
-  const ingredient = ingredientToDelete.value
-  if (!ingredient) return
+const DELETE_GRACE_PERIOD_MS = 6000
+/** Handles des suppressions programmées mais pas encore exécutées (délai d'annulation en cours), par id d'ingrédient. */
+const pendingDeleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-  deleting.value = true
+const performDelete = async (id: string, label: string) => {
   try {
-    await deleteDoc(doc(db, 'ingredients', ingredient.id))
-
-    // Le slideover afficherait sinon un ingrédient qui n'existe plus.
-    if (selectedIngredient.value?.id === ingredient.id) {
-      slideoverOpen.value = false
-      selectedIngredient.value = null
-    }
-
-    deleteDialogOpen.value = false
-    toast.add({
-      title: 'Supprimé',
-      description: `« ${ingredient.label} » a été supprimé`,
-      color: 'success'
-    })
+    await deleteDoc(doc(db, 'ingredients', id))
   } catch (error: any) {
     console.error('Erreur lors de la suppression:', error)
+    // La suppression a échoué : on réaffiche la carte, masquée depuis le clic sur « Supprimer ».
+    pendingDeleteIds.value.delete(id)
     toast.add({
       title: 'Erreur',
-      description: error.message || 'Une erreur est survenue lors de la suppression',
-      color: 'error'
-    })
-  } finally {
-    deleting.value = false
-  }
-}
-
-const addRandomIngredient = async () => {
-  if (!user.value) {
-    toast.add({
-      title: 'Erreur',
-      description: 'Vous devez être connecté pour ajouter un ingrédient',
+      description: `« ${label} » n'a pas pu être supprimé : ${error.message || 'une erreur est survenue'}.`,
       color: 'error'
     })
     return
   }
-
-  try {
-    // Liste d'aliments aléatoires
-    const randomFoods = [
-      'Pomme', 'Banane', 'Orange', 'Fraise', 'Tomate', 'Carotte', 'Brocoli', 'Épinard',
-      'Poulet', 'Saumon', 'Thon', 'Œuf', 'Riz', 'Pâtes', 'Pain', 'Fromage',
-      'Yaourt', 'Lait', 'Avocat', 'Noix', 'Amande', 'Chocolat', 'Miel', 'Huile d\'olive'
-    ]
-
-    const randomVariations = ['Tranche', 'Slice', 'Pot', 'Bowl', 'Cup', 'Glass', 'Bottle', 'Jar', 'Bag', 'Box', 'Packet', 'Can', 'Carton', 'Bottle', 'Jar', 'Bag', 'Box', 'Packet', 'Can', 'Carton']
-    
-    // Sélectionner un aliment aléatoire
-    const randomFood = randomFoods[Math.floor(Math.random() * randomFoods.length)]
-
-    
-    // Générer des mois actifs aléatoires (1-3 mois)
-    const activeMonths: number[] = []
-    const numMonths = Math.floor(Math.random() * 3) + 1
-    for (let i = 0; i < numMonths; i++) {
-      const month = Math.floor(Math.random() * 12) + 1
-      if (!activeMonths.includes(month)) {
-        activeMonths.push(month)
-      }
-    }
-
-    // Créer une référence vers une catégorie par défaut (on utilise un ID fictif ou on crée une référence)
-    // Pour simplifier, on crée une référence vers une catégorie "Autre"
-    const categoryRef = doc(db, 'ingredientCategories', 'vegetables')
-
-    const now = Timestamp.now()
-    
-    // Créer l'ingrédient
-    await addDoc(collection(db, 'ingredients'), {
-      label: randomFood,
-      comment: `Ingrédient ajouté aléatoirement`,
-      activeMonths,
-      category: categoryRef,
-      owner: user.value!.uid,
-      createdAt: now,
-      updatedAt: now,
-      unit: Math.random() > 0.5 ? 'g' : 'ml',
-      valuesBy100: {
-        calories: Math.floor(Math.random() * 250) + 100,
-        protein: Math.floor(Math.random() * 100) + 10,
-        carbohydrates: Math.floor(Math.random() * 100) + 10,
-        fat: Math.floor(Math.random() * 100) + 10
-      },
-      variations: {
-        [generateFirestoreId()]: {
-          label: randomVariations[Math.floor(Math.random() * randomVariations.length)],
-          value: Math.floor(Math.random() * 100) + 10
-        }
-      }
-    })
-
-    toast.add({
-      title: 'Succès',
-      description: `${randomFood} a été ajouté à vos ingrédients`,
-      color: 'success'
-    })
-  } catch (error: any) {
-    console.error('Erreur lors de l\'ajout de l\'ingrédient:', error)
-    toast.add({
-      title: 'Erreur',
-      description: error.message || 'Une erreur est survenue lors de l\'ajout de l\'ingrédient',
-      color: 'error'
-    })
-  }
+  pendingDeleteIds.value.delete(id)
 }
+
+const confirmDeleteIngredient = () => {
+  const ingredient = ingredientToDelete.value
+  if (!ingredient) return
+
+  deleteDialogOpen.value = false
+  ingredientToDelete.value = null
+
+  // Le slideover afficherait sinon un ingrédient en cours de suppression.
+  if (selectedIngredient.value?.id === ingredient.id) {
+    slideoverOpen.value = false
+    selectedIngredient.value = null
+  }
+
+  const { id, label } = ingredient
+  pendingDeleteIds.value.add(id)
+
+  const timeout = setTimeout(() => {
+    pendingDeleteTimeouts.delete(id)
+    performDelete(id, label)
+  }, DELETE_GRACE_PERIOD_MS)
+  pendingDeleteTimeouts.set(id, timeout)
+
+  toast.add({
+    title: 'Ingrédient supprimé',
+    description: `« ${label} » sera définitivement supprimé.`,
+    color: 'neutral',
+    actions: [{
+      label: 'Annuler',
+      color: 'neutral',
+      variant: 'outline',
+      onClick: () => {
+        const pending = pendingDeleteTimeouts.get(id)
+        if (!pending) return
+        clearTimeout(pending)
+        pendingDeleteTimeouts.delete(id)
+        pendingDeleteIds.value.delete(id)
+        toast.add({ title: 'Suppression annulée', description: `« ${label} » a été conservé`, color: 'success' })
+      }
+    }]
+  })
+}
+
 </script>
 
 <template>
@@ -258,7 +231,7 @@ const addRandomIngredient = async () => {
         </template>
 
         <template #right>
-          <UButton color="primary" @click="addRandomIngredient">
+          <UButton color="primary" @click="openCreateForm">
             <UIcon name="i-lucide-plus" class="size-5 shrink-0" />
             Ajouter un ingrédient
           </UButton>
@@ -304,6 +277,7 @@ const addRandomIngredient = async () => {
               :variant="seasonOnly ? 'solid' : 'outline'"
               icon="i-lucide-leaf"
               aria-label="Filtrer les ingrédients de saison"
+              :aria-pressed="seasonOnly"
               class="shrink-0 justify-center"
               @click="seasonOnly = !seasonOnly"
             />
@@ -312,6 +286,7 @@ const addRandomIngredient = async () => {
               :variant="variationsOnly ? 'solid' : 'outline'"
               icon="i-lucide-git-branch"
               aria-label="Filtrer les ingrédients avec variations"
+              :aria-pressed="variationsOnly"
               class="shrink-0 justify-center"
               @click="variationsOnly = !variationsOnly"
             />
@@ -344,11 +319,17 @@ const addRandomIngredient = async () => {
         />
         <template v-else>
           <div
-            v-for="ingredient in filteredIngredients"
+            v-for="ingredient in displayedIngredients"
             :key="ingredient.id"
-            class="rounded-xl border bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+            role="button"
+            tabindex="0"
+            :aria-label="`Voir le détail de ${ingredient.label}`"
+            class="rounded-xl border bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
             :class="isInSeason(ingredient) ? 'border-primary' : 'border-default'"
+            style="content-visibility: auto; contain-intrinsic-size: 0 140px;"
             @click="selectIngredient(ingredient)"
+            @keydown.enter.self="selectIngredient(ingredient)"
+            @keydown.space.self.prevent="selectIngredient(ingredient)"
           >
             <!-- Contenu de la carte -->
             <div class="p-4 flex flex-col gap-2 flex-1">
@@ -367,7 +348,7 @@ const addRandomIngredient = async () => {
                   <UBadge v-if="isOwnedByUser(ingredient)" label="Privé" variant="subtle" size="sm" />
                   <UDropdownMenu
                     v-if="isOwnedByUser(ingredient)"
-                    :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditModal(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDeleteIngredient(ingredient) }]]"
+                    :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditForm(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDeleteIngredient(ingredient) }]]"
                     :ui="{ content: 'w-40' }"
                   >
                     <UButton
@@ -375,6 +356,7 @@ const addRandomIngredient = async () => {
                       color="neutral"
                       variant="ghost"
                       size="xs"
+                      :aria-label="`Actions pour ${ingredient.label}`"
                       @click.stop
                     />
                   </UDropdownMenu>
@@ -387,13 +369,21 @@ const addRandomIngredient = async () => {
           </div>
         </template>
         </div>
+        <div v-if="hasMoreIngredients" class="flex justify-center pt-2">
+          <UButton
+            label="Afficher plus"
+            color="neutral"
+            variant="outline"
+            @click="showMoreIngredients"
+          />
+        </div>
       </div>
     </template>
   </UDashboardPanel>
 
   <USlideover
     v-model:open="slideoverOpen"
-    :title="selectedIngredient?.label + ' (' + selectedIngredient?.id + ')'"
+    :title="selectedIngredient?.label ?? ''"
     :description="selectedIngredient ? `Modifié le ${formatDate(selectedIngredient.updatedAt)}` : undefined"
   >
     <template #body>
@@ -461,10 +451,12 @@ const addRandomIngredient = async () => {
           <p class="text-xs text-dimmed mb-2">Disponibilité</p>
           <div class="grid grid-cols-12 gap-1">
             <div
-              v-for="(label, idx) in ['J','F','M','A','M','J','J','A','S','O','N','D']"
+              v-for="(label, idx) in monthAbbreviations"
               :key="idx"
-              :title="['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][idx]"
-              class="flex items-center justify-center rounded text-[10px] font-medium h-6 transition-colors"
+              role="img"
+              :aria-label="`${monthNames[idx]} — ${selectedIngredient?.activeMonths?.includes(idx + 1) ? 'en saison' : 'hors saison'}`"
+              :title="monthNames[idx]"
+              class="flex items-center justify-center rounded text-xs font-medium h-6 transition-colors"
               :class="selectedIngredient?.activeMonths?.includes(idx + 1)
                 ? 'bg-primary text-white'
                 : 'bg-accented text-dimmed'"
@@ -512,21 +504,21 @@ const addRandomIngredient = async () => {
                   <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-1.5 min-w-0">
                       <UIcon name="i-lucide-wheat" class="size-3.5 text-muted shrink-0" />
-                      <span class="text-[10px] font-medium text-muted uppercase tracking-wide leading-tight">Glucides</span>
+                      <span class="text-xs font-medium text-muted uppercase tracking-wide leading-tight">Glucides</span>
                     </div>
                     <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.carbohydrates }}g</span>
                   </div>
                   <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-1.5 min-w-0">
                       <UIcon name="i-lucide-dumbbell" class="size-3.5 text-muted shrink-0" />
-                      <span class="text-[10px] font-medium text-muted uppercase tracking-wide leading-tight">Protéines</span>
+                      <span class="text-xs font-medium text-muted uppercase tracking-wide leading-tight">Protéines</span>
                     </div>
                     <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.protein }}g</span>
                   </div>
                   <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-1.5 min-w-0">
                       <UIcon name="i-lucide-droplets" class="size-3.5 text-muted shrink-0" />
-                      <span class="text-[10px] font-medium text-muted uppercase tracking-wide leading-tight">Lipides</span>
+                      <span class="text-xs font-medium text-muted uppercase tracking-wide leading-tight">Lipides</span>
                     </div>
                     <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.fat }}g</span>
                   </div>
@@ -547,30 +539,11 @@ const addRandomIngredient = async () => {
           <p class="text-xs text-dimmed mb-1">Commentaire</p>
           <p class="text-sm text-muted">{{ selectedIngredient.comment }}</p>
         </div>
-
-        <!-- Debug -->
-        <UCollapsible>
-          <UButton
-            label="Debug"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            trailing-icon="i-lucide-chevron-down"
-            class="w-full justify-between text-dimmed"
-          />
-          <template #content>
-            <pre class="text-xs text-muted whitespace-pre-wrap break-all mt-2 p-3 rounded-lg">{{ JSON.stringify(selectedIngredientForDebug, null, 2) }}</pre>
-          </template>
-        </UCollapsible>
       </div>
     </template>
   </USlideover>
 
-  <UModal v-model:open="editModalOpen" :title="`Modifier — ${editingIngredient?.label}`">
-    <template #body>
-      <p class="text-sm text-muted">Formulaire de modification à venir.</p>
-    </template>
-  </UModal>
+  <IngredientFormSlideover v-model:open="formSlideoverOpen" :ingredient="formIngredient" />
 
   <ConfirmDialog
     v-model:open="deleteDialogOpen"
@@ -579,7 +552,6 @@ const addRandomIngredient = async () => {
     confirm-label="Supprimer"
     confirm-color="error"
     confirm-icon="i-lucide-trash-2"
-    :loading="deleting"
     @confirm="confirmDeleteIngredient"
   />
 </template>

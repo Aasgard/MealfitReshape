@@ -79,6 +79,22 @@ const ingredientListHeaderLabel = computed(() => {
   return `${n} Ingrédients`
 })
 
+const hasActiveFilters = computed(() =>
+  !!searchQuery.value.trim()
+  || selectedCategoryIds.value.length > 0
+  || selectedVisibility.value !== 'all'
+  || seasonOnly.value
+  || variationsOnly.value
+)
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  selectedCategoryIds.value = []
+  selectedVisibility.value = 'all'
+  seasonOnly.value = false
+  variationsOnly.value = false
+}
+
 /**
  * Le catalogue (public + privé) n'a pas de limite côté requête Firestore : les filtres
  * (recherche, catégorie...) doivent porter sur l'ensemble des résultats déjà chargés.
@@ -242,9 +258,21 @@ const confirmDeleteIngredient = () => {
     <template #body>
       <div class="flex flex-col gap-4 p-4 sm:p-6">
         <div class="flex flex-col gap-3">
-          <p class="text-sm font-medium text-highlighted">
-            {{ ingredientListHeaderLabel }}
-          </p>
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-medium text-highlighted">
+              {{ ingredientListHeaderLabel }}
+            </p>
+            <UButton
+              v-if="hasActiveFilters"
+              label="Réinitialiser les filtres"
+              icon="i-lucide-x"
+              color="neutral"
+              variant="link"
+              size="xs"
+              class="p-0"
+              @click="resetFilters"
+            />
+          </div>
           <div class="flex flex-col sm:flex-row gap-3">
             <UInput
               v-model="searchQuery"

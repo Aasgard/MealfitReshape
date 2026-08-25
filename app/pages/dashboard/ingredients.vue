@@ -380,8 +380,8 @@ const confirmDeleteIngredient = () => {
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
                   <UBadge v-if="isOwnedByUser(ingredient)" label="Privé" variant="subtle" size="sm" />
+                  <!-- v-if="isOwnedByUser(ingredient)" désactivé temporairement, à revenir dessus -->
                   <UDropdownMenu
-                    v-if="isOwnedByUser(ingredient)"
                     :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditForm(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDeleteIngredient(ingredient) }]]"
                     :ui="{ content: 'w-40' }"
                   >
@@ -446,6 +446,12 @@ const confirmDeleteIngredient = () => {
             <UIcon v-if="categoryIconName(selectedIngredient.category.icon)" :name="categoryIconName(selectedIngredient.category.icon)!" class="size-3.5 shrink-0" />
             {{ selectedIngredient.category.label }}
           </p>
+        </div>
+
+        <!-- Densité -->
+        <div v-if="selectedIngredient?.density != null">
+          <p class="text-xs text-dimmed mb-1">Densité</p>
+          <p class="text-sm text-muted">{{ selectedIngredient.density }} g/ml</p>
         </div>
 
         <!-- Valeurs nutritionnelles -->

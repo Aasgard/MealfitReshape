@@ -8,7 +8,9 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "seed:ingredient-categories": "node scripts/seed-data/ingredientCategories.cjs"
+    "seed:ingredient-categories": "node scripts/seed-data/ingredientCategories.cjs",
+    "seed:ingredients": "node scripts/seed-data/ingredients.cjs",
+    "purge:ingredients": "node scripts/purge-ingredients.cjs"
   },
   "dependencies": {
     "@nuxt/ui": "^4.4.0",

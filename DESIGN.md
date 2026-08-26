@@ -88,7 +88,7 @@ Corners are close to square (2px base radius token), density is tight, and depth
 Almost grayscale with one electric accent; color is information, not decoration.
 
 ### Primary
-- **Indigo Électrique** (`oklch(58.5% 0.233 277.117)`, Tailwind indigo-500): the only accent in the system. Used at full strength on primary buttons, active filter-toggle buttons (season/variations filters), the "in season" card border, the macro-bar fill, and a 10%-opacity halo behind status icons. Never used as a background tint for large surfaces.
+- **Indigo Électrique** (`oklch(58.5% 0.233 277.117)`, Tailwind indigo-500): the only accent in the system. Used at full strength on primary buttons, active filter-toggle buttons (season/variations filters), the "in season" leaf status icon, the macro-bar fill, and a 10%-opacity halo behind status icons. Never used as a background tint for large surfaces.
 - **Indigo Deep** (`oklch(51.1% 0.262 276.966)`, indigo-600): hover/active state for primary buttons and the wordmark's "RESHAPE" accent word.
 - **Indigo Soft** (`oklch(93% 0.034 272.788)`, indigo-100): reserved for the rare tinted badge or icon halo background (`bg-primary/10`), not for general surfaces.
 
@@ -105,7 +105,7 @@ Almost grayscale with one electric accent; color is information, not decoration.
 - **Error Red** (`oklch(63.7% 0.237 25.331)`, red-500): destructive actions (delete) and error toasts only.
 
 ### Named Rules
-**The One Signal Rule.** Indigo appears only where something is active, selected, or in-progress (a pressed filter toggle, an in-season border, a filled macro bar, a solid button). It never colors a static surface. If indigo is present, something is true right now.
+**The One Signal Rule.** Indigo appears only where something is active, selected, or in-progress (a pressed filter toggle, an in-season status icon, a filled macro bar, a solid button). It never colors a static surface. If indigo is present, something is true right now.
 
 ## Typography
 
@@ -153,7 +153,8 @@ Corners run close to square: the base radius token (`--ui-radius: 0.125rem`, 2px
 
 ### Cards / Containers
 - **Corner Style:** `rounded-xl` (12px).
-- **Background:** `bg-default`, border `border-default` at rest; border shifts to full-strength `border-primary` when the ingredient is in season — the border itself is the seasonality indicator, not a separate badge.
+- **Background:** `bg-default`, border `border-default` at rest, always (border no longer encodes season). Hover shifts the border to `border-primary/50` regardless of season.
+- **Footer row:** a `border-t border-default` divider at the bottom of the card content, a variations `UBadge` on the left (`variant="subtle"`, `size="sm"`, leading `i-lucide-git-branch` icon, always rendered) and a single seasonality readout on the right, in priority order: `"Toute l'année"` (dimmed text) if active all 12 months, else the leaf-icon status indicator (`i-lucide-leaf`, `text-primary`, in a `size-5 bg-primary/10` circular halo) if currently in season, else `"Hors saison"` (dimmed text). The variations badge itself follows the One Signal Rule: `color="primary"` with the count label ("N variation(s)") when there are any, `color="neutral"` with "Aucune variation" when there are none — indigo appears only when something is actually true.
 - **Shadow Strategy:** none (see Elevation & Depth); hover state is a border-color shift to `border-primary/50`, not a lift.
 - **Internal Padding:** `p-4` (16px), content stacked with `gap-2`.
 

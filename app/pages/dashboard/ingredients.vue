@@ -6,6 +6,7 @@ import type { Ingredient } from '~/types/ingredient'
 import { macrosForVariation } from '~/utils/ingredientNutrition'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { categoryIconName } from '~/utils/categoryIcon'
+import { isIngredientInSeason } from '~/utils/ingredientSeason'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -66,7 +67,7 @@ const filteredIngredients = computed(() => {
       || (!!i.category?.id && selectedCategoryIds.value.includes(i.category.id))
     const matchesVisibility = selectedVisibility.value === 'all'
       || (selectedVisibility.value === 'public' ? !isOwnedByUser(i) : isOwnedByUser(i))
-    const matchesSeason = !seasonOnly.value || isInSeason(i)
+    const matchesSeason = !seasonOnly.value || isIngredientInSeason(i)
     const matchesVariations = !variationsOnly.value || variationEntries(i).length > 0
     return matchesQuery && matchesCategory && matchesVisibility && matchesSeason && matchesVariations
   })
@@ -113,9 +114,6 @@ watch([searchQuery, selectedCategoryIds, selectedVisibility, seasonOnly, variati
 const showMoreIngredients = () => {
   visibleCount.value += PAGE_SIZE
 }
-
-const currentMonth = new Date().getMonth() + 1
-const isInSeason = (ingredient: Ingredient) => !!ingredient.activeMonths?.includes(currentMonth)
 
 const monthAbbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
 const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -306,24 +304,30 @@ const confirmDeleteIngredient = () => {
               icon="i-lucide-eye"
               class="w-full sm:w-40 shrink-0"
             />
-            <UButton
-              :color="seasonOnly ? 'primary' : 'neutral'"
-              :variant="seasonOnly ? 'solid' : 'outline'"
-              icon="i-lucide-leaf"
-              aria-label="Filtrer les ingrédients de saison"
-              :aria-pressed="seasonOnly"
-              class="shrink-0 justify-center"
-              @click="seasonOnly = !seasonOnly"
-            />
-            <UButton
-              :color="variationsOnly ? 'primary' : 'neutral'"
-              :variant="variationsOnly ? 'solid' : 'outline'"
-              icon="i-lucide-git-branch"
-              aria-label="Filtrer les ingrédients avec variations"
-              :aria-pressed="variationsOnly"
-              class="shrink-0 justify-center"
-              @click="variationsOnly = !variationsOnly"
-            />
+            <div class="flex items-center gap-1.5 border-t border-default pt-3 sm:border-t-0 sm:border-l sm:pl-3 sm:pt-0 sm:shrink-0">
+              <UTooltip text="Filtrer les ingrédients de saison" class="flex-1 sm:flex-none">
+                <UButton
+                  :color="seasonOnly ? 'primary' : 'neutral'"
+                  :variant="seasonOnly ? 'solid' : 'outline'"
+                  icon="i-lucide-leaf"
+                  aria-label="Filtrer les ingrédients de saison"
+                  :aria-pressed="seasonOnly"
+                  class="w-full sm:w-auto justify-center"
+                  @click="seasonOnly = !seasonOnly"
+                />
+              </UTooltip>
+              <UTooltip text="Filtrer les ingrédients avec variations" class="flex-1 sm:flex-none">
+                <UButton
+                  :color="variationsOnly ? 'primary' : 'neutral'"
+                  :variant="variationsOnly ? 'solid' : 'outline'"
+                  icon="i-lucide-git-branch"
+                  aria-label="Filtrer les ingrédients avec variations"
+                  :aria-pressed="variationsOnly"
+                  class="w-full sm:w-auto justify-center"
+                  @click="variationsOnly = !variationsOnly"
+                />
+              </UTooltip>
+            </div>
           </div>
         </div>
 
@@ -332,15 +336,20 @@ const confirmDeleteIngredient = () => {
           <div
             v-for="i in 12"
             :key="`skeleton-${i}`"
-            class="rounded-lg border border-default bg-card p-4"
+            class="rounded-xl border border-default bg-default p-4 flex flex-col gap-2"
           >
-            <USkeleton class="h-48 w-full rounded-lg mb-4" />
-            <USkeleton class="h-6 w-3/4 mb-2" />
-            <USkeleton class="h-4 w-full mb-2" />
-            <USkeleton class="h-4 w-2/3 mb-4" />
-            <div class="flex items-center justify-between">
-              <USkeleton class="h-4 w-24" />
-              <USkeleton class="h-5 w-16 rounded-full" />
+            <div class="flex items-start justify-between gap-2">
+              <USkeleton class="h-5 w-2/3" />
+              <USkeleton class="size-5 rounded-full shrink-0" />
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <USkeleton class="h-4 w-20" />
+              <USkeleton class="h-4 w-10" />
+            </div>
+            <div class="flex flex-col gap-1 mt-1">
+              <USkeleton class="h-1.5 w-full rounded-full" />
+              <USkeleton class="h-1.5 w-full rounded-full" />
+              <USkeleton class="h-1.5 w-full rounded-full" />
             </div>
           </div>
         </template>
@@ -352,58 +361,15 @@ const confirmDeleteIngredient = () => {
           description="Essayez un autre terme de recherche ou ajoutez un nouvel ingrédient."
         />
         <template v-else>
-          <div
+          <IngredientCard
             v-for="ingredient in displayedIngredients"
             :key="ingredient.id"
-            role="button"
-            tabindex="0"
-            :aria-label="`Voir le détail de ${ingredient.label}`"
-            class="rounded-xl border bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
-            :class="isInSeason(ingredient) ? 'border-primary' : 'border-default'"
-            style="content-visibility: auto; contain-intrinsic-size: 0 140px;"
-            @click="selectIngredient(ingredient)"
-            @keydown.enter.self="selectIngredient(ingredient)"
-            @keydown.space.self.prevent="selectIngredient(ingredient)"
-          >
-            <!-- Contenu de la carte -->
-            <div class="p-4 flex flex-col gap-2 flex-1">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0 flex-1 flex items-center gap-1.5">
-                  <p class="font-semibold text-highlighted truncate">
-                    {{ ingredient.label }}
-                  </p>
-                  <UIcon
-                    v-if="variationEntries(ingredient).length"
-                    name="i-lucide-git-branch"
-                    class="size-3.5 text-muted shrink-0"
-                  />
-                </div>
-                <div class="flex items-center gap-1.5 shrink-0">
-                  <UBadge v-if="isOwnedByUser(ingredient)" label="Privé" variant="subtle" size="sm" />
-                  <!-- v-if="isOwnedByUser(ingredient)" désactivé temporairement, à revenir dessus -->
-                  <UDropdownMenu
-                    :items="[[{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openEditForm(ingredient) }], [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDeleteIngredient(ingredient) }]]"
-                    :ui="{ content: 'w-40' }"
-                  >
-                    <UButton
-                      icon="i-lucide-ellipsis-vertical"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      :aria-label="`Actions pour ${ingredient.label}`"
-                      @click.stop
-                    />
-                  </UDropdownMenu>
-                </div>
-              </div>
-              <p v-if="ingredient.category?.label" class="text-sm text-muted flex items-center gap-1.5">
-                <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-3.5 shrink-0" />
-                {{ ingredient.category.label }}
-              </p>
-
-
-            </div>
-          </div>
+            :ingredient="ingredient"
+            :owned-by-user="isOwnedByUser(ingredient)"
+            @select="selectIngredient(ingredient)"
+            @edit="openEditForm(ingredient)"
+            @delete="askDeleteIngredient(ingredient)"
+          />
         </template>
         </div>
         <div v-if="hasMoreIngredients" class="flex justify-center pt-2">
@@ -509,7 +475,11 @@ const confirmDeleteIngredient = () => {
         <!-- Disponibilité par mois -->
         <div>
           <p class="text-xs text-dimmed mb-2">Disponibilité</p>
-          <div class="grid grid-cols-12 gap-1">
+          <div
+            class="grid grid-cols-12 gap-1"
+            role="group"
+            :aria-label="`Disponibilité : ${selectedIngredient?.activeMonths?.length ?? 0} mois sur 12`"
+          >
             <div
               v-for="(label, idx) in monthAbbreviations"
               :key="idx"

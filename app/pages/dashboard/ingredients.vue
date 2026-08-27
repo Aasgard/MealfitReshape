@@ -125,6 +125,7 @@ const variationEntries = (ing: Ingredient | null) => {
 }
 
 const slideoverOpen = ref(false)
+useOverlayBackClose(slideoverOpen)
 const selectedIngredient = ref<Ingredient | null>(null)
 
 const selectedVariationRows = computed(() => {

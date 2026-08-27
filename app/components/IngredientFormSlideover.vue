@@ -16,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
+useOverlayBackClose(open)
 
 const db = useFirestore()
 const user = useCurrentUser()

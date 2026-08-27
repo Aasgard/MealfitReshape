@@ -35,6 +35,7 @@ const emit = defineEmits<{
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
+useOverlayBackClose(open)
 
 /** Évite d'émettre `cancel` quand la fermeture fait suite à une confirmation. */
 let confirmed = false

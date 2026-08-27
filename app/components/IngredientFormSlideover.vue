@@ -35,7 +35,7 @@ const categoryOptions = computed(() =>
 const monthAbbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
 const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
-interface VariationRow {
+interface UnitRow {
   key: string
   label: string
   value: string
@@ -50,7 +50,7 @@ const protein = ref('')
 const carbohydrates = ref('')
 const fat = ref('')
 const activeMonths = ref<number[]>([])
-const variationRows = ref<VariationRow[]>([])
+const unitRows = ref<UnitRow[]>([])
 const comment = ref('')
 const saving = ref(false)
 const submitted = ref(false)
@@ -65,8 +65,8 @@ function resetForm() {
   carbohydrates.value = ing?.valuesBy100 ? String(ing.valuesBy100.carbohydrates) : ''
   fat.value = ing?.valuesBy100 ? String(ing.valuesBy100.fat) : ''
   activeMonths.value = ing?.activeMonths ? [...ing.activeMonths] : []
-  variationRows.value = ing?.variations
-    ? Object.entries(ing.variations).map(([key, v]) => ({ key, label: v.label, value: String(v.value), unit: v.unit }))
+  unitRows.value = ing?.units
+    ? Object.entries(ing.units).map(([key, v]) => ({ key, label: v.label, value: String(v.value), unit: v.unit }))
     : []
   comment.value = ing?.comment ?? ''
   submitted.value = false
@@ -88,32 +88,32 @@ function toggleAllMonths() {
   activeMonths.value = allMonthsSelected.value ? [] : Array.from({ length: 12 }, (_, i) => i + 1)
 }
 
-function addVariationRow() {
-  variationRows.value.push({ key: generateFirestoreId(), label: '', value: '', unit: 'g' })
+function addUnitRow() {
+  unitRows.value.push({ key: generateFirestoreId(), label: '', value: '', unit: 'g' })
 }
 
-function addPredefinedVariationRow(unit: { label: string; value: number; unit: 'g' | 'ml' }) {
-  variationRows.value.push({ key: generateFirestoreId(), label: unit.label, value: String(unit.value), unit: unit.unit })
+function addPredefinedUnitRow(defaultUnit: { label: string; value: number; unit: 'g' | 'ml' }) {
+  unitRows.value.push({ key: generateFirestoreId(), label: defaultUnit.label, value: String(defaultUnit.value), unit: defaultUnit.unit })
 }
 
-function removeVariationRow(key: string) {
-  variationRows.value = variationRows.value.filter(r => r.key !== key)
+function removeUnitRow(key: string) {
+  unitRows.value = unitRows.value.filter(r => r.key !== key)
 }
 
-const addVariationMenuItems = computed<DropdownMenuItem[][]>(() => {
-  const measureItems: DropdownMenuItem[] = ingredientDefaultUnitsStore.units.map(unit => ({
-    label: unit.label,
+const addUnitMenuItems = computed<DropdownMenuItem[][]>(() => {
+  const measureItems: DropdownMenuItem[] = ingredientDefaultUnitsStore.units.map(defaultUnit => ({
+    label: defaultUnit.label,
     slot: 'measure' as const,
-    unitValue: unit.value,
-    unitLabel: unit.unit,
-    onSelect: () => addPredefinedVariationRow(unit)
+    unitValue: defaultUnit.value,
+    unitLabel: defaultUnit.unit,
+    onSelect: () => addPredefinedUnitRow(defaultUnit)
   }))
 
   const groups: DropdownMenuItem[][] = []
   if (measureItems.length) {
     groups.push([{ type: 'label', label: 'Mesures courantes' }], measureItems)
   }
-  groups.push([{ label: 'Variation vide...', icon: 'i-lucide-plus', onSelect: addVariationRow }])
+  groups.push([{ label: 'Unité vide...', icon: 'i-lucide-plus', onSelect: addUnitRow }])
   return groups
 })
 
@@ -140,11 +140,11 @@ const proteinError = computed(() => macroFieldError(protein.value))
 const carbohydratesError = computed(() => macroFieldError(carbohydrates.value))
 const fatError = computed(() => macroFieldError(fat.value))
 
-function variationLabelError(row: VariationRow) {
+function unitLabelError(row: UnitRow) {
   return submitted.value && !row.label.trim() ? 'Requis' : undefined
 }
 
-function variationValueError(row: VariationRow) {
+function unitValueError(row: UnitRow) {
   if (!submitted.value) return undefined
   if (!row.value.trim()) return 'Requis'
   return parsePositiveNumber(row.value) === null ? 'Nombre invalide' : undefined
@@ -157,7 +157,7 @@ const isValid = computed(() => {
   if (macrosStarted.value && [calories.value, protein.value, carbohydrates.value, fat.value].some(v => parseNonNegativeNumber(v) === null)) {
     return false
   }
-  if (variationRows.value.some(r => !r.label.trim() || parsePositiveNumber(r.value) === null)) return false
+  if (unitRows.value.some(r => !r.label.trim() || parsePositiveNumber(r.value) === null)) return false
   return true
 })
 
@@ -175,9 +175,9 @@ async function handleSubmit() {
     const now = Timestamp.now()
     const categoryRef = doc(db, 'ingredientCategories', categoryId.value!)
 
-    const variations: Record<string, { label: string; value: number; unit: 'g' | 'ml' }> = {}
-    for (const row of variationRows.value) {
-      variations[row.key] = { label: row.label.trim(), value: parsePositiveNumber(row.value)!, unit: row.unit }
+    const units: Record<string, { label: string; value: number; unit: 'g' | 'ml' }> = {}
+    for (const row of unitRows.value) {
+      units[row.key] = { label: row.label.trim(), value: parsePositiveNumber(row.value)!, unit: row.unit }
     }
 
     const trimmedLabel = label.value.trim()
@@ -187,7 +187,7 @@ async function handleSubmit() {
       category: categoryRef,
       activeMonths: activeMonths.value,
       comment: comment.value.trim(),
-      variations,
+      units,
       updatedAt: now,
     }
 
@@ -264,7 +264,7 @@ async function handleSubmit() {
             </UFormField>
           </div>
           <p class="text-xs text-dimmed -mt-2">
-            La densité sert à convertir une variation exprimée en ml vers des grammes ; utile seulement si une variation ci-dessous est en ml.
+            La densité sert à convertir une unité exprimée en ml vers des grammes ; utile seulement si une unité ci-dessous est en ml.
           </p>
         </div>
 
@@ -317,14 +317,14 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <!-- Variations / équivalents -->
+        <!-- Unités / équivalents -->
         <div>
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
-              <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Variations (optionnel)</p>
+              <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Unités (optionnel)</p>
             </div>
-            <UDropdownMenu :items="addVariationMenuItems" :ui="{ content: 'w-56' }">
+            <UDropdownMenu :items="addUnitMenuItems" :ui="{ content: 'w-56' }">
               <UButton label="Ajouter" icon="i-lucide-plus" trailing-icon="i-lucide-chevron-down" size="xs" color="neutral" variant="outline" />
 
               <template #measure-label="{ item }">
@@ -335,15 +335,15 @@ async function handleSubmit() {
               </template>
             </UDropdownMenu>
           </div>
-          <p v-if="variationRows.length === 0" class="text-xs text-dimmed">
+          <p v-if="unitRows.length === 0" class="text-xs text-dimmed">
             Aucune portion alternative.
           </p>
           <div v-else class="flex flex-col gap-3">
-            <div v-for="row in variationRows" :key="row.key" class="flex items-start gap-2">
-              <UFormField class="flex-1" :error="variationLabelError(row)">
+            <div v-for="row in unitRows" :key="row.key" class="flex items-start gap-2">
+              <UFormField class="flex-1" :error="unitLabelError(row)">
                 <UInput v-model="row.label" placeholder="ex : Tranche" size="md" variant="outline" class="w-full" />
               </UFormField>
-              <UFormField class="w-20 shrink-0" :error="variationValueError(row)">
+              <UFormField class="w-20 shrink-0" :error="unitValueError(row)">
                 <UInput v-model="row.value" type="text" inputmode="decimal" placeholder="qté" size="md" variant="outline" class="w-full" />
               </UFormField>
               <div class="flex gap-1 shrink-0 mt-0.5">
@@ -369,9 +369,9 @@ async function handleSubmit() {
                 color="neutral"
                 variant="ghost"
                 size="md"
-                :aria-label="`Supprimer la variation ${row.label || ''}`"
+                :aria-label="`Supprimer l'unité ${row.label || ''}`"
                 class="mt-0.5"
-                @click="removeVariationRow(row.key)"
+                @click="removeUnitRow(row.key)"
               />
             </div>
           </div>

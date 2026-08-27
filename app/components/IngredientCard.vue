@@ -16,10 +16,10 @@ const emit = defineEmits<{
 
 const inSeason = computed(() => isIngredientInSeason(props.ingredient))
 const allYear = computed(() => (props.ingredient.activeMonths?.length ?? 0) === 12)
-const variationCount = computed(() => Object.keys(props.ingredient.variations ?? {}).length)
-const variationLabel = computed(() => variationCount.value
-  ? `${variationCount.value} variation${variationCount.value > 1 ? 's' : ''}`
-  : 'Aucune variation')
+const unitCount = computed(() => Object.keys(props.ingredient.units ?? {}).length)
+const unitLabel = computed(() => unitCount.value
+  ? `${unitCount.value} unité${unitCount.value > 1 ? 's' : ''}`
+  : 'Aucune unité')
 const macros = computed(() => props.ingredient.valuesBy100 ?? null)
 
 const macroBarWidth = (value: number) => `${Math.min(100, (value / 100) * 100)}%`
@@ -109,8 +109,8 @@ const actionItems = computed(() => [
       <div class="flex items-center gap-2 mt-1 pt-2 border-t border-default">
         <UBadge
           icon="i-lucide-git-branch"
-          :label="variationLabel"
-          :color="variationCount ? 'primary' : 'neutral'"
+          :label="unitLabel"
+          :color="unitCount ? 'primary' : 'neutral'"
           variant="subtle"
           size="sm"
         />

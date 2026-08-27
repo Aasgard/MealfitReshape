@@ -26,7 +26,7 @@ A straightforward ingredients/recipes/nutrition tracker with built-in calculator
 
 ## Capabilities and Constraints
 
-- Confirmed: ingredient catalog with categories, seasonality (active months), per-100-unit macros, and variations/equivalents; recipes referencing ingredient lines with quantity and variation; a daily nutritional needs calculator; a trail running pace/carb-fueling calculator; Firebase-backed auth and data.
+- Confirmed: ingredient catalog with categories, seasonality (active months), per-100-unit macros, and units/equivalents; recipes referencing ingredient lines with quantity and unit; a daily nutritional needs calculator; a trail running pace/carb-fueling calculator; Firebase-backed auth and data.
 - Constraint: French-only UI — no i18n/English support to design around.
 - Constraint: Firebase/Firestore is the fixed backend and auth provider.
 - Constraint: Nuxt UI (@nuxt/ui) is the fixed component library.

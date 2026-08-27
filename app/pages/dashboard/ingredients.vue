@@ -3,7 +3,7 @@ import { watch } from 'vue'
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, deleteDoc, doc, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
-import { macrosForVariation } from '~/utils/ingredientNutrition'
+import { macrosForUnit } from '~/utils/ingredientNutrition'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
@@ -49,7 +49,7 @@ const visibilityOptions = [
 ]
 const selectedVisibility = ref<'all' | 'private' | 'public'>('all')
 const seasonOnly = ref(false)
-const variationsOnly = ref(false)
+const unitsOnly = ref(false)
 
 /** Un ingrédient sans `owner` appartient au catalogue public : il n'est ni privé, ni modifiable. */
 const isOwnedByUser = (ingredient: Ingredient) =>
@@ -68,8 +68,8 @@ const filteredIngredients = computed(() => {
     const matchesVisibility = selectedVisibility.value === 'all'
       || (selectedVisibility.value === 'public' ? !isOwnedByUser(i) : isOwnedByUser(i))
     const matchesSeason = !seasonOnly.value || isIngredientInSeason(i)
-    const matchesVariations = !variationsOnly.value || variationEntries(i).length > 0
-    return matchesQuery && matchesCategory && matchesVisibility && matchesSeason && matchesVariations
+    const matchesUnits = !unitsOnly.value || unitEntries(i).length > 0
+    return matchesQuery && matchesCategory && matchesVisibility && matchesSeason && matchesUnits
   })
 })
 
@@ -86,7 +86,7 @@ const hasActiveFilters = computed(() =>
   || selectedCategoryIds.value.length > 0
   || selectedVisibility.value !== 'all'
   || seasonOnly.value
-  || variationsOnly.value
+  || unitsOnly.value
 )
 
 const resetFilters = () => {
@@ -94,7 +94,7 @@ const resetFilters = () => {
   selectedCategoryIds.value = []
   selectedVisibility.value = 'all'
   seasonOnly.value = false
-  variationsOnly.value = false
+  unitsOnly.value = false
 }
 
 /**
@@ -107,7 +107,7 @@ const visibleCount = ref(PAGE_SIZE)
 const displayedIngredients = computed(() => filteredIngredients.value.slice(0, visibleCount.value))
 const hasMoreIngredients = computed(() => filteredIngredients.value.length > visibleCount.value)
 
-watch([searchQuery, selectedCategoryIds, selectedVisibility, seasonOnly, variationsOnly], () => {
+watch([searchQuery, selectedCategoryIds, selectedVisibility, seasonOnly, unitsOnly], () => {
   visibleCount.value = PAGE_SIZE
 })
 
@@ -118,9 +118,9 @@ const showMoreIngredients = () => {
 const monthAbbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
 const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
-const variationEntries = (ing: Ingredient | null) => {
-  if (!ing?.variations) return []
-  return Object.entries(ing.variations).map(([id, v]) => ({ id, ...v }))
+const unitEntries = (ing: Ingredient | null) => {
+  if (!ing?.units) return []
+  return Object.entries(ing.units).map(([id, v]) => ({ id, ...v }))
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
 }
 
@@ -128,12 +128,12 @@ const slideoverOpen = ref(false)
 useOverlayBackClose(slideoverOpen)
 const selectedIngredient = ref<Ingredient | null>(null)
 
-const selectedVariationRows = computed(() => {
+const selectedUnitRows = computed(() => {
   const ing = selectedIngredient.value
   if (!ing) return []
-  return variationEntries(ing).map((v) => ({
+  return unitEntries(ing).map((v) => ({
     ...v,
-    scaled: macrosForVariation(ing, v.id),
+    scaled: macrosForUnit(ing, v.id),
   }))
 })
 
@@ -317,15 +317,15 @@ const confirmDeleteIngredient = () => {
                   @click="seasonOnly = !seasonOnly"
                 />
               </UTooltip>
-              <UTooltip text="Filtrer les ingrédients avec variations" class="flex-1 sm:flex-none">
+              <UTooltip text="Filtrer les ingrédients avec unités" class="flex-1 sm:flex-none">
                 <UButton
-                  :color="variationsOnly ? 'primary' : 'neutral'"
-                  :variant="variationsOnly ? 'solid' : 'outline'"
+                  :color="unitsOnly ? 'primary' : 'neutral'"
+                  :variant="unitsOnly ? 'solid' : 'outline'"
                   icon="i-lucide-git-branch"
-                  aria-label="Filtrer les ingrédients avec variations"
-                  :aria-pressed="variationsOnly"
+                  aria-label="Filtrer les ingrédients avec unités"
+                  :aria-pressed="unitsOnly"
                   class="w-full sm:w-auto justify-center"
-                  @click="variationsOnly = !variationsOnly"
+                  @click="unitsOnly = !unitsOnly"
                 />
               </UTooltip>
             </div>
@@ -391,7 +391,7 @@ const confirmDeleteIngredient = () => {
   >
     <template #title>
       <div class="flex items-center gap-2">
-        <span>{{ selectedIngredient?.label }}</span>
+        <span>{{ selectedIngredient?.label }} {{ selectedIngredient?.id }}</span>
         <UButton
           v-if="selectedIngredient && isOwnedByUser(selectedIngredient)"
           icon="i-lucide-pencil"
@@ -497,18 +497,18 @@ const confirmDeleteIngredient = () => {
           </div>
         </div>
 
-        <!-- Variations / équivalents -->
-        <div v-if="selectedIngredient && variationEntries(selectedIngredient).length">
+        <!-- Unités / équivalents -->
+        <div v-if="selectedIngredient && unitEntries(selectedIngredient).length">
           <div class="flex items-center gap-2 mb-3">
             <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
-            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Variations</p>
+            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Unités</p>
           </div>
           <p class="text-xs text-dimmed mb-3">
             Autres portions équivalentes.
           </p>
           <ul class="flex flex-col gap-3">
             <li
-              v-for="v in selectedVariationRows"
+              v-for="v in selectedUnitRows"
               :key="v.id"
               class="rounded-lg border border-default bg-elevated/30 overflow-hidden"
             >
@@ -559,7 +559,7 @@ const confirmDeleteIngredient = () => {
                 v-else
                 class="px-3 py-2 text-xs text-dimmed"
               >
-                Ajoutez les valeurs nutritionnelles et, si cette variation est en ml, la densité de l’ingrédient pour afficher l’équivalent.
+                Ajoutez les valeurs nutritionnelles et, si cette unité est en ml, la densité de l’ingrédient pour afficher l’équivalent.
               </div>
             </li>
           </ul>

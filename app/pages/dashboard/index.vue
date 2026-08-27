@@ -22,8 +22,8 @@ function shuffle<T>(items: T[]): T[] {
   return a
 }
 
-function variationKeys(ing: Ingredient): string[] {
-  return ing.variations ? Object.keys(ing.variations) : []
+function unitKeys(ing: Ingredient): string[] {
+  return ing.units ? Object.keys(ing.units) : []
 }
 
 async function seedFakeRecipe() {
@@ -65,15 +65,15 @@ async function seedFakeRecipe() {
     )
     const picked = shuffle(fromDb).slice(0, targetCount)
 
-    /** Parfois `null` à la place de l’id de variation (pas de portion précise). */
-    const nullVariationProbability = 0.9
+    /** Parfois `null` à la place de l’id d’unité (pas de portion précise). */
+    const nullUnitProbability = 0.9
 
     const ingredients = picked.map((ing) => {
-      const keys = variationKeys(ing)
-      const useId = keys.length > 0 && Math.random() >= nullVariationProbability
-      const variation = useId ? keys[Math.floor(Math.random() * keys.length)]! : null
+      const keys = unitKeys(ing)
+      const useId = keys.length > 0 && Math.random() >= nullUnitProbability
+      const unit = useId ? keys[Math.floor(Math.random() * keys.length)]! : null
       const quantity = Math.floor(Math.random() * 5) + 1
-      return { ingredientRef: doc(db, 'ingredients', ing.id), quantity, variation }
+      return { ingredientRef: doc(db, 'ingredients', ing.id), quantity, unit }
     })
 
     const now = Timestamp.now()

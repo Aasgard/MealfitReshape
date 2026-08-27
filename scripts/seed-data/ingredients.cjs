@@ -30,7 +30,7 @@ async function seed() {
       category: categoryRef,
       activeMonths: item.saisonnalite,
       comment: "",
-      variations: {},
+      units: {},
       valuesBy100: {
         calories: item.calories,
         protein: item.proteines,

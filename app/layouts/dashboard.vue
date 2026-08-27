@@ -9,7 +9,7 @@ const db = useFirestore()
 const recipes = useCollection(collection(db, 'recipes'))
 provide('recipes', recipes)
 
-const links = [[{
+const links = [{
   label: 'Accueil',
   icon: 'i-lucide-house',
   to: '/dashboard',
@@ -47,17 +47,20 @@ const links = [[{
     icon: 'i-lucide-sport-shoe',
     to: '/dashboard/calculateur-allure',
   }]
-}], [{
-  label: 'Feedback',
-  icon: 'i-lucide-message-circle',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
-}, {
-  label: 'Help & Support',
-  icon: 'i-lucide-info',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
-}]] satisfies NavigationMenuItem[][]
+}] satisfies NavigationMenuItem[]
+
+// Placeholders du template Nuxt UI (pointent vers le repo du template, pas vers de vraies pages) : désactivés en attendant de vrais liens.
+// const footerLinks = [{
+//   label: 'Feedback',
+//   icon: 'i-lucide-message-circle',
+//   to: 'https://github.com/nuxt-ui-templates/dashboard',
+//   target: '_blank'
+// }, {
+//   label: 'Help & Support',
+//   icon: 'i-lucide-info',
+//   to: 'https://github.com/nuxt-ui-templates/dashboard',
+//   target: '_blank'
+// }] satisfies NavigationMenuItem[]
 </script>
 
 <template>
@@ -80,19 +83,19 @@ const links = [[{
       <template #default="{ collapsed }">
         <UNavigationMenu
           :collapsed="collapsed"
-          :items="links[0]"
+          :items="links"
           orientation="vertical"
           tooltip
           popover
         />
 
-        <UNavigationMenu
+        <!-- <UNavigationMenu
           :collapsed="collapsed"
-          :items="links[1]"
+          :items="footerLinks"
           orientation="vertical"
           tooltip
           class="mt-auto"
-        />
+        /> -->
       </template>
 
       <template #footer="{ collapsed }">

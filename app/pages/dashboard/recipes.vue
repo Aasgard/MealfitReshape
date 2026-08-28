@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, query, where, orderBy } from 'firebase/firestore'
+import { addDoc, collection, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
 import type { Recipe } from '~/types/recipe'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { RECIPE_DIFFICULTIES } from '~/utils/recipeDifficulty'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -89,9 +90,49 @@ const selectRecipe = (recipe: Recipe) => {
   console.log('Voir', recipe.title)
 }
 
-const addRecipe = () => {
-  console.log('Ajouter une recette')
+// --- TEST TEMPORAIRE : à supprimer ---
+// Ajoute une recette aléatoire dans Firestore (`recipes`) pour des besoins de test.
+// Toute la logique est volontairement regroupée ici pour pouvoir être retirée d'un bloc.
+const addRecipe = async () => {
+  const uid = user.value?.uid
+  if (!uid) return
+
+  const RANDOM_TITLES = [
+    'Salade de quinoa',
+    'Poulet rôti aux herbes',
+    'Tarte aux pommes',
+    'Soupe de légumes',
+    'Pâtes carbonara',
+    'Curry de légumes',
+    'Omelette aux champignons',
+    'Gâteau au chocolat',
+  ]
+  const RANDOM_DESCRIPTIONS = [
+    'Une recette simple et rapide.',
+    'Parfait pour un repas en famille.',
+    'Un classique revisité.',
+    'Léger et savoureux.',
+  ]
+
+  const randomTitle = RANDOM_TITLES[Math.floor(Math.random() * RANDOM_TITLES.length)]
+  const randomDescription = RANDOM_DESCRIPTIONS[Math.floor(Math.random() * RANDOM_DESCRIPTIONS.length)]
+  const randomType = RECIPE_TYPES[Math.floor(Math.random() * RECIPE_TYPES.length)]
+  const randomDifficulty = RECIPE_DIFFICULTIES[Math.floor(Math.random() * RECIPE_DIFFICULTIES.length)]
+
+  await addDoc(collection(db, 'recipes'), {
+    title: `${randomTitle} (test #${Math.floor(Math.random() * 10000)})`,
+    description: randomDescription,
+    owner: uid,
+    isPublic: false,
+    type: randomType,
+    difficulty: randomDifficulty,
+    prepTime: Math.floor(Math.random() * 55) + 5,
+    cookTime: Math.floor(Math.random() * 90),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
 }
+// --- FIN TEST TEMPORAIRE ---
 </script>
 
 <template>

@@ -22,20 +22,6 @@ const unitLabel = computed(() => unitCount.value
   : 'Aucune unité')
 const macros = computed(() => props.ingredient.valuesBy100 ?? null)
 
-const macroTotal = computed(() => macros.value ? macros.value.carbohydrates + macros.value.protein + macros.value.fat : 0)
-
-/** Segments de la barre de composition, dans l'ordre G/P/L utilisé partout ailleurs ; les macros à 0 sont omises pour éviter un segment invisible collé à un gap. */
-const macroSegments = computed(() => {
-  if (!macros.value || macroTotal.value <= 0) return []
-  return ([
-    { key: 'carbohydrates', value: macros.value.carbohydrates, colorClass: 'bg-green-500' },
-    { key: 'protein', value: macros.value.protein, colorClass: 'bg-red-700' },
-    { key: 'fat', value: macros.value.fat, colorClass: 'bg-amber-500' },
-  ] as const)
-    .filter(segment => segment.value > 0)
-    .map(segment => ({ ...segment, width: `${(segment.value / macroTotal.value) * 100}%` }))
-})
-
 const actionItems = computed(() => [
   [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit') }],
   [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => emit('delete') }],
@@ -86,35 +72,7 @@ const actionItems = computed(() => [
         </p>
       </div>
 
-      <div v-if="macros" class="flex flex-col gap-1.5 mt-1">
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dimmed">
-          <span class="flex items-center gap-1 shrink-0">
-            <span class="size-2 rounded-full bg-green-500 shrink-0" />
-            G <span class="font-medium text-highlighted tabular-nums">{{ macros.carbohydrates }}g</span>
-          </span>
-          <span class="flex items-center gap-1 shrink-0">
-            <span class="size-2 rounded-full bg-red-700 shrink-0" />
-            P <span class="font-medium text-highlighted tabular-nums">{{ macros.protein }}g</span>
-          </span>
-          <span class="flex items-center gap-1 shrink-0">
-            <span class="size-2 rounded-full bg-amber-500 shrink-0" />
-            L <span class="font-medium text-highlighted tabular-nums">{{ macros.fat }}g</span>
-          </span>
-          <p class="flex items-baseline gap-1 shrink-0 ml-auto">
-            <span class="font-semibold text-highlighted tabular-nums">{{ macros.calories }}</span>
-            <span>kcal</span>
-          </p>
-        </div>
-        <div class="flex h-1.5 rounded-full bg-accented overflow-hidden gap-0.5">
-          <div
-            v-for="segment in macroSegments"
-            :key="segment.key"
-            class="h-full rounded-full transition-all duration-500"
-            :class="segment.colorClass"
-            :style="{ width: segment.width }"
-          />
-        </div>
-      </div>
+      <IngredientMacroSummary v-if="macros" :macros="macros" class="mt-1" />
       <p v-else class="flex items-center gap-1.5 text-xs text-dimmed mt-1">
         <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
         Valeurs non renseignées

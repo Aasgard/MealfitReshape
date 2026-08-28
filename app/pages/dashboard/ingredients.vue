@@ -137,6 +137,8 @@ const selectedUnitRows = computed(() => {
   }))
 })
 
+const selectedIngredientAllYear = computed(() => (selectedIngredient.value?.activeMonths?.length ?? 0) === 12)
+
 /** Slideover d'ajout/modification (voir IngredientFormSlideover) : `formIngredient` nul = création. */
 const formSlideoverOpen = ref(false)
 const formIngredient = ref<Ingredient | null>(null)
@@ -423,60 +425,18 @@ const confirmDeleteIngredient = () => {
 
         <!-- Valeurs nutritionnelles -->
         <div v-if="selectedIngredient?.valuesBy100">
-          <div class="flex items-baseline justify-between mb-4">
-            <p class="text-xs text-dimmed">Pour 100 g</p>
-            <div class="flex items-baseline gap-1">
-              <span class="text-2xl font-bold text-highlighted">{{ selectedIngredient.valuesBy100.calories }}</span>
-              <span class="text-xs text-dimmed">kcal</span>
-            </div>
-          </div>
-          <div class="flex flex-col gap-3">
-            <div class="flex items-center gap-3">
-              <div class="flex items-center gap-1.5 w-24 shrink-0">
-                <UIcon name="i-lucide-wheat" class="size-3.5 text-muted shrink-0" />
-                <span class="text-xs font-medium text-muted uppercase tracking-wide">Glucides</span>
-              </div>
-              <div class="flex-1 h-2 rounded-full bg-accented overflow-hidden">
-                <div
-                  class="h-full rounded-full bg-primary transition-all duration-500"
-                  :style="{ width: `${Math.min(100, (selectedIngredient.valuesBy100.carbohydrates / 100) * 100)}%` }"
-                />
-              </div>
-              <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.carbohydrates }}g</span>
-            </div>
-            <div class="flex items-center gap-3">
-              <div class="flex items-center gap-1.5 w-24 shrink-0">
-                <UIcon name="i-lucide-dumbbell" class="size-3.5 text-muted shrink-0" />
-                <span class="text-xs font-medium text-muted uppercase tracking-wide">Protéines</span>
-              </div>
-              <div class="flex-1 h-2 rounded-full bg-accented overflow-hidden">
-                <div
-                  class="h-full rounded-full bg-primary/60 transition-all duration-500"
-                  :style="{ width: `${Math.min(100, (selectedIngredient.valuesBy100.protein / 100) * 100)}%` }"
-                />
-              </div>
-              <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.protein }}g</span>
-            </div>
-            <div class="flex items-center gap-3">
-              <div class="flex items-center gap-1.5 w-24 shrink-0">
-                <UIcon name="i-lucide-droplets" class="size-3.5 text-muted shrink-0" />
-                <span class="text-xs font-medium text-muted uppercase tracking-wide">Lipides</span>
-              </div>
-              <div class="flex-1 h-2 rounded-full bg-accented overflow-hidden">
-                <div
-                  class="h-full rounded-full bg-primary/30 transition-all duration-500"
-                  :style="{ width: `${Math.min(100, (selectedIngredient.valuesBy100.fat / 100) * 100)}%` }"
-                />
-              </div>
-              <span class="text-sm font-semibold text-highlighted w-8 text-right">{{ selectedIngredient.valuesBy100.fat }}g</span>
-            </div>
-          </div>
+          <p class="text-xs text-dimmed mb-2">Pour 100 g</p>
+          <IngredientMacroSummary :macros="selectedIngredient.valuesBy100" />
         </div>
 
         <!-- Disponibilité par mois -->
         <div>
           <p class="text-xs text-dimmed mb-2">Disponibilité</p>
+          <p v-if="selectedIngredientAllYear" class="text-sm text-muted">
+            Toute l'année
+          </p>
           <div
+            v-else
             class="grid grid-cols-12 gap-1"
             role="group"
             :aria-label="`Disponibilité : ${selectedIngredient?.activeMonths?.length ?? 0} mois sur 12`"
@@ -522,38 +482,10 @@ const confirmDeleteIngredient = () => {
                 v-if="v.scaled"
                 class="p-3"
               >
-                <div class="flex items-baseline justify-between mb-3">
-                  <p class="text-xs text-dimmed">
-                    Pour {{ v.value }}&nbsp;{{ v.unit }}
-                  </p>
-                  <div class="flex items-baseline gap-1">
-                    <span class="text-xl font-bold text-highlighted">{{ v.scaled.calories }}</span>
-                    <span class="text-xs text-dimmed">kcal</span>
-                  </div>
-                </div>
-                <div class="flex flex-col gap-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-1.5 min-w-0">
-                      <UIcon name="i-lucide-wheat" class="size-3.5 text-muted shrink-0" />
-                      <span class="text-xs font-medium text-muted uppercase tracking-wide leading-tight">Glucides</span>
-                    </div>
-                    <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.carbohydrates }}g</span>
-                  </div>
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-1.5 min-w-0">
-                      <UIcon name="i-lucide-dumbbell" class="size-3.5 text-muted shrink-0" />
-                      <span class="text-xs font-medium text-muted uppercase tracking-wide leading-tight">Protéines</span>
-                    </div>
-                    <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.protein }}g</span>
-                  </div>
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-1.5 min-w-0">
-                      <UIcon name="i-lucide-droplets" class="size-3.5 text-muted shrink-0" />
-                      <span class="text-xs font-medium text-muted uppercase tracking-wide leading-tight">Lipides</span>
-                    </div>
-                    <span class="text-sm font-semibold text-highlighted tabular-nums shrink-0">{{ v.scaled.fat }}g</span>
-                  </div>
-                </div>
+                <p class="text-xs text-dimmed mb-2">
+                  Pour {{ v.value }}&nbsp;{{ v.unit }}
+                </p>
+                <IngredientMacroSummary :macros="v.scaled" />
               </div>
               <div
                 v-else

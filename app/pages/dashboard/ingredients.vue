@@ -391,7 +391,7 @@ const confirmDeleteIngredient = () => {
   >
     <template #title>
       <div class="flex items-center gap-2">
-        <span>{{ selectedIngredient?.label }} {{ selectedIngredient?.id }}</span>
+        <span>{{ selectedIngredient?.label }}</span>
         <UButton
           v-if="selectedIngredient && isOwnedByUser(selectedIngredient)"
           icon="i-lucide-pencil"

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { addDoc, collection, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
-import type { Recipe } from '~/types/recipe'
+import { addDoc, collection, doc, getDocs, or, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
+import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
+import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { RECIPE_DIFFICULTIES } from '~/utils/recipeDifficulty'
 
@@ -119,6 +120,37 @@ const addRecipe = async () => {
   const randomType = RECIPE_TYPES[Math.floor(Math.random() * RECIPE_TYPES.length)]
   const randomDifficulty = RECIPE_DIFFICULTIES[Math.floor(Math.random() * RECIPE_DIFFICULTIES.length)]
 
+  // Catalogue d'ingrédients disponible (privés de l'utilisateur + publics), comme sur la page Ingrédients.
+  const ingredientsSnapshot = await getDocs(
+    query(
+      collection(db, 'ingredients'),
+      or(
+        where('owner', '==', uid),
+        where('owner', '==', null)
+      )
+    )
+  )
+  const availableIngredients = ingredientsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }) as Ingredient)
+
+  const randomIngredientLines: RecipeIngredientLine[] = []
+  if (availableIngredients.length > 0) {
+    const pickCount = Math.min(availableIngredients.length, Math.floor(Math.random() * 4) + 2) // 2 à 5 ingrédients
+    const shuffled = [...availableIngredients].sort(() => Math.random() - 0.5)
+
+    for (const ingredient of shuffled.slice(0, pickCount)) {
+      const unitIds = Object.keys(ingredient.units ?? {})
+      const randomUnit = unitIds.length > 0 && Math.random() > 0.3
+        ? unitIds[Math.floor(Math.random() * unitIds.length)]
+        : null
+
+      randomIngredientLines.push({
+        ingredientRef: doc(db, 'ingredients', ingredient.id),
+        quantity: Math.floor(Math.random() * 5) + 1,
+        unit: randomUnit ?? null,
+      })
+    }
+  }
+
   await addDoc(collection(db, 'recipes'), {
     title: `${randomTitle} (test #${Math.floor(Math.random() * 10000)})`,
     description: randomDescription,
@@ -128,6 +160,7 @@ const addRecipe = async () => {
     difficulty: randomDifficulty,
     prepTime: Math.floor(Math.random() * 55) + 5,
     cookTime: Math.floor(Math.random() * 90),
+    ingredients: randomIngredientLines,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })

@@ -38,3 +38,18 @@ export interface Recipe {
   source?: string
   ingredients?: RecipeIngredientLine[]
 }
+
+export type RecipeCategory = 'Petit-déjeuner' | 'Déjeuner' | 'Dîner' | 'Collation' | 'Dessert'
+export type RecipeDifficulty = 'Facile' | 'Moyen' | 'Difficile'
+
+/** Donnée de démonstration pour la page recettes, en attendant son branchement à Firestore. */
+export interface RecipePreview {
+  id: string
+  title: string
+  ingredientsPreview: string
+  category: RecipeCategory
+  prepTime: number
+  calories: number
+  difficulty: RecipeDifficulty
+  isFavorite: boolean
+}

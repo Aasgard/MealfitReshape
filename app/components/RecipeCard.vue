@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import type { RecipePreview } from '~/types/recipe'
+import type { Recipe } from '~/types/recipe'
+import { recipeTypeLabel } from '~/utils/recipeType'
+import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
 
 const props = defineProps<{
-  recipe: RecipePreview
+  recipe: Recipe
 }>()
 
 const emit = defineEmits<{
   select: []
   edit: []
   delete: []
-  favorite: []
 }>()
 
-const ingredientCount = computed(() => props.recipe.ingredientsPreview
-  ? props.recipe.ingredientsPreview.split(',').map(s => s.trim()).filter(Boolean).length
-  : 0)
+const difficultyLabel = computed(() => recipeDifficultyLabel(props.recipe.difficulty))
+const difficultyColor = computed(() => recipeDifficultyColor(props.recipe.difficulty))
+
+const ingredientCount = computed(() => props.recipe.ingredients?.length ?? 0)
 const ingredientCountLabel = computed(() => ingredientCount.value
   ? `${ingredientCount.value} ingrédient${ingredientCount.value > 1 ? 's' : ''}`
   : 'Aucun ingrédient')
@@ -29,11 +31,7 @@ const actionItems = computed(() => [
   <div
     role="button"
     tabindex="0"
-    :aria-label="[
-      `Voir le détail de ${recipe.title}`,
-      `${recipe.calories} kcal`,
-      recipe.isFavorite ? 'favori' : null,
-    ].filter(Boolean).join(', ')"
+    :aria-label="`Voir le détail de ${recipe.title}`"
     class="rounded-xl border border-default bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
     @click="emit('select')"
     @keydown.enter.self="emit('select')"
@@ -46,48 +44,36 @@ const actionItems = computed(() => [
             {{ recipe.title }}
           </p>
         </div>
-        <div class="flex items-center gap-1 shrink-0">
+        <UDropdownMenu :items="actionItems" :ui="{ content: 'w-40' }">
           <UButton
-            icon="i-lucide-heart"
-            :color="recipe.isFavorite ? 'primary' : 'neutral'"
-            :variant="recipe.isFavorite ? 'solid' : 'ghost'"
+            icon="i-lucide-ellipsis-vertical"
+            color="neutral"
+            variant="ghost"
             size="xs"
-            :aria-label="recipe.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'"
-            :aria-pressed="recipe.isFavorite"
-            :ui="{ leadingIcon: recipe.isFavorite ? 'fill-current' : '' }"
-            @click.stop="emit('favorite')"
+            :aria-label="`Actions pour ${recipe.title}`"
+            @click.stop
           />
-          <UDropdownMenu :items="actionItems" :ui="{ content: 'w-40' }">
-            <UButton
-              icon="i-lucide-ellipsis-vertical"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              :aria-label="`Actions pour ${recipe.title}`"
-              @click.stop
-            />
-          </UDropdownMenu>
-        </div>
+        </UDropdownMenu>
       </div>
 
-      <p class="text-sm text-muted flex items-center gap-1.5 min-w-0 truncate">
+      <p v-if="recipe.type" class="text-sm text-muted flex items-center gap-1.5 min-w-0 truncate">
         <UIcon name="i-lucide-utensils" class="size-3.5 shrink-0" />
-        <span class="truncate">{{ recipe.category }}</span>
+        <span class="truncate">{{ recipeTypeLabel(recipe.type) }}</span>
       </p>
 
-      <p class="text-xs text-dimmed truncate">
-        {{ recipe.ingredientsPreview }}
+      <p v-if="recipe.description" class="text-xs text-dimmed truncate">
+        {{ recipe.description }}
       </p>
 
-      <div class="flex items-center gap-3 text-xs text-dimmed mt-1">
-        <span class="flex items-center gap-1 shrink-0">
+      <div v-if="recipe.prepTime != null || recipe.cookTime != null" class="flex items-center gap-3 text-xs text-dimmed mt-1">
+        <span v-if="recipe.prepTime != null" class="flex items-center gap-1 shrink-0">
           <UIcon name="i-lucide-clock" class="size-3.5 shrink-0" />
-          <span class="font-medium text-highlighted tabular-nums">{{ recipe.prepTime }}</span> min
+          <span class="font-medium text-highlighted tabular-nums">{{ recipe.prepTime }}</span> min prép.
         </span>
-        <p class="flex items-baseline gap-1 shrink-0 ml-auto">
-          <span class="font-semibold text-highlighted tabular-nums">{{ recipe.calories }}</span>
-          <span>kcal</span>
-        </p>
+        <span v-if="recipe.cookTime != null" class="flex items-center gap-1 shrink-0">
+          <UIcon name="i-lucide-flame" class="size-3.5 shrink-0" />
+          <span class="font-medium text-highlighted tabular-nums">{{ recipe.cookTime }}</span> min cuisson
+        </span>
       </div>
 
       <div class="flex items-center gap-2 mt-1 pt-2 border-t border-default">
@@ -98,7 +84,13 @@ const actionItems = computed(() => [
           variant="subtle"
           size="sm"
         />
-        <span class="text-xs text-dimmed ml-auto">{{ recipe.difficulty }}</span>
+        <UBadge
+          icon="i-lucide-gauge"
+          :label="difficultyLabel"
+          :color="difficultyColor"
+          variant="subtle"
+          size="sm"
+        />
       </div>
     </div>
   </div>

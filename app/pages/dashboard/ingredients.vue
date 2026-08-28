@@ -161,6 +161,7 @@ const openEditFromDetail = () => {
 }
 
 const selectIngredient = (ingredient: Ingredient) => {
+  console.log(ingredient.id)
   selectedIngredient.value = ingredient
   slideoverOpen.value = true
 }

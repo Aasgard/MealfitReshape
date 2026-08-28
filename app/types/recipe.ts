@@ -1,4 +1,5 @@
 import type { DocumentReference, Timestamp } from 'firebase/firestore'
+import type { RecipeType } from '~/utils/recipeType'
 
 /** Ligne d’ingrédient dans une recette (réf. document `ingredients` + quantité + unité) */
 export interface RecipeIngredientLine {
@@ -31,25 +32,13 @@ export interface Recipe {
   prepTime?: number
   /** Durée de cuisson (minutes) */
   cookTime?: number
-  /** Type de repas (ex. breakfast, lunch) */
-  type?: string
-  isFavorite?: boolean
+  /** Type de repas */
+  type?: RecipeType
+  /** Niveau de difficulté (ex. "EASY", "MEDIUM", "HARD") */
+  difficulty?: string
   imageUrl?: string
   source?: string
+  instructions?: string
+  tags?: string[]
   ingredients?: RecipeIngredientLine[]
-}
-
-export type RecipeCategory = 'Petit-déjeuner' | 'Déjeuner' | 'Dîner' | 'Collation' | 'Dessert'
-export type RecipeDifficulty = 'Facile' | 'Moyen' | 'Difficile'
-
-/** Donnée de démonstration pour la page recettes, en attendant son branchement à Firestore. */
-export interface RecipePreview {
-  id: string
-  title: string
-  ingredientsPreview: string
-  category: RecipeCategory
-  prepTime: number
-  calories: number
-  difficulty: RecipeDifficulty
-  isFavorite: boolean
 }

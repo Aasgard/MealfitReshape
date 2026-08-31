@@ -35,6 +35,8 @@ export interface Recipe {
   type?: RecipeType
   /** Niveau de difficulté (ex. "EASY", "MEDIUM", "HARD") */
   difficulty?: string
+  /** Nombre de parts que produit la recette ; `undefined` équivaut à 1. */
+  persons?: number
   imageUrl?: string
   source?: string
   instructions?: string

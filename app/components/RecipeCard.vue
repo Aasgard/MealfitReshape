@@ -24,6 +24,7 @@ const emit = defineEmits<{
 
 const difficultyLabel = computed(() => recipeDifficultyLabel(props.recipe.difficulty))
 const difficultyColor = computed(() => recipeDifficultyColor(props.recipe.difficulty))
+const personsLabel = computed(() => `${props.recipe.persons ?? 1}`)
 
 const ingredientCount = computed(() => props.recipe.ingredients?.length ?? 0)
 const ingredientCountLabel = computed(() => ingredientCount.value
@@ -71,15 +72,24 @@ const actionItems = computed(() => [
           size="sm"
           :ui="{ base: 'bg-default' }"
         />
-        <UBadge
-          icon="i-lucide-gauge"
-          :label="difficultyLabel"
-          :color="difficultyColor"
-          variant="subtle"
-          size="sm"
-          class="ml-auto"
-          :ui="{ base: 'bg-default' }"
-        />
+        <div class="flex items-center gap-2 ml-auto">
+          <UBadge
+            icon="i-lucide-users"
+            :label="personsLabel"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+            :ui="{ base: 'bg-default' }"
+          />
+          <UBadge
+            icon="i-lucide-gauge"
+            :label="difficultyLabel"
+            :color="difficultyColor"
+            variant="subtle"
+            size="sm"
+            :ui="{ base: 'bg-default' }"
+          />
+        </div>
       </div>
     </div>
     <div class="p-4 flex flex-col gap-2 flex-1">

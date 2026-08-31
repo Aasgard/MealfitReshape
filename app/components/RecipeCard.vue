@@ -1,11 +1,20 @@
 <script setup lang="ts">
 import type { Recipe } from '~/types/recipe'
+import type { Ingredient } from '~/types/ingredient'
 import { recipeTypeLabel } from '~/utils/recipeType'
 import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
+import { macrosForRecipe } from '~/utils/recipeNutrition'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   recipe: Recipe
-}>()
+  /** Ingrédients résolus (id document → Ingredient) pour calculer les macros cumulées de la recette. */
+  ingredientsById?: Map<string, Ingredient>
+  /** Index unité → ingrédient parent (voir `buildUnitOwnerIndex`), pour les lignes qui référencent une unité. */
+  unitOwnerById?: Map<string, Ingredient>
+}>(), {
+  ingredientsById: () => new Map(),
+  unitOwnerById: () => new Map(),
+})
 
 const emit = defineEmits<{
   select: []
@@ -20,6 +29,11 @@ const ingredientCount = computed(() => props.recipe.ingredients?.length ?? 0)
 const ingredientCountLabel = computed(() => ingredientCount.value
   ? `${ingredientCount.value} ingrédient${ingredientCount.value > 1 ? 's' : ''}`
   : 'Aucun ingrédient')
+
+const macros = computed(() => macrosForRecipe(props.recipe.ingredients, props.ingredientsById, props.unitOwnerById))
+const hasMacros = computed(() =>
+  macros.value.calories > 0 || macros.value.protein > 0 || macros.value.carbohydrates > 0 || macros.value.fat > 0
+)
 
 const actionItems = computed(() => [
   [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit') }],
@@ -47,15 +61,26 @@ const actionItems = computed(() => [
       <div v-else class="flex items-center justify-center w-full h-36 bg-accented">
         <UIcon name="i-lucide-image-off" class="size-6 text-dimmed" />
       </div>
-      <UBadge
-        v-if="recipe.type"
-        icon="i-lucide-utensils"
-        :label="recipeTypeLabel(recipe.type)"
-        color="neutral"
-        variant="subtle"
-        size="sm"
-        class="absolute top-2 left-2"
-      />
+      <div class="absolute inset-x-0 top-0 p-2 flex flex-wrap items-start justify-between gap-2">
+        <UBadge
+          v-if="recipe.type"
+          icon="i-lucide-utensils"
+          :label="recipeTypeLabel(recipe.type)"
+          color="neutral"
+          variant="subtle"
+          size="sm"
+          :ui="{ base: 'bg-default' }"
+        />
+        <UBadge
+          icon="i-lucide-gauge"
+          :label="difficultyLabel"
+          :color="difficultyColor"
+          variant="subtle"
+          size="sm"
+          class="ml-auto"
+          :ui="{ base: 'bg-default' }"
+        />
+      </div>
     </div>
     <div class="p-4 flex flex-col gap-2 flex-1">
       <div class="flex items-start justify-between gap-2">
@@ -76,7 +101,14 @@ const actionItems = computed(() => [
         </UDropdownMenu>
       </div>
 
-      <div v-if="recipe.prepTime != null || recipe.cookTime != null" class="flex items-center gap-3 text-xs text-dimmed mt-1">
+      <p class="flex items-center gap-1.5 text-xs text-dimmed min-w-0 truncate h-4">
+        <template v-if="recipe.tags?.length">
+          <UIcon name="i-lucide-tag" class="size-3.5 shrink-0" />
+          <span class="truncate">{{ recipe.tags.join(', ') }}</span>
+        </template>
+      </p>
+
+      <div class="flex items-center gap-3 text-xs text-dimmed mt-1 h-4">
         <span v-if="recipe.prepTime != null" class="flex items-center gap-1 shrink-0">
           <UIcon name="i-lucide-clock" class="size-3.5 shrink-0" />
           <span class="font-medium text-highlighted tabular-nums">{{ recipe.prepTime }}</span> min prép.
@@ -87,18 +119,17 @@ const actionItems = computed(() => [
         </span>
       </div>
 
+      <IngredientMacroSummary v-if="hasMacros" :macros="macros" class="mt-1" />
+      <p v-else class="flex items-center gap-1.5 text-xs text-dimmed mt-1">
+        <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
+        Valeurs non renseignées
+      </p>
+
       <div class="flex flex-wrap items-center gap-2 mt-auto pt-2 border-t border-default">
         <UBadge
           icon="i-lucide-list"
           :label="ingredientCountLabel"
           :color="ingredientCount ? 'primary' : 'neutral'"
-          variant="subtle"
-          size="sm"
-        />
-        <UBadge
-          icon="i-lucide-gauge"
-          :label="difficultyLabel"
-          :color="difficultyColor"
           variant="subtle"
           size="sm"
         />

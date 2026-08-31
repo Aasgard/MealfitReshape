@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore'
+import { collection, or, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore'
 import type { Recipe } from '~/types/recipe'
+import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { buildUnitOwnerIndex } from '~/utils/recipeNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -24,6 +26,22 @@ const recipes = useCollection<Recipe>(() => {
   )
 })
 await recipes.promise.value
+
+/** Catalogue d'ingrédients (privés de l'utilisateur + publics) pour résoudre les macros affichées sur les cartes. */
+const ingredients = useCollection<Ingredient>(() => {
+  const uid = user.value?.uid
+  if (!uid) return null
+
+  return query(
+    collection(db, 'ingredients'),
+    or(
+      where('owner', '==', uid),
+      where('owner', '==', null)
+    )
+  )
+})
+const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
+const unitOwnerById = computed(() => buildUnitOwnerIndex(ingredients.value))
 
 const searchQuery = ref('')
 
@@ -263,6 +281,8 @@ const confirmDeleteRecipe = () => {
               v-for="recipe in filteredRecipes"
               :key="recipe.id"
               :recipe="recipe"
+              :ingredients-by-id="ingredientsById"
+              :unit-owner-by-id="unitOwnerById"
               @select="selectRecipe(recipe)"
               @edit="editRecipe(recipe)"
               @delete="askDeleteRecipe(recipe)"

@@ -28,7 +28,7 @@ function normalize(difficulty: string | undefined | null): RecipeDifficulty | nu
 }
 
 export function recipeDifficultyLabel(difficulty: string | undefined | null): string {
-  if (!difficulty) return 'Difficulté non renseignée'
+  if (!difficulty) return 'Aucune difficulté'
   const normalized = normalize(difficulty)
   return normalized ? RECIPE_DIFFICULTY_LABELS[normalized] : difficulty
 }

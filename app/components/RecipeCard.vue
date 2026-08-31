@@ -37,6 +37,26 @@ const actionItems = computed(() => [
     @keydown.enter.self="emit('select')"
     @keydown.space.self.prevent="emit('select')"
   >
+    <div class="relative">
+      <img
+        v-if="recipe.imageUrl"
+        :src="recipe.imageUrl"
+        :alt="recipe.title"
+        class="w-full h-36 object-cover"
+      />
+      <div v-else class="flex items-center justify-center w-full h-36 bg-accented">
+        <UIcon name="i-lucide-image-off" class="size-6 text-dimmed" />
+      </div>
+      <UBadge
+        v-if="recipe.type"
+        icon="i-lucide-utensils"
+        :label="recipeTypeLabel(recipe.type)"
+        color="neutral"
+        variant="subtle"
+        size="sm"
+        class="absolute top-2 left-2"
+      />
+    </div>
     <div class="p-4 flex flex-col gap-2 flex-1">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
@@ -56,15 +76,6 @@ const actionItems = computed(() => [
         </UDropdownMenu>
       </div>
 
-      <p v-if="recipe.type" class="text-sm text-muted flex items-center gap-1.5 min-w-0 truncate">
-        <UIcon name="i-lucide-utensils" class="size-3.5 shrink-0" />
-        <span class="truncate">{{ recipeTypeLabel(recipe.type) }}</span>
-      </p>
-
-      <p v-if="recipe.description" class="text-xs text-dimmed truncate">
-        {{ recipe.description }}
-      </p>
-
       <div v-if="recipe.prepTime != null || recipe.cookTime != null" class="flex items-center gap-3 text-xs text-dimmed mt-1">
         <span v-if="recipe.prepTime != null" class="flex items-center gap-1 shrink-0">
           <UIcon name="i-lucide-clock" class="size-3.5 shrink-0" />
@@ -76,7 +87,7 @@ const actionItems = computed(() => [
         </span>
       </div>
 
-      <div class="flex items-center gap-2 mt-1 pt-2 border-t border-default">
+      <div class="flex flex-wrap items-center gap-2 mt-auto pt-2 border-t border-default">
         <UBadge
           icon="i-lucide-list"
           :label="ingredientCountLabel"

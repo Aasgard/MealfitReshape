@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   macros: IngredientMacros
-}>()
+  showBar?: boolean
+}>(), {
+  showBar: true,
+})
 
 const macroTotal = computed(() => props.macros.carbohydrates + props.macros.protein + props.macros.fat)
 
@@ -40,7 +43,7 @@ const macroSegments = computed(() => {
         <span>kcal</span>
       </p>
     </div>
-    <div class="flex h-1.5 rounded-full bg-accented overflow-hidden gap-0.5">
+    <div v-if="showBar" class="flex h-1.5 rounded-full bg-accented overflow-hidden gap-0.5">
       <div
         v-for="segment in macroSegments"
         :key="segment.key"

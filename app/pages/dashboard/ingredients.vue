@@ -483,10 +483,7 @@ const confirmDeleteIngredient = () => {
                 v-if="v.scaled"
                 class="p-3"
               >
-                <p class="text-xs text-dimmed mb-2">
-                  Pour {{ v.value }}&nbsp;{{ v.unit }}
-                </p>
-                <IngredientMacroSummary :macros="v.scaled" />
+                <IngredientMacroSummary :macros="v.scaled" :show-bar="false" />
               </div>
               <div
                 v-else

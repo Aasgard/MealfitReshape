@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { addDoc, collection, doc, getDocs, or, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
-import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
-import type { Ingredient } from '~/types/ingredient'
+import { collection, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore'
+import type { Recipe } from '~/types/recipe'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
-import { RECIPE_DIFFICULTIES } from '~/utils/recipeDifficulty'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -13,6 +11,7 @@ useSeoMeta({
 
 const db = useFirestore()
 const user = useCurrentUser()
+const toast = useToast()
 
 const recipes = useCollection<Recipe>(() => {
   const uid = user.value?.uid
@@ -42,10 +41,13 @@ const sortOptions = [
 ]
 const selectedSort = ref('label-asc')
 
+/** Recettes masquées immédiatement pendant le délai d'annulation d'une suppression (voir confirmDeleteRecipe). */
+const pendingDeleteIds = ref(new Set<string>())
+
 const filteredRecipes = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
 
-  const list = (recipes.value ?? []).filter((r) => {
+  const list = (recipes.value ?? []).filter(r => !pendingDeleteIds.value.has(r.id)).filter((r) => {
     const matchesQuery = !q || r.title.toLowerCase().includes(q)
     const matchesType = selectedType.value === 'Toutes' || r.type === selectedType.value
     return matchesQuery && matchesType
@@ -79,93 +81,90 @@ const resetFilters = () => {
   selectedType.value = 'Toutes'
 }
 
-const editRecipe = (recipe: Recipe) => {
-  console.log('Modifier', recipe.title)
-}
-
-const deleteRecipe = (recipe: Recipe) => {
-  console.log('Supprimer', recipe.title)
-}
-
-const selectRecipe = (recipe: Recipe) => {
-  console.log('Voir', recipe.title)
-}
-
-// --- TEST TEMPORAIRE : à supprimer ---
-// Ajoute une recette aléatoire dans Firestore (`recipes`) pour des besoins de test.
-// Toute la logique est volontairement regroupée ici pour pouvoir être retirée d'un bloc.
-const addRecipe = async () => {
-  const uid = user.value?.uid
-  if (!uid) return
-
-  const RANDOM_TITLES = [
-    'Salade de quinoa',
-    'Poulet rôti aux herbes',
-    'Tarte aux pommes',
-    'Soupe de légumes',
-    'Pâtes carbonara',
-    'Curry de légumes',
-    'Omelette aux champignons',
-    'Gâteau au chocolat',
-  ]
-  const RANDOM_DESCRIPTIONS = [
-    'Une recette simple et rapide.',
-    'Parfait pour un repas en famille.',
-    'Un classique revisité.',
-    'Léger et savoureux.',
-  ]
-
-  const randomTitle = RANDOM_TITLES[Math.floor(Math.random() * RANDOM_TITLES.length)]
-  const randomDescription = RANDOM_DESCRIPTIONS[Math.floor(Math.random() * RANDOM_DESCRIPTIONS.length)]
-  const randomType = RECIPE_TYPES[Math.floor(Math.random() * RECIPE_TYPES.length)]
-  const randomDifficulty = RECIPE_DIFFICULTIES[Math.floor(Math.random() * RECIPE_DIFFICULTIES.length)]
-
-  // Catalogue d'ingrédients disponible (privés de l'utilisateur + publics), comme sur la page Ingrédients.
-  const ingredientsSnapshot = await getDocs(
-    query(
-      collection(db, 'ingredients'),
-      or(
-        where('owner', '==', uid),
-        where('owner', '==', null)
-      )
-    )
-  )
-  const availableIngredients = ingredientsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }) as Ingredient)
-
-  const randomIngredientLines: RecipeIngredientLine[] = []
-  if (availableIngredients.length > 0) {
-    const pickCount = Math.min(availableIngredients.length, Math.floor(Math.random() * 4) + 2) // 2 à 5 ingrédients
-    const shuffled = [...availableIngredients].sort(() => Math.random() - 0.5)
-
-    for (const ingredient of shuffled.slice(0, pickCount)) {
-      const unitIds = Object.keys(ingredient.units ?? {})
-      const randomUnit = unitIds.length > 0 && Math.random() > 0.3
-        ? unitIds[Math.floor(Math.random() * unitIds.length)]
-        : null
-
-      randomIngredientLines.push({
-        ingredientRef: doc(db, 'ingredients', ingredient.id),
-        quantity: Math.floor(Math.random() * 5) + 1,
-        unit: randomUnit ?? null,
-      })
-    }
-  }
-
-  await addDoc(collection(db, 'recipes'), {
-    title: `${randomTitle} (test #${Math.floor(Math.random() * 10000)})`,
-    description: randomDescription,
-    owner: uid,
-    isPublic: false,
-    type: randomType,
-    difficulty: randomDifficulty,
-    prepTime: Math.floor(Math.random() * 55) + 5,
-    cookTime: Math.floor(Math.random() * 90),
-    ingredients: randomIngredientLines,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+/** La création/édition/détail des recettes n'est pas encore construite ; on le dit plutôt que de laisser les contrôles ne rien faire. */
+const notifyUnavailable = (action: string) => {
+  toast.add({
+    title: 'Bientôt disponible',
+    description: `${action} n'est pas encore possible depuis cette page.`,
+    color: 'neutral',
   })
 }
-// --- FIN TEST TEMPORAIRE ---
+
+const addRecipe = () => notifyUnavailable('L’ajout de recettes')
+const editRecipe = (recipe: Recipe) => notifyUnavailable(`Modifier « ${recipe.title} »`)
+const selectRecipe = (recipe: Recipe) => notifyUnavailable(`Voir le détail de « ${recipe.title} »`)
+
+const recipeToDelete = ref<Recipe | null>(null)
+const deleteDialogOpen = ref(false)
+
+const askDeleteRecipe = (recipe: Recipe) => {
+  recipeToDelete.value = recipe
+  deleteDialogOpen.value = true
+}
+
+const deleteConfirmDescription = computed(() => {
+  const title = recipeToDelete.value?.title
+  return title
+    ? `« ${title} » sera supprimée après un court délai, le temps d'annuler si besoin.`
+    : undefined
+})
+
+const DELETE_GRACE_PERIOD_MS = 6000
+/** Handles des suppressions programmées mais pas encore exécutées (délai d'annulation en cours), par id de recette. */
+const pendingDeleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+const performDelete = async (id: string, title: string) => {
+  try {
+    await deleteDoc(doc(db, 'recipes', id))
+  } catch (error: any) {
+    console.error('Erreur lors de la suppression:', error)
+    // La suppression a échoué : on réaffiche la carte, masquée depuis le clic sur « Supprimer ».
+    pendingDeleteIds.value.delete(id)
+    toast.add({
+      title: 'Erreur',
+      description: `« ${title} » n'a pas pu être supprimée : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error'
+    })
+    return
+  }
+  pendingDeleteIds.value.delete(id)
+}
+
+const confirmDeleteRecipe = () => {
+  const recipe = recipeToDelete.value
+  if (!recipe) return
+
+  deleteDialogOpen.value = false
+  recipeToDelete.value = null
+
+  const { id, title } = recipe
+  pendingDeleteIds.value.add(id)
+
+  const timeout = setTimeout(() => {
+    pendingDeleteTimeouts.delete(id)
+    performDelete(id, title)
+  }, DELETE_GRACE_PERIOD_MS)
+  pendingDeleteTimeouts.set(id, timeout)
+
+  toast.add({
+    title: 'Recette supprimée',
+    description: `« ${title} » sera définitivement supprimée.`,
+    color: 'neutral',
+    actions: [{
+      label: 'Annuler',
+      color: 'neutral',
+      variant: 'outline',
+      onClick: () => {
+        const pending = pendingDeleteTimeouts.get(id)
+        if (!pending) return
+        clearTimeout(pending)
+        pendingDeleteTimeouts.delete(id)
+        pendingDeleteIds.value.delete(id)
+        toast.add({ title: 'Suppression annulée', description: `« ${title} » a été conservée`, color: 'success' })
+      }
+    }]
+  })
+}
 </script>
 
 <template>
@@ -236,15 +235,20 @@ const addRecipe = async () => {
             <div
               v-for="i in 8"
               :key="`skeleton-${i}`"
-              class="rounded-xl border border-default bg-default p-4 flex flex-col gap-2"
+              class="rounded-xl border border-default bg-default overflow-hidden flex flex-col"
             >
-              <div class="flex items-start justify-between gap-2">
-                <USkeleton class="h-5 w-2/3" />
-                <USkeleton class="size-5 rounded-full shrink-0" />
+              <USkeleton class="w-full h-36 rounded-none" />
+              <div class="p-4 flex flex-col gap-2 flex-1">
+                <div class="flex items-start justify-between gap-2">
+                  <USkeleton class="h-5 w-2/3" />
+                  <USkeleton class="size-5 rounded-full shrink-0" />
+                </div>
+                <USkeleton class="h-4 w-32 mt-1" />
+                <div class="flex items-center gap-2 mt-auto pt-2 border-t border-default">
+                  <USkeleton class="h-5 w-24 rounded-full" />
+                  <USkeleton class="h-5 w-20 rounded-full" />
+                </div>
               </div>
-              <USkeleton class="h-4 w-24" />
-              <USkeleton class="h-4 w-32 mt-1" />
-              <USkeleton class="h-5 w-28 mt-2" />
             </div>
           </template>
           <UEmpty
@@ -261,11 +265,21 @@ const addRecipe = async () => {
               :recipe="recipe"
               @select="selectRecipe(recipe)"
               @edit="editRecipe(recipe)"
-              @delete="deleteRecipe(recipe)"
+              @delete="askDeleteRecipe(recipe)"
             />
           </template>
         </div>
       </div>
     </template>
   </UDashboardPanel>
+
+  <ConfirmDialog
+    v-model:open="deleteDialogOpen"
+    title="Supprimer cette recette ?"
+    :description="deleteConfirmDescription"
+    confirm-label="Supprimer"
+    confirm-color="error"
+    confirm-icon="i-lucide-trash-2"
+    @confirm="confirmDeleteRecipe"
+  />
 </template>

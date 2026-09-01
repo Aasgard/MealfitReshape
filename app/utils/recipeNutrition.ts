@@ -56,6 +56,33 @@ export function macrosForRecipeLine(
 }
 
 /**
+ * Intitulé lisible et quantité affichée d'une ligne de recette, résolus via les
+ * mêmes index que `macrosForRecipeLine` : nom de l'ingrédient + quantité en
+ * grammes pour une référence directe, ou « ingrédient (unité) » + multiplicateur
+ * pour une référence à une unité. `null` si l'id est introuvable dans les deux index.
+ */
+export function describeRecipeLine(
+  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'quantity'>,
+  ingredientsById: Map<string, Ingredient>,
+  unitOwnerById: Map<string, Ingredient>
+): { label: string; quantityLabel: string } | null {
+  const refId = line.ingredientRef.id
+
+  const directIngredient = ingredientsById.get(refId)
+  if (directIngredient) {
+    return { label: directIngredient.label, quantityLabel: `${line.quantity} g` }
+  }
+
+  const owner = unitOwnerById.get(refId)
+  const unit = owner?.units?.[refId]
+  if (owner && unit) {
+    return { label: `${owner.label} (${unit.label})`, quantityLabel: `${line.quantity} × ${unit.label}` }
+  }
+
+  return null
+}
+
+/**
  * Macros totales d'une recette : somme des lignes résolues via `ingredientsById`
  * / `unitOwnerById` (voir `macrosForRecipeLine`). Une ligne dont la référence est
  * introuvable, ou sans valeurs nutritionnelles, est ignorée plutôt que de rendre

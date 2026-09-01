@@ -4,7 +4,8 @@ import { collection, or, query, where, orderBy, deleteDoc, doc } from 'firebase/
 import type { Recipe } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
-import { buildUnitOwnerIndex } from '~/utils/recipeNutrition'
+import { recipeDifficultyLabel } from '~/utils/recipeDifficulty'
+import { buildUnitOwnerIndex, describeRecipeLine, macrosForRecipe } from '~/utils/recipeNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -14,6 +15,7 @@ useSeoMeta({
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
+const { formatDate } = useDateFormat()
 
 const recipes = useCollection<Recipe>(() => {
   const uid = user.value?.uid
@@ -99,7 +101,7 @@ const resetFilters = () => {
   selectedType.value = 'Toutes'
 }
 
-/** La création/édition/détail des recettes n'est pas encore construite ; on le dit plutôt que de laisser les contrôles ne rien faire. */
+/** La création/édition des recettes n'est pas encore construite ; on le dit plutôt que de laisser les contrôles ne rien faire. */
 const notifyUnavailable = (action: string) => {
   toast.add({
     title: 'Bientôt disponible',
@@ -110,7 +112,39 @@ const notifyUnavailable = (action: string) => {
 
 const addRecipe = () => notifyUnavailable('L’ajout de recettes')
 const editRecipe = (recipe: Recipe) => notifyUnavailable(`Modifier « ${recipe.title} »`)
-const selectRecipe = (recipe: Recipe) => notifyUnavailable(`Voir le détail de « ${recipe.title} »`)
+
+const slideoverOpen = ref(false)
+useOverlayBackClose(slideoverOpen)
+const selectedRecipe = ref<Recipe | null>(null)
+
+const selectRecipe = (recipe: Recipe) => {
+  selectedRecipe.value = recipe
+  slideoverOpen.value = true
+}
+
+const selectedRecipePersons = computed(() => selectedRecipe.value?.persons ?? 1)
+
+const selectedRecipeMacros = computed(() =>
+  macrosForRecipe(selectedRecipe.value?.ingredients, ingredientsById.value, unitOwnerById.value)
+)
+const hasSelectedRecipeMacros = computed(() => {
+  const m = selectedRecipeMacros.value
+  return m.calories > 0 || m.protein > 0 || m.carbohydrates > 0 || m.fat > 0
+})
+
+/** Lignes d'ingrédients résolues (nom + quantité affichable) pour la recette sélectionnée. */
+const selectedRecipeLines = computed(() => {
+  const recipe = selectedRecipe.value
+  if (!recipe?.ingredients?.length) return []
+  return recipe.ingredients.map((line, idx) => {
+    const described = describeRecipeLine(line, ingredientsById.value, unitOwnerById.value)
+    return {
+      key: `${line.ingredientRef.id}-${idx}`,
+      label: described?.label ?? 'Ingrédient introuvable',
+      quantityLabel: described?.quantityLabel ?? `${line.quantity}`,
+    }
+  })
+})
 
 const recipeToDelete = ref<Recipe | null>(null)
 const deleteDialogOpen = ref(false)
@@ -292,6 +326,141 @@ const confirmDeleteRecipe = () => {
       </div>
     </template>
   </UDashboardPanel>
+
+  <USlideover
+    v-model:open="slideoverOpen"
+    :description="selectedRecipe ? `Modifiée le ${formatDate(selectedRecipe.updatedAt)}` : undefined"
+  >
+    <template #title>
+      <div class="flex items-center gap-2">
+        <span>{{ selectedRecipe?.title }}</span>
+        <UButton
+          v-if="selectedRecipe"
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :aria-label="`Modifier ${selectedRecipe.title}`"
+          @click="editRecipe(selectedRecipe)"
+        />
+      </div>
+    </template>
+
+    <template #body>
+      <div class="flex flex-col gap-6">
+        <img
+          v-if="selectedRecipe?.imageUrl"
+          :src="selectedRecipe.imageUrl"
+          :alt="selectedRecipe.title"
+          class="w-full h-40 object-cover rounded-lg"
+        />
+
+        <!-- Repas / difficulté / parts / temps -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div v-if="selectedRecipe?.type">
+            <p class="text-xs text-dimmed mb-1">Repas</p>
+            <p class="text-sm text-muted flex items-center gap-1.5">
+              <UIcon name="i-lucide-utensils" class="size-3.5 shrink-0" />
+              {{ recipeTypeLabel(selectedRecipe.type) }}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-dimmed mb-1">Difficulté</p>
+            <p class="text-sm text-muted flex items-center gap-1.5">
+              <UIcon name="i-lucide-gauge" class="size-3.5 shrink-0" />
+              {{ recipeDifficultyLabel(selectedRecipe?.difficulty) }}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-dimmed mb-1">Parts</p>
+            <p class="text-sm text-muted flex items-center gap-1.5">
+              <UIcon name="i-lucide-users" class="size-3.5 shrink-0" />
+              {{ selectedRecipePersons }}
+            </p>
+          </div>
+          <div v-if="selectedRecipe?.prepTime != null">
+            <p class="text-xs text-dimmed mb-1">Préparation</p>
+            <p class="text-sm text-muted flex items-center gap-1.5">
+              <UIcon name="i-lucide-clock" class="size-3.5 shrink-0" />
+              {{ selectedRecipe.prepTime }} min
+            </p>
+          </div>
+          <div v-if="selectedRecipe?.cookTime != null">
+            <p class="text-xs text-dimmed mb-1">Cuisson</p>
+            <p class="text-sm text-muted flex items-center gap-1.5">
+              <UIcon name="i-lucide-flame" class="size-3.5 shrink-0" />
+              {{ selectedRecipe.cookTime }} min
+            </p>
+          </div>
+        </div>
+
+        <!-- Valeurs nutritionnelles -->
+        <div v-if="hasSelectedRecipeMacros">
+          <p class="text-xs text-dimmed mb-2">Valeurs nutritionnelles pour une part</p>
+          <IngredientMacroSummary :macros="selectedRecipeMacros" />
+        </div>
+        <p v-if="!hasSelectedRecipeMacros" class="flex items-center gap-1.5 text-xs text-dimmed">
+          <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
+          Valeurs non renseignées
+        </p>
+
+        <!-- Ingrédients -->
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
+            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients</p>
+          </div>
+          <ul v-if="selectedRecipeLines.length" class="rounded-lg border border-default bg-elevated overflow-hidden">
+            <li
+              v-for="line in selectedRecipeLines"
+              :key="line.key"
+              class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default last:border-b-0"
+            >
+              <span class="text-sm font-medium text-highlighted truncate">{{ line.label }}</span>
+              <span class="text-sm tabular-nums text-muted shrink-0">{{ line.quantityLabel }}</span>
+            </li>
+          </ul>
+          <p v-else class="flex items-center gap-1.5 text-xs text-dimmed">
+            <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
+            Aucun ingrédient
+          </p>
+        </div>
+
+        <!-- Tags -->
+        <div v-if="selectedRecipe?.tags?.length">
+          <p class="text-xs text-dimmed mb-2">Tags</p>
+          <div class="flex flex-wrap gap-1.5">
+            <UBadge
+              v-for="tag in selectedRecipe.tags"
+              :key="tag"
+              :label="tag"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+            />
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div v-if="selectedRecipe?.description">
+          <p class="text-xs text-dimmed mb-1">Description</p>
+          <p class="text-sm text-muted whitespace-pre-line">{{ selectedRecipe.description }}</p>
+        </div>
+
+        <!-- Instructions -->
+        <div v-if="selectedRecipe?.instructions">
+          <p class="text-xs text-dimmed mb-1">Instructions</p>
+          <p class="text-sm text-muted whitespace-pre-line">{{ selectedRecipe.instructions }}</p>
+        </div>
+
+        <!-- Source -->
+        <div v-if="selectedRecipe?.source">
+          <p class="text-xs text-dimmed mb-1">Source</p>
+          <p class="text-sm text-muted">{{ selectedRecipe.source }}</p>
+        </div>
+      </div>
+    </template>
+  </USlideover>
 
   <ConfirmDialog
     v-model:open="deleteDialogOpen"

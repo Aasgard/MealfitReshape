@@ -4,7 +4,7 @@ import { collection, or, query, where, orderBy, deleteDoc, doc } from 'firebase/
 import type { Recipe } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
-import { recipeDifficultyLabel } from '~/utils/recipeDifficulty'
+import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
 import { buildUnitOwnerIndex, describeRecipeLine, macrosForRecipe } from '~/utils/recipeNutrition'
 
 useSeoMeta({
@@ -356,42 +356,45 @@ const confirmDeleteRecipe = () => {
         />
 
         <!-- Repas / difficulté / parts / temps -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <div v-if="selectedRecipe?.type">
-            <p class="text-xs text-dimmed mb-1">Repas</p>
-            <p class="text-sm text-muted flex items-center gap-1.5">
-              <UIcon name="i-lucide-utensils" class="size-3.5 shrink-0" />
-              {{ recipeTypeLabel(selectedRecipe.type) }}
-            </p>
-          </div>
-          <div>
-            <p class="text-xs text-dimmed mb-1">Difficulté</p>
-            <p class="text-sm text-muted flex items-center gap-1.5">
-              <UIcon name="i-lucide-gauge" class="size-3.5 shrink-0" />
-              {{ recipeDifficultyLabel(selectedRecipe?.difficulty) }}
-            </p>
-          </div>
-          <div>
-            <p class="text-xs text-dimmed mb-1">Parts</p>
-            <p class="text-sm text-muted flex items-center gap-1.5">
-              <UIcon name="i-lucide-users" class="size-3.5 shrink-0" />
-              {{ selectedRecipePersons }}
-            </p>
-          </div>
-          <div v-if="selectedRecipe?.prepTime != null">
-            <p class="text-xs text-dimmed mb-1">Préparation</p>
-            <p class="text-sm text-muted flex items-center gap-1.5">
-              <UIcon name="i-lucide-clock" class="size-3.5 shrink-0" />
-              {{ selectedRecipe.prepTime }} min
-            </p>
-          </div>
-          <div v-if="selectedRecipe?.cookTime != null">
-            <p class="text-xs text-dimmed mb-1">Cuisson</p>
-            <p class="text-sm text-muted flex items-center gap-1.5">
-              <UIcon name="i-lucide-flame" class="size-3.5 shrink-0" />
-              {{ selectedRecipe.cookTime }} min
-            </p>
-          </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <UBadge
+            v-if="selectedRecipe?.type"
+            icon="i-lucide-utensils"
+            :label="recipeTypeLabel(selectedRecipe.type)"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+          />
+          <UBadge
+            icon="i-lucide-gauge"
+            :label="recipeDifficultyLabel(selectedRecipe?.difficulty)"
+            :color="recipeDifficultyColor(selectedRecipe?.difficulty)"
+            variant="subtle"
+            size="sm"
+          />
+          <UBadge
+            icon="i-lucide-users"
+            :label="`${selectedRecipePersons} part${selectedRecipePersons > 1 ? 's' : ''}`"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+          />
+          <UBadge
+            v-if="selectedRecipe?.prepTime != null"
+            icon="i-lucide-clock"
+            :label="`${selectedRecipe.prepTime} min prép.`"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+          />
+          <UBadge
+            v-if="selectedRecipe?.cookTime != null"
+            icon="i-lucide-flame"
+            :label="`${selectedRecipe.cookTime} min cuisson`"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+          />
         </div>
 
         <!-- Valeurs nutritionnelles -->

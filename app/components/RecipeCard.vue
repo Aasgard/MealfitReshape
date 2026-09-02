@@ -9,11 +9,8 @@ const props = withDefaults(defineProps<{
   recipe: Recipe
   /** Ingrédients résolus (id document → Ingredient) pour calculer les macros cumulées de la recette. */
   ingredientsById?: Map<string, Ingredient>
-  /** Index unité → ingrédient parent (voir `buildUnitOwnerIndex`), pour les lignes qui référencent une unité. */
-  unitOwnerById?: Map<string, Ingredient>
 }>(), {
   ingredientsById: () => new Map(),
-  unitOwnerById: () => new Map(),
 })
 
 const emit = defineEmits<{
@@ -31,7 +28,7 @@ const ingredientCountLabel = computed(() => ingredientCount.value
   ? `${ingredientCount.value} ingrédient${ingredientCount.value > 1 ? 's' : ''}`
   : 'Aucun ingrédient')
 
-const macros = computed(() => macrosForRecipe(props.recipe.ingredients, props.ingredientsById, props.unitOwnerById))
+const macros = computed(() => macrosForRecipe(props.recipe.ingredients, props.ingredientsById))
 const hasMacros = computed(() =>
   macros.value.calories > 0 || macros.value.protein > 0 || macros.value.carbohydrates > 0 || macros.value.fat > 0
 )

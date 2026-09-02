@@ -5,97 +5,70 @@ import { gramsForUnit, scaleMacros, type IngredientMacros } from './ingredientNu
 const EMPTY_MACROS: IngredientMacros = { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
 
 /**
- * Index unité → ingrédient parent : pour chaque id d'unité (`ing.units[id]`) du
- * catalogue, l'ingrédient qui la porte. Permet de résoudre une ligne de recette
- * dont `ingredientRef` référence une unité plutôt que l'ingrédient lui-même.
- * À construire une fois pour tout le catalogue chargé (voir `macrosForRecipe`).
- */
-export function buildUnitOwnerIndex(ingredients: Ingredient[]): Map<string, Ingredient> {
-  const index = new Map<string, Ingredient>()
-  for (const ing of ingredients) {
-    for (const unitId of Object.keys(ing.units ?? {})) {
-      index.set(unitId, ing)
-    }
-  }
-  return index
-}
-
-/**
- * Macros d'une ligne d'ingrédient de recette. L'id référencé par la ligne
- * (`line.ingredientRef.id`) désigne :
- * - un ingrédient (aliment brut, trouvé dans `ingredientsById`) : `quantity` est
- *   alors en grammes ;
- * - sinon une unité d'un ingrédient (trouvée dans `unitOwnerById`, via
- *   `ingredient.units[id]`) : `quantity` est alors un multiplicateur de cette
- *   unité (ex. 5 pièces).
- * `null` si l'id est introuvable dans les deux index, ou si les valeurs
- * nutritionnelles / l'unité référencée sont manquantes.
+ * Macros d'une ligne d'ingrédient de recette. `line.ingredientRef` désigne
+ * toujours le document ingrédient (trouvé dans `ingredientsById`) :
+ * - si `line.unit` est absent, `quantity` est en grammes ;
+ * - si `line.unit` est renseigné, c'est l'id d'une unité de cet ingrédient
+ *   (`ingredient.units[unit]`) et `quantity` en est un multiplicateur (ex. 5 pièces).
+ * `null` si l'ingrédient est introuvable, si l'unité référencée est manquante,
+ * ou si les valeurs nutritionnelles nécessaires sont absentes.
  */
 export function macrosForRecipeLine(
-  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'quantity'>,
-  ingredientsById: Map<string, Ingredient>,
-  unitOwnerById: Map<string, Ingredient>
+  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'unit' | 'quantity'>,
+  ingredientsById: Map<string, Ingredient>
 ): IngredientMacros | null {
   if (line.quantity <= 0) return null
+  if (!line.ingredientRef) return null
 
-  const refId = line.ingredientRef.id
+  const ingredient = ingredientsById.get(line.ingredientRef.id)
+  if (!ingredient?.valuesBy100) return null
 
-  const directIngredient = ingredientsById.get(refId)
-  if (directIngredient) {
-    if (!directIngredient.valuesBy100) return null
-    return scaleMacros(directIngredient.valuesBy100, line.quantity / 100)
+  if (!line.unit) {
+    return scaleMacros(ingredient.valuesBy100, line.quantity / 100)
   }
 
-  const owner = unitOwnerById.get(refId)
-  if (!owner?.valuesBy100) return null
-
-  const unitGrams = gramsForUnit(owner, refId)
+  const unitGrams = gramsForUnit(ingredient, line.unit)
   if (unitGrams == null) return null
 
-  return scaleMacros(owner.valuesBy100, (unitGrams * line.quantity) / 100)
+  return scaleMacros(ingredient.valuesBy100, (unitGrams * line.quantity) / 100)
 }
 
 /**
- * Intitulé lisible et quantité affichée d'une ligne de recette, résolus via les
- * mêmes index que `macrosForRecipeLine` : nom de l'ingrédient + quantité en
- * grammes pour une référence directe, ou « ingrédient (unité) » + multiplicateur
- * pour une référence à une unité. `null` si l'id est introuvable dans les deux index.
+ * Intitulé lisible (nom de l'ingrédient parent, quelle que soit l'unité) et
+ * quantité affichée d'une ligne de recette, résolus via `ingredientsById`.
+ * `null` si l'ingrédient ou l'unité référencée est introuvable.
  */
 export function describeRecipeLine(
-  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'quantity'>,
-  ingredientsById: Map<string, Ingredient>,
-  unitOwnerById: Map<string, Ingredient>
+  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'unit' | 'quantity'>,
+  ingredientsById: Map<string, Ingredient>
 ): { label: string; quantityLabel: string } | null {
-  const refId = line.ingredientRef.id
+  if (!line.ingredientRef) return null
 
-  const directIngredient = ingredientsById.get(refId)
-  if (directIngredient) {
-    return { label: directIngredient.label, quantityLabel: `${line.quantity} g` }
+  const ingredient = ingredientsById.get(line.ingredientRef.id)
+  if (!ingredient) return null
+
+  if (!line.unit) {
+    return { label: ingredient.label, quantityLabel: `${line.quantity} g` }
   }
 
-  const owner = unitOwnerById.get(refId)
-  const unit = owner?.units?.[refId]
-  if (owner && unit) {
-    return { label: `${owner.label} (${unit.label})`, quantityLabel: `${line.quantity} × ${unit.label}` }
-  }
+  const unit = ingredient.units?.[line.unit]
+  if (!unit) return null
 
-  return null
+  return { label: ingredient.label, quantityLabel: `${line.quantity} × ${unit.label}` }
 }
 
 /**
  * Macros totales d'une recette : somme des lignes résolues via `ingredientsById`
- * / `unitOwnerById` (voir `macrosForRecipeLine`). Une ligne dont la référence est
- * introuvable, ou sans valeurs nutritionnelles, est ignorée plutôt que de rendre
- * le total indisponible.
+ * (voir `macrosForRecipeLine`). Une ligne dont la référence est introuvable, ou
+ * sans valeurs nutritionnelles, est ignorée plutôt que de rendre le total indisponible.
  */
 export function macrosForRecipe(
   lines: RecipeIngredientLine[] | undefined,
-  ingredientsById: Map<string, Ingredient>,
-  unitOwnerById: Map<string, Ingredient>
+  ingredientsById: Map<string, Ingredient>
 ): IngredientMacros {
   const total = { ...EMPTY_MACROS }
   for (const line of lines ?? []) {
-    const lineMacros = macrosForRecipeLine(line, ingredientsById, unitOwnerById)
+    const lineMacros = macrosForRecipeLine(line, ingredientsById)
     if (!lineMacros) continue
 
     total.calories += lineMacros.calories

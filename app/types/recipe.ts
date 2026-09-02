@@ -1,11 +1,13 @@
 import type { DocumentReference, Timestamp } from 'firebase/firestore'
 import type { RecipeType } from '~/utils/recipeType'
 
-/** Ligne d’ingrédient dans une recette (réf. document `ingredients` + quantité en grammes) */
+/** Ligne d’ingrédient dans une recette (réf. document `ingredients` + quantité) */
 export interface RecipeIngredientLine {
-  /** Référence Firestore vers le document dans la collection `ingredients` */
+  /** Référence Firestore vers le document ingrédient (jamais vers une unité) */
   ingredientRef: DocumentReference
-  /** Quantité en grammes de l'ingrédient référencé */
+  /** Id d'une unité de l'ingrédient (clé de `ingredient.units`) ; absent = quantité en grammes */
+  unit?: string
+  /** Quantité : grammes si `unit` absent, sinon nombre de fois l'unité référencée */
   quantity: number
 }
 

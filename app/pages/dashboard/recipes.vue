@@ -5,7 +5,7 @@ import type { Recipe } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
-import { buildUnitOwnerIndex, describeRecipeLine, macrosForRecipe } from '~/utils/recipeNutrition'
+import { describeRecipeLine, macrosForRecipe } from '~/utils/recipeNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -46,7 +46,6 @@ const ingredients = useCollection<Ingredient>(() => {
   )
 })
 const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
-const unitOwnerById = computed(() => buildUnitOwnerIndex(ingredients.value))
 
 const searchQuery = ref('')
 
@@ -128,7 +127,7 @@ const selectRecipe = (recipe: Recipe) => {
 const selectedRecipePersons = computed(() => selectedRecipe.value?.persons ?? 1)
 
 const selectedRecipeMacros = computed(() =>
-  macrosForRecipe(selectedRecipe.value?.ingredients, ingredientsById.value, unitOwnerById.value)
+  macrosForRecipe(selectedRecipe.value?.ingredients, ingredientsById.value)
 )
 const hasSelectedRecipeMacros = computed(() => {
   const m = selectedRecipeMacros.value
@@ -140,9 +139,9 @@ const selectedRecipeLines = computed(() => {
   const recipe = selectedRecipe.value
   if (!recipe?.ingredients?.length) return []
   return recipe.ingredients.map((line, idx) => {
-    const described = describeRecipeLine(line, ingredientsById.value, unitOwnerById.value)
+    const described = describeRecipeLine(line, ingredientsById.value)
     return {
-      key: `${line.ingredientRef.id}-${idx}`,
+      key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`,
       label: described?.label ?? 'Ingrédient introuvable',
       quantityLabel: described?.quantityLabel ?? `${line.quantity}`,
     }
@@ -319,7 +318,6 @@ const confirmDeleteRecipe = () => {
               :key="recipe.id"
               :recipe="recipe"
               :ingredients-by-id="ingredientsById"
-              :unit-owner-by-id="unitOwnerById"
               @select="selectRecipe(recipe)"
               @edit="editRecipe(recipe)"
               @delete="askDeleteRecipe(recipe)"

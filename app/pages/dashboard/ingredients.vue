@@ -390,7 +390,6 @@ const confirmDeleteIngredient = () => {
 
   <USlideover
     v-model:open="slideoverOpen"
-    :description="selectedIngredient ? `Modifié le ${formatDate(selectedIngredient.updatedAt)}` : undefined"
   >
     <template #title>
       <div class="flex items-center gap-2">
@@ -499,6 +498,12 @@ const confirmDeleteIngredient = () => {
         <div v-if="selectedIngredient?.comment">
           <p class="text-xs text-dimmed mb-1">Commentaire</p>
           <p class="text-sm text-muted">{{ selectedIngredient.comment }}</p>
+        </div>
+
+        <!-- Modifié le -->
+        <div v-if="selectedIngredient">
+          <p class="text-xs text-dimmed mb-1">Modifié le</p>
+          <p class="text-sm text-muted">{{ formatDate(selectedIngredient.updatedAt) }}</p>
         </div>
       </div>
     </template>

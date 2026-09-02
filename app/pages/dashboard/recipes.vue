@@ -23,7 +23,10 @@ const recipes = useCollection<Recipe>(() => {
 
   return query(
     collection(db, 'recipes'),
-    where('owner', '==', uid),
+    or(
+      where('owner', '==', uid),
+      where('owner', '==', null)
+    ),
     orderBy('title', 'asc')
   )
 })
@@ -329,7 +332,6 @@ const confirmDeleteRecipe = () => {
 
   <USlideover
     v-model:open="slideoverOpen"
-    :description="selectedRecipe ? `Modifiée le ${formatDate(selectedRecipe.updatedAt)}` : undefined"
   >
     <template #title>
       <div class="flex items-center gap-2">
@@ -460,6 +462,12 @@ const confirmDeleteRecipe = () => {
         <div v-if="selectedRecipe?.source">
           <p class="text-xs text-dimmed mb-1">Source</p>
           <p class="text-sm text-muted">{{ selectedRecipe.source }}</p>
+        </div>
+
+        <!-- Modifiée le -->
+        <div v-if="selectedRecipe">
+          <p class="text-xs text-dimmed mb-1">Modifiée le</p>
+          <p class="text-sm text-muted">{{ formatDate(selectedRecipe.updatedAt) }}</p>
         </div>
       </div>
     </template>

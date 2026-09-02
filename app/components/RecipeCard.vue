@@ -28,7 +28,7 @@ const ingredientCountLabel = computed(() => ingredientCount.value
   ? `${ingredientCount.value} ingrédient${ingredientCount.value > 1 ? 's' : ''}`
   : 'Aucun ingrédient')
 
-const macros = computed(() => macrosForRecipe(props.recipe.ingredients, props.ingredientsById))
+const macros = computed(() => macrosForRecipe(props.recipe.ingredients, props.ingredientsById, props.recipe.persons ?? 1))
 const hasMacros = computed(() =>
   macros.value.calories > 0 || macros.value.protein > 0 || macros.value.carbohydrates > 0 || macros.value.fat > 0
 )

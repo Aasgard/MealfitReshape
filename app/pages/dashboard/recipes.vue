@@ -129,7 +129,7 @@ const selectRecipe = (recipe: Recipe) => {
 const selectedRecipePersons = computed(() => selectedRecipe.value?.persons ?? 1)
 
 const selectedRecipeMacros = computed(() =>
-  macrosForRecipe(selectedRecipe.value?.ingredients, ingredientsById.value)
+  macrosForRecipe(selectedRecipe.value?.ingredients, ingredientsById.value, selectedRecipePersons.value)
 )
 const hasSelectedRecipeMacros = computed(() => {
   const m = selectedRecipeMacros.value
@@ -332,22 +332,8 @@ const confirmDeleteRecipe = () => {
 
   <USlideover
     v-model:open="slideoverOpen"
+    :title="selectedRecipe?.title"
   >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <span>{{ selectedRecipe?.title }}</span>
-        <UButton
-          v-if="selectedRecipe"
-          icon="i-lucide-pencil"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          :aria-label="`Modifier ${selectedRecipe.title}`"
-          @click="editRecipe(selectedRecipe)"
-        />
-      </div>
-    </template>
-
     <template #body>
       <div class="flex flex-col gap-6">
         <img

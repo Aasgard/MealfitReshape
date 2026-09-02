@@ -58,13 +58,15 @@ export function describeRecipeLine(
 }
 
 /**
- * Macros totales d'une recette : somme des lignes résolues via `ingredientsById`
- * (voir `macrosForRecipeLine`). Une ligne dont la référence est introuvable, ou
- * sans valeurs nutritionnelles, est ignorée plutôt que de rendre le total indisponible.
+ * Macros pour une part d'une recette : somme des lignes résolues via `ingredientsById`
+ * (voir `macrosForRecipeLine`), divisée par `persons`. Une ligne dont la référence est
+ * introuvable, ou sans valeurs nutritionnelles, est ignorée plutôt que de rendre le
+ * total indisponible.
  */
 export function macrosForRecipe(
   lines: RecipeIngredientLine[] | undefined,
-  ingredientsById: Map<string, Ingredient>
+  ingredientsById: Map<string, Ingredient>,
+  persons = 1
 ): IngredientMacros {
   const total = { ...EMPTY_MACROS }
   for (const line of lines ?? []) {
@@ -76,5 +78,5 @@ export function macrosForRecipe(
     total.carbohydrates += lineMacros.carbohydrates
     total.fat += lineMacros.fat
   }
-  return total
+  return scaleMacros(total, 1 / (persons > 0 ? persons : 1))
 }

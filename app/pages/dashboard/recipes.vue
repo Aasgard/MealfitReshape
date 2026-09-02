@@ -103,17 +103,19 @@ const resetFilters = () => {
   selectedType.value = 'Toutes'
 }
 
-/** La création/édition des recettes n'est pas encore construite ; on le dit plutôt que de laisser les contrôles ne rien faire. */
-const notifyUnavailable = (action: string) => {
-  toast.add({
-    title: 'Bientôt disponible',
-    description: `${action} n'est pas encore possible depuis cette page.`,
-    color: 'neutral',
-  })
+const formOpen = ref(false)
+const editingRecipe = ref<Recipe | null>(null)
+
+const addRecipe = () => {
+  editingRecipe.value = null
+  formOpen.value = true
 }
 
-const addRecipe = () => notifyUnavailable('L’ajout de recettes')
-const editRecipe = (recipe: Recipe) => notifyUnavailable(`Modifier « ${recipe.title} »`)
+const editRecipe = (recipe: Recipe) => {
+  slideoverOpen.value = false
+  editingRecipe.value = recipe
+  formOpen.value = true
+}
 
 const slideoverOpen = ref(false)
 useOverlayBackClose(slideoverOpen)
@@ -470,6 +472,11 @@ const confirmDeleteRecipe = () => {
       </div>
     </template>
   </USlideover>
+
+  <RecipeFormSlideover
+    v-model:open="formOpen"
+    :recipe="editingRecipe"
+  />
 
   <ConfirmDialog
     v-model:open="deleteDialogOpen"

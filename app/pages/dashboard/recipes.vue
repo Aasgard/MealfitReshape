@@ -333,6 +333,7 @@ const confirmDeleteRecipe = () => {
   <USlideover
     v-model:open="slideoverOpen"
     :title="selectedRecipe?.title"
+    :ui="{ content: 'sm:max-w-xl' }"
   >
     <template #body>
       <div class="flex flex-col gap-6">

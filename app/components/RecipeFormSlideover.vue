@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { collection, addDoc, updateDoc, doc, Timestamp, deleteField, query, or, where, orderBy } from 'firebase/firestore'
 import { useCollection } from 'vuefire'
+import { VueDraggable } from 'vue-draggable-plus'
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
@@ -116,6 +117,25 @@ function addIngredientRow() {
 
 function removeIngredientRow(key: string) {
   ingredientRows.value = ingredientRows.value.filter(r => r.key !== key)
+}
+
+/** Alternative clavier au glisser-déposer : déplace une ligne d'un cran (poignée focus + flèches). */
+function moveIngredientRow(row: IngredientRow, direction: -1 | 1) {
+  const index = ingredientRows.value.findIndex(r => r.key === row.key)
+  const target = index + direction
+  if (index === -1 || target < 0 || target >= ingredientRows.value.length) return
+  const [moved] = ingredientRows.value.splice(index, 1)
+  ingredientRows.value.splice(target, 0, moved!)
+}
+
+function onIngredientHandleKeydown(row: IngredientRow, event: KeyboardEvent) {
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveIngredientRow(row, -1)
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    moveIngredientRow(row, 1)
+  }
 }
 
 /** Les unités disponibles dépendent de l'ingrédient choisi : celle d'une ligne ne survit pas à un changement d'ingrédient. */
@@ -313,8 +333,30 @@ async function handleSubmit() {
           <p v-if="ingredientRows.length === 0" class="text-xs text-dimmed">
             Aucun ingrédient.
           </p>
-          <div v-else class="flex flex-col gap-3">
-            <div v-for="row in ingredientRows" :key="row.key" class="flex items-start gap-2">
+          <VueDraggable
+            v-else
+            v-model="ingredientRows"
+            tag="div"
+            class="flex flex-col gap-2"
+            handle=".ingredient-drag-handle"
+            :animation="200"
+            ghost-class="ingredient-row-ghost"
+            chosen-class="ingredient-row-chosen"
+          >
+            <div
+              v-for="(row, index) in ingredientRows"
+              :key="row.key"
+              class="ingredient-row flex items-start gap-2 rounded-lg border border-transparent p-1.5"
+            >
+              <UButton
+                icon="i-lucide-grip-vertical"
+                color="neutral"
+                variant="ghost"
+                size="md"
+                :aria-label="`Réordonner ${ingredientRowLabel(row) || 'cet ingrédient'} (position ${index + 1} sur ${ingredientRows.length}) : flèches haut/bas pour déplacer`"
+                class="ingredient-drag-handle shrink-0 mt-0.5 cursor-grab text-dimmed hover:text-muted active:cursor-grabbing touch-none"
+                @keydown="onIngredientHandleKeydown(row, $event)"
+              />
               <UFormField class="flex-1 min-w-0" :error="ingredientRowIngredientError(row)">
                 <USelectMenu
                   v-model="row.ingredientId"
@@ -349,7 +391,7 @@ async function handleSubmit() {
                 @click="removeIngredientRow(row.key)"
               />
             </div>
-          </div>
+          </VueDraggable>
         </div>
 
         <UFormField label="Tags (optionnel)">
@@ -376,3 +418,27 @@ async function handleSubmit() {
     </template>
   </USlideover>
 </template>
+
+<style scoped>
+.ingredient-row {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Emplacement de dépose : cadre en pointillés indigo, contenu estompé (Sortable applique cette classe au placeholder). */
+.ingredient-row-ghost {
+  opacity: 0.5;
+  background-color: color-mix(in oklch, var(--ui-primary) 6%, transparent) !important;
+  border-color: color-mix(in oklch, var(--ui-primary) 40%, transparent) !important;
+  border-style: dashed;
+}
+
+/* Ligne saisie par la poignée : même traitement « actif » que les autres signaux indigo du produit. */
+.ingredient-row-chosen {
+  background-color: var(--ui-bg-elevated) !important;
+  border-color: color-mix(in oklch, var(--ui-primary) 50%, transparent) !important;
+}
+
+.ingredient-row-chosen .ingredient-drag-handle {
+  color: var(--ui-primary);
+}
+</style>

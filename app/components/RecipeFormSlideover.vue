@@ -346,50 +346,54 @@ async function handleSubmit() {
             <div
               v-for="(row, index) in ingredientRows"
               :key="row.key"
-              class="ingredient-row flex items-start gap-2 rounded-lg border border-transparent p-1.5"
+              class="ingredient-row flex flex-col gap-2 rounded-lg border border-transparent p-2 sm:flex-row sm:items-start sm:p-1.5"
             >
-              <UButton
-                icon="i-lucide-grip-vertical"
-                color="neutral"
-                variant="ghost"
-                size="md"
-                :aria-label="`Réordonner ${ingredientRowLabel(row) || 'cet ingrédient'} (position ${index + 1} sur ${ingredientRows.length}) : flèches haut/bas pour déplacer`"
-                class="ingredient-drag-handle shrink-0 mt-0.5 cursor-grab text-dimmed hover:text-muted active:cursor-grabbing touch-none"
-                @keydown="onIngredientHandleKeydown(row, $event)"
-              />
-              <UFormField class="flex-1 min-w-0" :error="ingredientRowIngredientError(row)">
-                <USelectMenu
-                  v-model="row.ingredientId"
-                  :items="ingredientOptions"
-                  value-key="id"
-                  placeholder="Choisir un ingrédient..."
-                  :search-input="{ placeholder: 'Rechercher...' }"
-                  icon="i-lucide-carrot"
-                  aria-label="Ingrédient"
-                  class="w-full"
-                  @update:model-value="onIngredientRowIngredientChange(row)"
+              <div class="flex items-start gap-2 sm:contents">
+                <UButton
+                  icon="i-lucide-grip-vertical"
+                  color="neutral"
+                  variant="ghost"
+                  size="md"
+                  :aria-label="`Réordonner ${ingredientRowLabel(row) || 'cet ingrédient'} (position ${index + 1} sur ${ingredientRows.length}) : flèches haut/bas pour déplacer`"
+                  class="ingredient-drag-handle shrink-0 mt-0.5 cursor-grab text-dimmed hover:text-muted active:cursor-grabbing touch-none"
+                  @keydown="onIngredientHandleKeydown(row, $event)"
                 />
-              </UFormField>
-              <UFormField class="w-20 shrink-0" :error="ingredientRowQuantityError(row)">
-                <UInput v-model="row.quantity" type="text" inputmode="decimal" placeholder="qté" aria-label="Quantité" size="md" variant="outline" class="w-full" />
-              </UFormField>
-              <USelectMenu
-                v-model="row.unit"
-                :items="unitOptionsForRow(row)"
-                value-key="value"
-                :search-input="false"
-                aria-label="Unité"
-                class="w-28 shrink-0"
-              />
-              <UButton
-                icon="i-lucide-trash-2"
-                color="neutral"
-                variant="ghost"
-                size="md"
-                :aria-label="`Supprimer ${ingredientRowLabel(row) || 'cet ingrédient'}`"
-                class="mt-0.5"
-                @click="removeIngredientRow(row.key)"
-              />
+                <UFormField class="min-w-0 flex-1" :error="ingredientRowIngredientError(row)">
+                  <USelectMenu
+                    v-model="row.ingredientId"
+                    :items="ingredientOptions"
+                    value-key="id"
+                    placeholder="Choisir un ingrédient..."
+                    :search-input="{ placeholder: 'Rechercher...' }"
+                    icon="i-lucide-carrot"
+                    aria-label="Ingrédient"
+                    class="w-full"
+                    @update:model-value="onIngredientRowIngredientChange(row)"
+                  />
+                </UFormField>
+              </div>
+              <div class="flex items-start gap-2 sm:contents">
+                <UFormField class="w-20 shrink-0" :error="ingredientRowQuantityError(row)">
+                  <UInput v-model="row.quantity" type="text" inputmode="decimal" placeholder="qté" aria-label="Quantité" size="md" variant="outline" class="w-full" />
+                </UFormField>
+                <USelectMenu
+                  v-model="row.unit"
+                  :items="unitOptionsForRow(row)"
+                  value-key="value"
+                  :search-input="false"
+                  aria-label="Unité"
+                  class="min-w-0 flex-1 sm:w-28 sm:flex-none"
+                />
+                <UButton
+                  icon="i-lucide-trash-2"
+                  color="neutral"
+                  variant="ghost"
+                  size="md"
+                  :aria-label="`Supprimer ${ingredientRowLabel(row) || 'cet ingrédient'}`"
+                  class="shrink-0 mt-0.5"
+                  @click="removeIngredientRow(row.key)"
+                />
+              </div>
             </div>
           </VueDraggable>
         </div>

@@ -28,6 +28,7 @@ const links = [{
   }, {
     label: 'Menus de la semaine',
     icon: 'i-lucide-calendar-days',
+    to: '/dashboard/menus',
   }, {
     label: 'Liste de courses',
     icon: 'i-lucide-shopping-cart',

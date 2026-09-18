@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from 'date-fns'
-import type { MenuEntry, MenuMealTypeRow } from '~/types/menu'
+import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
+import { collection, or, query, where } from 'firebase/firestore'
+import type { Ingredient } from '~/types/ingredient'
+import type { MenuMealTypeRow } from '~/types/menu'
+import type { Recipe } from '~/types/recipe'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
+import { buildSampleWeek } from '~/utils/menuSample'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -28,70 +33,53 @@ const goToCurrentWeek = () => { selectedWeekStart.value = referenceWeekStart }
 
 const days = computed(() => buildWeekDays(selectedWeekStart.value))
 
-const mealTypes: MenuMealTypeRow[] = [
-  { key: 'petit-dej', label: 'Petit déj', avgLabel: '~488 kcal' },
-  { key: 'dejeuner', label: 'Déjeuner', avgLabel: '~650 kcal' },
-  { key: 'diner', label: 'Diner', avgLabel: '~406 kcal' },
-  { key: 'collation', label: 'Collation', avgLabel: '~81 kcal' },
-  { key: 'en-plus', label: 'En plus', avgLabel: 'Hors plan' },
-]
+const db = useFirestore()
+const user = useCurrentUser()
 
-let nextEntryId = 0
-const entry = (label: string, kcal: number): MenuEntry => ({ id: `entry-${nextEntryId++}`, label, kcal })
+const recipes = useCollection<Recipe>(() => {
+  const uid = user.value?.uid
+  if (!uid) return null
 
-/** Repas/aliments de la semaine en cours (référence pour la démo, le temps que la page soit branchée à Firestore). */
-const referenceEntries: Record<string, Record<string, MenuEntry[]>> = {
-  lun: {
-    'petit-dej': [entry('Omelette aux champignons', 389)],
-    dejeuner: [entry('Pâtes de courgettes, poulet, amandes', 433)],
-    diner: [entry('Saumon, légumes rôtis', 430)],
-    collation: [entry('Poignée d’amandes', 180)],
-  },
-  mar: {
-    'petit-dej': [entry('Porridge avoine-banane', 320)],
-    dejeuner: [entry('Buddha bowl quinoa-pois chiches', 520)],
-    diner: [entry('Curry de pois chiches', 400)],
-    collation: [entry('Yaourt grec et miel', 150)],
-  },
-  mer: {
-    'petit-dej': [entry('Skyr, fruits rouges, amandes', 265)],
-    dejeuner: [entry('Soupe de lentilles corail', 390)],
-    diner: [entry('Risotto aux champignons', 470), entry('Omelette et salade verte', 350)],
-    'en-plus': [entry('Carré de chocolat', 110)],
-  },
-  jeu: {
-    'petit-dej': [entry('Omelette aux champignons', 389)],
-    dejeuner: [entry('Pâtes de courgettes, poulet, amandes', 433)],
-    diner: [entry('Omelette et salade verte', 350)],
-    collation: [entry('Poignée d’amandes', 180)],
-  },
-  ven: {
-    'petit-dej': [entry('Porridge avoine-banane', 320)],
-    dejeuner: [entry('Wrap thon-crudités', 480)],
-    diner: [entry('Saumon, légumes rôtis', 430)],
-    'en-plus': [entry('Verre de vin', 125), entry('Poignée de chips', 150)],
-  },
-  sam: {
-    'petit-dej': [entry('Pancakes à l’avoine', 410)],
-    dejeuner: [entry('Buddha bowl quinoa-pois chiches', 520), entry('Soupe de lentilles corail', 390)],
-    collation: [entry('Pomme, beurre de cacahuète', 230)],
-    'en-plus': [entry('Cookie', 180)],
-  },
-  dim: {
-    'petit-dej': [entry('Skyr, fruits rouges, amandes', 265)],
-    diner: [entry('Curry de pois chiches', 400)],
-  },
-}
+  return query(
+    collection(db, 'recipes'),
+    or(
+      where('owner', '==', uid),
+      where('owner', '==', null)
+    )
+  )
+})
 
-const referenceDayTotals: Record<string, number> = {
-  lun: 1432,
-  mar: 1390,
-  mer: 1585,
-  jeu: 1352,
-  ven: 1505,
-  sam: 1730,
-  dim: 665,
-}
+/** Catalogue d'ingrédients (privés de l'utilisateur + publics) pour calculer les kcal par part des recettes. */
+const ingredients = useCollection<Ingredient>(() => {
+  const uid = user.value?.uid
+  if (!uid) return null
+
+  return query(
+    collection(db, 'ingredients'),
+    or(
+      where('owner', '==', uid),
+      where('owner', '==', null)
+    )
+  )
+})
+await Promise.all([recipes.promise.value, ingredients.promise.value])
+
+const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
+
+/** Semaine de démo bâtie à partir des recettes Firestore, le temps que la page lise/écrive de vrais menus. */
+const referenceWeek = computed(() => buildSampleWeek(recipes.value ?? [], ingredientsById.value))
+
+const mealTypes = computed<MenuMealTypeRow[]>(() => {
+  const averages = referenceWeek.value.mealAverages
+  const avgLabel = (key: string) => averages[key] != null ? `~${averages[key]} kcal` : undefined
+  return [
+    { key: 'petit-dej', label: 'Petit déj', avgLabel: avgLabel('petit-dej') },
+    { key: 'dejeuner', label: 'Déjeuner', avgLabel: avgLabel('dejeuner') },
+    { key: 'diner', label: 'Diner', avgLabel: avgLabel('diner') },
+    { key: 'collation', label: 'Collation', avgLabel: avgLabel('collation') },
+    { key: 'en-plus', label: 'En plus', avgLabel: 'Hors plan' },
+  ]
+})
 
 /** Bande des semaines sélectionnables, centrée sur la semaine actuellement affichée. */
 const WEEK_PICKER_RADIUS = 3
@@ -100,12 +88,27 @@ const selectedWeekId = computed(() => weekId(selectedWeekStart.value))
 const selectWeek = (id: string) => { selectedWeekStart.value = parseWeekId(id) }
 
 /** Repas/aliments et total kcal affichés : ceux de la semaine de référence, vides sur toute autre semaine (pas encore de données réelles). */
-const entries = computed(() => isReferenceWeekSelected.value ? referenceEntries : {})
-const dayTotals = computed(() => isReferenceWeekSelected.value ? referenceDayTotals : {})
+const entries = computed(() => isReferenceWeekSelected.value ? referenceWeek.value.entries : {})
+const dayTotals = computed(() => isReferenceWeekSelected.value ? referenceWeek.value.dayTotals : {})
 
 const stats = computed(() => isReferenceWeekSelected.value
-  ? { averageKcal: 1380, overagePerDayKcal: 81, overageCount: 4, overageTotalKcal: 565, macros: { protein: 74, carbohydrates: 113, fat: 59 } }
+  ? referenceWeek.value.stats
   : { averageKcal: 0, overagePerDayKcal: 0, overageCount: 0, overageTotalKcal: 0, macros: { protein: 0, carbohydrates: 0, fat: 0 } })
+
+const slideoverOpen = ref(false)
+const selectedRecipe = ref<Recipe | null>(null)
+
+/** Ouvre la fiche de la recette dont provient le repas cliqué dans le calendrier. */
+const selectEntry = (entryId: string) => {
+  const recipeId = Object.values(entries.value)
+    .flatMap(meals => Object.values(meals).flat())
+    .find(e => e.id === entryId)?.recipeId
+  const recipe = recipes.value.find(r => r.id === recipeId)
+  if (!recipe) return
+
+  selectedRecipe.value = recipe
+  slideoverOpen.value = true
+}
 </script>
 
 <template>
@@ -123,6 +126,7 @@ const stats = computed(() => isReferenceWeekSelected.value
         <MenuWeekHeader
           :week-label="weekLabel"
           :week-status-label="weekStatusLabel"
+          :is-current-week="isReferenceWeekSelected"
           @previous="goToPreviousWeek"
           @next="goToNextWeek"
           @this-week="goToCurrentWeek"
@@ -144,8 +148,15 @@ const stats = computed(() => isReferenceWeekSelected.value
           :meal-types="mealTypes"
           :entries="entries"
           :day-totals="dayTotals"
+          @select-entry="selectEntry"
         />
       </div>
     </template>
   </UDashboardPanel>
+
+  <RecipeDetailSlideover
+    v-model:open="slideoverOpen"
+    :recipe="selectedRecipe"
+    :ingredients-by-id="ingredientsById"
+  />
 </template>

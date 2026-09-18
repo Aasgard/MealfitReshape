@@ -34,6 +34,8 @@ export interface MenuMealTypeRow {
 /** Un repas/aliment placé dans une case du calendrier. */
 export interface MenuEntry {
   id: string
+  /** Recette (Firestore `recipes`) dont provient ce repas ; sert à ouvrir sa fiche au clic. */
+  recipeId: string
   label: string
   kcal: number
 }

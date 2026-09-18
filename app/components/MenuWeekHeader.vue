@@ -2,8 +2,10 @@
 withDefaults(defineProps<{
   weekLabel: string
   weekStatusLabel?: string
+  isCurrentWeek?: boolean
 }>(), {
   weekStatusLabel: undefined,
+  isCurrentWeek: false,
 })
 
 const emit = defineEmits<{
@@ -49,6 +51,7 @@ const emit = defineEmits<{
             {{ weekLabel }}
           </h1>
           <UButton
+            v-if="!isCurrentWeek"
             label="Cette semaine"
             color="primary"
             variant="subtle"

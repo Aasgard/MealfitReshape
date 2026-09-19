@@ -16,8 +16,6 @@ export interface SampleWeek {
   /** Repas par jour puis par type de repas : entries[dayKey][mealTypeKey]. */
   entries: Record<string, Record<string, MenuEntry[]>>
   dayTotals: Record<string, number>
-  /** Kcal moyennes d'un repas, par type de repas (uniquement ceux qui ont au moins un repas). */
-  mealAverages: Record<string, number>
   stats: {
     averageKcal: number
     overagePerDayKcal: number
@@ -54,7 +52,6 @@ export function buildSampleWeek(recipes: Recipe[], ingredientsById: Map<string, 
 
   const entries: SampleWeek['entries'] = {}
   const dayTotals: SampleWeek['dayTotals'] = {}
-  const mealKcalTotals: Record<string, { total: number, count: number }> = {}
   const macroTotals = { protein: 0, carbohydrates: 0, fat: 0 }
   let overageTotalKcal = 0
   let overageCount = 0
@@ -71,6 +68,9 @@ export function buildSampleWeek(recipes: Recipe[], ingredientsById: Map<string, 
       recipeId: sample.recipe.id,
       label: sample.recipe.title,
       kcal,
+      carbohydrates: Math.round(sample.macros.carbohydrates),
+      protein: Math.round(sample.macros.protein),
+      fat: Math.round(sample.macros.fat),
     })
 
     dayTotals[dayKey] = (dayTotals[dayKey] ?? 0) + kcal
@@ -82,11 +82,7 @@ export function buildSampleWeek(recipes: Recipe[], ingredientsById: Map<string, 
     if (mealKey === EXTRA_MEAL_KEY) {
       overageTotalKcal += kcal
       overageCount++
-      return
     }
-    const meal = mealKcalTotals[mealKey] ??= { total: 0, count: 0 }
-    meal.total += kcal
-    meal.count++
   }
 
   DAY_KEYS.forEach((dayKey, day) => {
@@ -103,9 +99,6 @@ export function buildSampleWeek(recipes: Recipe[], ingredientsById: Map<string, 
   return {
     entries,
     dayTotals,
-    mealAverages: Object.fromEntries(
-      Object.entries(mealKcalTotals).map(([mealKey, { total, count }]) => [mealKey, Math.round(total / count)])
-    ),
     stats: {
       averageKcal: perDay(kcalTotal),
       overagePerDayKcal: perDay(overageTotalKcal),

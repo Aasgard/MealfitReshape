@@ -27,7 +27,7 @@ export interface MenuDayHeader {
 export interface MenuMealTypeRow {
   key: string
   label: string
-  /** Ex: "~488 kcal" */
+  /** Sous-titre affiché sous le libellé. Ex: "Hors plan" */
   avgLabel?: string
 }
 
@@ -38,4 +38,8 @@ export interface MenuEntry {
   recipeId: string
   label: string
   kcal: number
+  /** Macros d'une part, en grammes arrondis (affichées "G62 P41 L15" : glucides, protéines, lipides). */
+  carbohydrates: number
+  protein: number
+  fat: number
 }

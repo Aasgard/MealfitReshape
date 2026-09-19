@@ -20,6 +20,19 @@ const emit = defineEmits<{
 
 const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
   props.entries[dayKey]?.[mealTypeKey] ?? []
+
+/** Macros du jour : somme des macros (déjà arrondies) des repas affichés, comme `dayTotals` pour les kcal. */
+const macrosFor = (dayKey: string) => {
+  const total = { carbohydrates: 0, protein: 0, fat: 0 }
+  for (const meals of Object.values(props.entries[dayKey] ?? {})) {
+    for (const entry of meals) {
+      total.carbohydrates += entry.carbohydrates
+      total.protein += entry.protein
+      total.fat += entry.fat
+    }
+  }
+  return total
+}
 </script>
 
 <template>
@@ -72,17 +85,19 @@ const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
               <p class="text-xs font-medium text-highlighted truncate">
                 {{ entry.label }}
               </p>
-              <p class="text-xs text-dimmed tabular-nums">
-                {{ entry.kcal }} kcal
+              <!-- Deux lignes sur mobile, une seule ligne à partir de la tablette. -->
+              <p class="text-xs text-dimmed tabular-nums sm:truncate">
+                {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
+                <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
               </p>
             </button>
             <button
               type="button"
-              class="flex items-center justify-center gap-1 rounded-md border border-dashed border-default px-2 py-1.5 text-xs text-dimmed hover:text-primary hover:border-primary/50 transition-colors"
+              aria-label="Ajouter"
+              class="flex-1 flex items-center justify-center rounded-md border border-dashed border-default px-2 py-1.5 text-dimmed hover:text-primary hover:border-primary/50 transition-colors"
               @click="emit('add', day.key, mealType.key)"
             >
               <UIcon name="i-lucide-plus" class="size-3.5 shrink-0" />
-              <span>Ajouter</span>
             </button>
           </div>
         </template>
@@ -100,6 +115,9 @@ const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
         >
           <p class="text-sm font-bold text-highlighted tabular-nums">
             {{ dayTotals[day.key] ?? 0 }} kcal
+          </p>
+          <p class="text-xs text-dimmed">
+            <MenuMacroLabels v-bind="macrosFor(day.key)" />
           </p>
         </div>
       </div>

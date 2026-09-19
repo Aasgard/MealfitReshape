@@ -69,17 +69,13 @@ const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id,
 /** Semaine de démo bâtie à partir des recettes Firestore, le temps que la page lise/écrive de vrais menus. */
 const referenceWeek = computed(() => buildSampleWeek(recipes.value ?? [], ingredientsById.value))
 
-const mealTypes = computed<MenuMealTypeRow[]>(() => {
-  const averages = referenceWeek.value.mealAverages
-  const avgLabel = (key: string) => averages[key] != null ? `~${averages[key]} kcal` : undefined
-  return [
-    { key: 'petit-dej', label: 'Petit déj', avgLabel: avgLabel('petit-dej') },
-    { key: 'dejeuner', label: 'Déjeuner', avgLabel: avgLabel('dejeuner') },
-    { key: 'diner', label: 'Diner', avgLabel: avgLabel('diner') },
-    { key: 'collation', label: 'Collation', avgLabel: avgLabel('collation') },
-    { key: 'en-plus', label: 'En plus', avgLabel: 'Hors plan' },
-  ]
-})
+const mealTypes: MenuMealTypeRow[] = [
+  { key: 'petit-dej', label: 'Petit déj' },
+  { key: 'dejeuner', label: 'Déjeuner' },
+  { key: 'diner', label: 'Diner' },
+  { key: 'collation', label: 'Collation' },
+  { key: 'en-plus', label: 'En plus', avgLabel: 'Hors plan' },
+]
 
 /** Bande des semaines sélectionnables, centrée sur la semaine actuellement affichée. */
 const WEEK_PICKER_RADIUS = 3

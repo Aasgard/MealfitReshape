@@ -91,12 +91,22 @@ let addedEntryCount = 0
 /** Semaines vidées via "Vider" : la semaine de démo n'y est plus affichée. */
 const clearedWeekIds = ref<string[]>([])
 
-/** Repas affichés : ceux de la semaine de référence (vides sur toute autre semaine, pas encore de données réelles, ou une fois vidée) plus ceux ajoutés à la main. */
-const entries = computed(() => mergeMenuEntries(
-  isReferenceWeekSelected.value && !clearedWeekIds.value.includes(selectedWeekId.value) ? referenceWeek.value : {},
-  addedEntries.value[selectedWeekId.value] ?? {}
-))
-const isWeekEmpty = computed(() => Object.values(entries.value).every(meals => Object.values(meals).every(list => !list.length)))
+/** Repas d'une semaine : ceux de la semaine de référence (vides sur toute autre semaine, pas encore de données réelles, ou une fois vidée) plus ceux ajoutés à la main. */
+const entriesForWeek = (weekStart: Date): MenuWeekEntries => {
+  const id = weekId(weekStart)
+  const isReferenceWeek = isSameWeek(weekStart, referenceWeekStart, { weekStartsOn: WEEK_STARTS_ON })
+  return mergeMenuEntries(
+    isReferenceWeek && !clearedWeekIds.value.includes(id) ? referenceWeek.value : {},
+    addedEntries.value[id] ?? {}
+  )
+}
+const isEmptyWeek = (weekEntries: MenuWeekEntries) =>
+  Object.values(weekEntries).every(meals => Object.values(meals).every(list => !list.length))
+
+const entries = computed(() => entriesForWeek(selectedWeekStart.value))
+const previousWeekEntries = computed(() => entriesForWeek(subWeeks(selectedWeekStart.value, 1)))
+const isWeekEmpty = computed(() => isEmptyWeek(entries.value))
+const isPreviousWeekEmpty = computed(() => isEmptyWeek(previousWeekEntries.value))
 const summary = computed(() => summarizeMenuWeek(entries.value))
 const dayTotals = computed(() => summary.value.dayTotals)
 
@@ -159,15 +169,42 @@ const submitAddedEntry = (draft: MenuEntryDraft) => {
   insertEntry(addTarget.value.dayKey, addTarget.value.mealTypeKey, draft)
 }
 
-const clearDialogOpen = ref(false)
-
-/** Retire tous les repas de la semaine affichée (les autres semaines ne bougent pas). */
-const confirmClearWeek = () => {
+/** Remplace tous les repas de la semaine affichée par `weekEntries` (les autres semaines ne bougent pas). */
+const replaceWeekEntries = (weekEntries: MenuWeekEntries) => {
   const id = selectedWeekId.value
   if (!clearedWeekIds.value.includes(id)) clearedWeekIds.value.push(id)
-  addedEntries.value[id] = {}
+  addedEntries.value[id] = weekEntries
   copiedEntry.value = null
+}
+
+const clearDialogOpen = ref(false)
+
+const confirmClearWeek = () => {
+  replaceWeekEntries({})
   clearDialogOpen.value = false
+}
+
+const toast = useToast()
+const copyPreviousDialogOpen = ref(false)
+
+/** Recopie les repas de la semaine précédente dans la semaine affichée, avec de nouveaux identifiants. */
+const copyPreviousWeek = () => {
+  const copy: MenuWeekEntries = {}
+  for (const [dayKey, meals] of Object.entries(previousWeekEntries.value)) {
+    for (const [mealTypeKey, list] of Object.entries(meals)) {
+      const day = copy[dayKey] ??= {}
+      day[mealTypeKey] = list.map(entry => ({ ...entry, id: `added-${++addedEntryCount}` }))
+    }
+  }
+  replaceWeekEntries(copy)
+  copyPreviousDialogOpen.value = false
+  toast.add({ title: 'Semaine copiée', description: 'Les repas de la semaine précédente ont été recopiés.', color: 'success' })
+}
+
+/** Copie directement si la semaine affichée est vide ; sinon demande confirmation avant de remplacer ses repas. */
+const requestCopyPreviousWeek = () => {
+  if (isWeekEmpty.value) copyPreviousWeek()
+  else copyPreviousDialogOpen.value = true
 }
 
 const slideoverOpen = ref(false)
@@ -203,10 +240,12 @@ const selectEntry = (entryId: string) => {
           :week-status-label="weekStatusLabel"
           :is-current-week="isReferenceWeekSelected"
           :clear-disabled="isWeekEmpty"
+          :copy-previous-disabled="isPreviousWeekEmpty"
           @previous="goToPreviousWeek"
           @next="goToNextWeek"
           @this-week="goToCurrentWeek"
           @clear="clearDialogOpen = true"
+          @copy-previous="requestCopyPreviousWeek"
         />
 
         <MenuWeekPicker :model-value="selectedWeekId" :weeks="weekOptions" @update:model-value="selectWeek" />
@@ -251,6 +290,16 @@ const selectEntry = (entryId: string) => {
     confirm-color="error"
     confirm-icon="i-lucide-eraser"
     @confirm="confirmClearWeek"
+  />
+
+  <ConfirmDialog
+    v-model:open="copyPreviousDialogOpen"
+    title="Copier la semaine précédente ?"
+    description="Les repas de cette semaine seront remplacés par ceux de la semaine précédente."
+    confirm-label="Remplacer"
+    confirm-color="warning"
+    confirm-icon="i-lucide-copy"
+    @confirm="copyPreviousWeek"
   />
 
   <RecipeDetailSlideover

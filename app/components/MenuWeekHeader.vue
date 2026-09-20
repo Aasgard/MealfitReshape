@@ -5,10 +5,13 @@ withDefaults(defineProps<{
   isCurrentWeek?: boolean
   /** Grise "Vider" quand la semaine affichée ne contient aucun repas. */
   clearDisabled?: boolean
+  /** Grise "Copier la semaine précédente" quand la semaine précédente ne contient aucun repas. */
+  copyPreviousDisabled?: boolean
 }>(), {
   weekStatusLabel: undefined,
   isCurrentWeek: false,
   clearDisabled: false,
+  copyPreviousDisabled: false,
 })
 
 const emit = defineEmits<{
@@ -75,6 +78,7 @@ const emit = defineEmits<{
         color="neutral"
         variant="outline"
         size="sm"
+        :disabled="copyPreviousDisabled"
         @click="emit('copy-previous')"
       />
       <UButton

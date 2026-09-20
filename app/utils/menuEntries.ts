@@ -1,5 +1,9 @@
-import type { MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
+import type { Ingredient } from '~/types/ingredient'
+import type { MenuEntry, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
+import type { Recipe } from '~/types/recipe'
+import { macrosForQuantity, type IngredientMacros } from './ingredientNutrition'
 import { DAY_KEYS } from './menuWeek'
+import { macrosForRecipe } from './recipeNutrition'
 
 /** Ligne "Hors plan" du calendrier : repas hors objectif, comptés comme dérapages. */
 export const EXTRA_MEAL_KEY = 'en-plus'
@@ -67,4 +71,43 @@ export function summarizeMenuWeek(entries: MenuWeekEntries): MenuWeekSummary {
       fat: perDay(macroTotals.fat),
     },
   }
+}
+
+/** Repas prêt à être placé dans une case : un `MenuEntry` dont l'identifiant est attribué à l'insertion. */
+export type MenuEntryDraft = Omit<MenuEntry, 'id'>
+
+const formatQuantity = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+
+function draftFromMacros(label: string, macros: IngredientMacros, extra: Partial<MenuEntryDraft> = {}): MenuEntryDraft {
+  return {
+    ...extra,
+    label,
+    kcal: Math.round(macros.calories),
+    carbohydrates: Math.round(macros.carbohydrates),
+    protein: Math.round(macros.protein),
+    fat: Math.round(macros.fat),
+  }
+}
+
+/** Repas pour `parts` parts d'une recette (une part = `persons` de la recette). */
+export function buildRecipeDraft(recipe: Recipe, parts: number, ingredientsById: Map<string, Ingredient>): MenuEntryDraft {
+  // macrosForRecipe divise le total par `persons` : passer persons / parts donne total * parts / persons, sans double arrondi.
+  const macros = macrosForRecipe(recipe.ingredients, ingredientsById, (recipe.persons ?? 1) / parts)
+  const label = parts === 1 ? recipe.title : `${recipe.title} (${formatQuantity(parts)} parts)`
+  return draftFromMacros(label, macros, { recipeId: recipe.id })
+}
+
+/** Repas pour `quantity` grammes d'un ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités ; `null` si non calculable. */
+export function buildIngredientDraft(ingredient: Ingredient, unitId: string | null, quantity: number): MenuEntryDraft | null {
+  const macros = macrosForQuantity(ingredient, unitId, quantity)
+  if (!macros) return null
+
+  const unitLabel = unitId == null ? undefined : ingredient.units?.[unitId]?.label
+  const quantityLabel = unitLabel ? `${formatQuantity(quantity)} × ${unitLabel}` : `${formatQuantity(quantity)} g`
+  return draftFromMacros(`${ingredient.label} (${quantityLabel})`, macros)
+}
+
+/** Repas saisi à la main : un libellé et des macros brutes. */
+export function buildManualDraft(label: string, macros: IngredientMacros): MenuEntryDraft {
+  return draftFromMacros(label, macros)
 }

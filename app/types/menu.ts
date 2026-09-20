@@ -37,8 +37,8 @@ export type MenuWeekEntries = Record<string, Record<string, MenuEntry[]>>
 /** Un repas/aliment placé dans une case du calendrier. */
 export interface MenuEntry {
   id: string
-  /** Recette (Firestore `recipes`) dont provient ce repas ; sert à ouvrir sa fiche au clic. */
-  recipeId: string
+  /** Recette (Firestore `recipes`) dont provient ce repas ; sert à ouvrir sa fiche au clic. Absent pour un aliment ou des macros saisies à la main. */
+  recipeId?: string
   label: string
   kcal: number
   /** Macros d'une part, en grammes arrondis (affichées "G62 P41 L15" : glucides, protéines, lipides). */

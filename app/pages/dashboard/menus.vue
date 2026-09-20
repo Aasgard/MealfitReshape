@@ -6,7 +6,7 @@ import type { Ingredient } from '~/types/ingredient'
 import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { mergeMenuEntries, summarizeMenuWeek } from '~/utils/menuEntries'
+import { mergeMenuEntries, summarizeMenuWeek, type MenuEntryDraft } from '~/utils/menuEntries'
 import { buildSampleWeek } from '~/utils/menuSample'
 
 useSeoMeta({
@@ -84,15 +84,19 @@ const weekOptions = computed(() => buildWeekOptions(selectedWeekStart.value, WEE
 const selectedWeekId = computed(() => weekId(selectedWeekStart.value))
 const selectWeek = (id: string) => { selectedWeekStart.value = parseWeekId(id) }
 
-/** Repas ajoutés à la main (copier puis +), par semaine : addedEntries[weekId]. Locaux à la session, pas encore persistés. */
+/** Repas ajoutés à la main (modale "Ajouter" ou copier puis +), par semaine : addedEntries[weekId]. Locaux à la session, pas encore persistés. */
 const addedEntries = ref<Record<string, MenuWeekEntries>>({})
 let addedEntryCount = 0
 
-/** Repas affichés : ceux de la semaine de référence (vides sur toute autre semaine, pas encore de données réelles) plus ceux ajoutés à la main. */
+/** Semaines vidées via "Vider" : la semaine de démo n'y est plus affichée. */
+const clearedWeekIds = ref<string[]>([])
+
+/** Repas affichés : ceux de la semaine de référence (vides sur toute autre semaine, pas encore de données réelles, ou une fois vidée) plus ceux ajoutés à la main. */
 const entries = computed(() => mergeMenuEntries(
-  isReferenceWeekSelected.value ? referenceWeek.value : {},
+  isReferenceWeekSelected.value && !clearedWeekIds.value.includes(selectedWeekId.value) ? referenceWeek.value : {},
   addedEntries.value[selectedWeekId.value] ?? {}
 ))
+const isWeekEmpty = computed(() => Object.values(entries.value).every(meals => Object.values(meals).every(list => !list.length)))
 const summary = computed(() => summarizeMenuWeek(entries.value))
 const dayTotals = computed(() => summary.value.dayTotals)
 
@@ -118,14 +122,52 @@ const cancelCopyOnOutsideClick = (event: MouseEvent) => {
 onMounted(() => document.addEventListener('click', cancelCopyOnOutsideClick))
 onBeforeUnmount(() => document.removeEventListener('click', cancelCopyOnOutsideClick))
 
-const addEntry = (dayKey: string, mealTypeKey: string) => {
-  const copied = copiedEntry.value
-  if (!copied) return
-
+const insertEntry = (dayKey: string, mealTypeKey: string, draft: MenuEntryDraft) => {
   const week = addedEntries.value[selectedWeekId.value] ??= {}
   const day = week[dayKey] ??= {}
-  ;(day[mealTypeKey] ??= []).push({ ...copied, id: `added-${++addedEntryCount}` })
+  ;(day[mealTypeKey] ??= []).push({ ...draft, id: `added-${++addedEntryCount}` })
+}
+
+/** Case pour laquelle la modale d'ajout est ouverte. */
+const addModalOpen = ref(false)
+const addTarget = ref<{ dayKey: string, mealTypeKey: string } | null>(null)
+
+const addContextLabel = computed(() => {
+  const target = addTarget.value
+  if (!target) return ''
+  const day = days.value.find(d => d.key === target.dayKey)
+  const mealType = mealTypes.find(m => m.key === target.mealTypeKey)
+  return `${day?.dayLabel} ${day?.dateLabel} · ${mealType?.label}`
+})
+
+/** Colle le repas copié dans la case ; sans copie en cours, ouvre la modale d'ajout pour cette case. */
+const addEntry = (dayKey: string, mealTypeKey: string) => {
+  const copied = copiedEntry.value
+  if (!copied) {
+    addTarget.value = { dayKey, mealTypeKey }
+    addModalOpen.value = true
+    return
+  }
+
+  const { id: _id, ...draft } = copied
+  insertEntry(dayKey, mealTypeKey, draft)
   copiedEntry.value = null
+}
+
+const submitAddedEntry = (draft: MenuEntryDraft) => {
+  if (!addTarget.value) return
+  insertEntry(addTarget.value.dayKey, addTarget.value.mealTypeKey, draft)
+}
+
+const clearDialogOpen = ref(false)
+
+/** Retire tous les repas de la semaine affichée (les autres semaines ne bougent pas). */
+const confirmClearWeek = () => {
+  const id = selectedWeekId.value
+  if (!clearedWeekIds.value.includes(id)) clearedWeekIds.value.push(id)
+  addedEntries.value[id] = {}
+  copiedEntry.value = null
+  clearDialogOpen.value = false
 }
 
 const slideoverOpen = ref(false)
@@ -160,9 +202,11 @@ const selectEntry = (entryId: string) => {
           :week-label="weekLabel"
           :week-status-label="weekStatusLabel"
           :is-current-week="isReferenceWeekSelected"
+          :clear-disabled="isWeekEmpty"
           @previous="goToPreviousWeek"
           @next="goToNextWeek"
           @this-week="goToCurrentWeek"
+          @clear="clearDialogOpen = true"
         />
 
         <MenuWeekPicker :model-value="selectedWeekId" :weeks="weekOptions" @update:model-value="selectWeek" />
@@ -189,6 +233,25 @@ const selectEntry = (entryId: string) => {
       </div>
     </template>
   </UDashboardPanel>
+
+  <MenuAddEntryModal
+    v-model:open="addModalOpen"
+    :recipes="recipes"
+    :ingredients="ingredients"
+    :ingredients-by-id="ingredientsById"
+    :context-label="addContextLabel"
+    @submit="submitAddedEntry"
+  />
+
+  <ConfirmDialog
+    v-model:open="clearDialogOpen"
+    title="Vider la semaine ?"
+    :description="`Tous les repas de la semaine du ${weekLabel} seront retirés.`"
+    confirm-label="Vider"
+    confirm-color="error"
+    confirm-icon="i-lucide-eraser"
+    @confirm="confirmClearWeek"
+  />
 
   <RecipeDetailSlideover
     v-model:open="slideoverOpen"

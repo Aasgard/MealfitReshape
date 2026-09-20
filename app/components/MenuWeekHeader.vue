@@ -3,9 +3,12 @@ withDefaults(defineProps<{
   weekLabel: string
   weekStatusLabel?: string
   isCurrentWeek?: boolean
+  /** Grise "Vider" quand la semaine affichée ne contient aucun repas. */
+  clearDisabled?: boolean
 }>(), {
   weekStatusLabel: undefined,
   isCurrentWeek: false,
+  clearDisabled: false,
 })
 
 const emit = defineEmits<{
@@ -80,6 +83,7 @@ const emit = defineEmits<{
         color="neutral"
         variant="outline"
         size="sm"
+        :disabled="clearDisabled"
         @click="emit('clear')"
       />
       <UButton

@@ -53,3 +53,18 @@ export function macrosForUnit(ing: Ingredient, unitId: string | null): Ingredien
 
   return scaleMacros(base, grams / 100)
 }
+
+/**
+ * Macros pour `quantity` grammes de l'ingrédient (`unitId` `null`), ou pour `quantity` fois
+ * l'unité `ing.units[unitId]`. `null` si les valeurs nutritionnelles sont absentes ou si
+ * l'unité est introuvable / non convertible en grammes.
+ */
+export function macrosForQuantity(ing: Ingredient, unitId: string | null, quantity: number): IngredientMacros | null {
+  const base = ing.valuesBy100
+  if (!base || quantity <= 0) return null
+
+  const grams = unitId == null ? quantity : gramsForUnit(ing, unitId)
+  if (grams == null) return null
+
+  return scaleMacros(base, (unitId == null ? grams : grams * quantity) / 100)
+}

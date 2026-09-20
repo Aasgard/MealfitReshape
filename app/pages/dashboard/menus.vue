@@ -3,9 +3,10 @@ import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from '
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import { collection, or, query, where } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
-import type { MenuMealTypeRow } from '~/types/menu'
+import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
+import { mergeMenuEntries, summarizeMenuWeek } from '~/utils/menuEntries'
 import { buildSampleWeek } from '~/utils/menuSample'
 
 useSeoMeta({
@@ -67,7 +68,7 @@ await Promise.all([recipes.promise.value, ingredients.promise.value])
 const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
 
 /** Semaine de démo bâtie à partir des recettes Firestore, le temps que la page lise/écrive de vrais menus. */
-const referenceWeek = computed(() => buildSampleWeek(recipes.value ?? [], ingredientsById.value))
+const referenceWeek = computed<MenuWeekEntries>(() => buildSampleWeek(recipes.value ?? [], ingredientsById.value))
 
 const mealTypes: MenuMealTypeRow[] = [
   { key: 'petit-dej', label: 'Petit déj' },
@@ -83,13 +84,49 @@ const weekOptions = computed(() => buildWeekOptions(selectedWeekStart.value, WEE
 const selectedWeekId = computed(() => weekId(selectedWeekStart.value))
 const selectWeek = (id: string) => { selectedWeekStart.value = parseWeekId(id) }
 
-/** Repas/aliments et total kcal affichés : ceux de la semaine de référence, vides sur toute autre semaine (pas encore de données réelles). */
-const entries = computed(() => isReferenceWeekSelected.value ? referenceWeek.value.entries : {})
-const dayTotals = computed(() => isReferenceWeekSelected.value ? referenceWeek.value.dayTotals : {})
+/** Repas ajoutés à la main (copier puis +), par semaine : addedEntries[weekId]. Locaux à la session, pas encore persistés. */
+const addedEntries = ref<Record<string, MenuWeekEntries>>({})
+let addedEntryCount = 0
 
-const stats = computed(() => isReferenceWeekSelected.value
-  ? referenceWeek.value.stats
-  : { averageKcal: 0, overagePerDayKcal: 0, overageCount: 0, overageTotalKcal: 0, macros: { protein: 0, carbohydrates: 0, fat: 0 } })
+/** Repas affichés : ceux de la semaine de référence (vides sur toute autre semaine, pas encore de données réelles) plus ceux ajoutés à la main. */
+const entries = computed(() => mergeMenuEntries(
+  isReferenceWeekSelected.value ? referenceWeek.value : {},
+  addedEntries.value[selectedWeekId.value] ?? {}
+))
+const summary = computed(() => summarizeMenuWeek(entries.value))
+const dayTotals = computed(() => summary.value.dayTotals)
+
+/** Repas copié via l'icône des tuiles : le prochain clic sur un "+" en ajoute un exemplaire dans cette case. */
+const copiedEntry = ref<MenuEntry | null>(null)
+
+const toggleCopyEntry = (entryId: string) => {
+  if (copiedEntry.value?.id === entryId) {
+    copiedEntry.value = null
+    return
+  }
+  copiedEntry.value = Object.values(entries.value)
+    .flatMap(meals => Object.values(meals).flat())
+    .find(e => e.id === entryId) ?? null
+}
+
+/** Un clic ailleurs que sur une icône "copier" ou un "+" (marqués `data-copy-control`) annule la copie en cours. */
+const cancelCopyOnOutsideClick = (event: MouseEvent) => {
+  if (!copiedEntry.value) return
+  if (event.target instanceof Element && event.target.closest('[data-copy-control]')) return
+  copiedEntry.value = null
+}
+onMounted(() => document.addEventListener('click', cancelCopyOnOutsideClick))
+onBeforeUnmount(() => document.removeEventListener('click', cancelCopyOnOutsideClick))
+
+const addEntry = (dayKey: string, mealTypeKey: string) => {
+  const copied = copiedEntry.value
+  if (!copied) return
+
+  const week = addedEntries.value[selectedWeekId.value] ??= {}
+  const day = week[dayKey] ??= {}
+  ;(day[mealTypeKey] ??= []).push({ ...copied, id: `added-${++addedEntryCount}` })
+  copiedEntry.value = null
+}
 
 const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
@@ -131,12 +168,12 @@ const selectEntry = (entryId: string) => {
         <MenuWeekPicker :model-value="selectedWeekId" :weeks="weekOptions" @update:model-value="selectWeek" />
 
         <MenuWeekStats
-          :average-kcal="stats.averageKcal"
+          :average-kcal="summary.averageKcal"
           :target-kcal="1625"
-          :overage-per-day-kcal="stats.overagePerDayKcal"
-          :overage-count="stats.overageCount"
-          :overage-total-kcal="stats.overageTotalKcal"
-          :macros="stats.macros"
+          :overage-per-day-kcal="summary.overagePerDayKcal"
+          :overage-count="summary.overageCount"
+          :overage-total-kcal="summary.overageTotalKcal"
+          :macros="summary.macros"
         />
 
         <MenuWeekCalendar
@@ -144,7 +181,10 @@ const selectEntry = (entryId: string) => {
           :meal-types="mealTypes"
           :entries="entries"
           :day-totals="dayTotals"
+          :copied-entry-id="copiedEntry?.id"
           @select-entry="selectEntry"
+          @copy-entry="toggleCopyEntry"
+          @add="addEntry"
         />
       </div>
     </template>

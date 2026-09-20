@@ -31,6 +31,9 @@ export interface MenuMealTypeRow {
   avgLabel?: string
 }
 
+/** Repas d'une semaine, par jour puis par type de repas : entries[dayKey][mealTypeKey]. */
+export type MenuWeekEntries = Record<string, Record<string, MenuEntry[]>>
+
 /** Un repas/aliment placé dans une case du calendrier. */
 export interface MenuEntry {
   id: string

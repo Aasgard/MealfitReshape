@@ -8,6 +8,8 @@ const props = withDefaults(defineProps<{
   entries?: Record<string, Record<string, MenuEntry[]>>
   /** Total kcal du jour, par dayKey. */
   dayTotals?: Record<string, number>
+  /** Repas actuellement copié : mis en évidence, et les boutons "+" indiquent qu'ils vont le coller. */
+  copiedEntryId?: string
 }>(), {
   entries: () => ({}),
   dayTotals: () => ({}),
@@ -16,6 +18,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   add: [dayKey: string, mealTypeKey: string]
   'select-entry': [entryId: string]
+  'copy-entry': [entryId: string]
 }>()
 
 const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
@@ -75,26 +78,44 @@ const macrosFor = (dayKey: string) => {
             class="border-b border-r border-default last:border-r-0 p-1.5 flex flex-col gap-1 min-h-20"
             :class="day.isSelected ? 'bg-primary/5' : ''"
           >
-            <button
+            <div
               v-for="entry in entriesFor(day.key, mealType.key)"
               :key="entry.id"
-              type="button"
-              class="w-full rounded-md border border-default bg-default px-2 py-1.5 text-left hover:border-primary/50 transition-colors"
-              @click="emit('select-entry', entry.id)"
+              class="relative rounded-md border bg-default transition-colors"
+              :class="entry.id === copiedEntryId ? 'border-primary' : 'border-default hover:border-primary/50'"
             >
-              <p class="text-xs font-medium text-highlighted truncate">
-                {{ entry.label }}
-              </p>
-              <!-- Deux lignes sur mobile, une seule ligne à partir de la tablette. -->
-              <p class="text-xs text-dimmed tabular-nums sm:truncate">
-                {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
-                <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
-              </p>
-            </button>
+              <button
+                type="button"
+                class="w-full px-2 py-1.5 pr-7 text-left"
+                @click="emit('select-entry', entry.id)"
+              >
+                <p class="text-xs font-medium text-highlighted truncate">
+                  {{ entry.label }}
+                </p>
+                <!-- Deux lignes sur mobile, une seule ligne à partir de la tablette. -->
+                <p class="text-xs text-dimmed tabular-nums sm:truncate">
+                  {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
+                  <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
+                </p>
+              </button>
+              <button
+                type="button"
+                data-copy-control
+                :aria-label="entry.id === copiedEntryId ? 'Annuler la copie' : 'Copier'"
+                :aria-pressed="entry.id === copiedEntryId"
+                class="absolute top-1 right-1 rounded p-0.5 transition-colors"
+                :class="entry.id === copiedEntryId ? 'text-primary bg-primary/10' : 'text-dimmed hover:text-primary'"
+                @click="emit('copy-entry', entry.id)"
+              >
+                <UIcon name="i-lucide-copy" class="size-3.5 block" />
+              </button>
+            </div>
             <button
               type="button"
+              data-copy-control
               aria-label="Ajouter"
-              class="flex-1 flex items-center justify-center rounded-md border border-dashed border-default px-2 py-1.5 text-dimmed hover:text-primary hover:border-primary/50 transition-colors"
+              class="flex-1 flex items-center justify-center rounded-md border border-dashed px-2 py-1.5 transition-colors"
+              :class="copiedEntryId ? 'border-primary/50 text-primary bg-primary/5' : 'border-default text-dimmed hover:text-primary hover:border-primary/50'"
               @click="emit('add', day.key, mealType.key)"
             >
               <UIcon name="i-lucide-plus" class="size-3.5 shrink-0" />

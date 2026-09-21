@@ -71,32 +71,39 @@ const emit = defineEmits<{
       </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
       <UButton
-        label="Copier la semaine précédente"
         icon="i-lucide-copy"
         color="neutral"
         variant="outline"
         size="sm"
+        class="w-full justify-center sm:w-auto"
         :disabled="copyPreviousDisabled"
         @click="emit('copy-previous')"
-      />
+      >
+        <span class="sm:hidden">Copier</span>
+        <span class="hidden sm:inline">Copier la semaine précédente</span>
+      </UButton>
       <UButton
         label="Vider"
         icon="i-lucide-eraser"
         color="neutral"
         variant="outline"
         size="sm"
+        class="w-full justify-center sm:w-auto"
         :disabled="clearDisabled"
         @click="emit('clear')"
       />
       <UButton
-        label="Liste de courses"
         icon="i-lucide-shopping-cart"
         color="primary"
         size="sm"
+        class="w-full justify-center sm:w-auto"
         @click="emit('shopping-list')"
-      />
+      >
+        <span class="sm:hidden">Courses</span>
+        <span class="hidden sm:inline">Liste de courses</span>
+      </UButton>
     </div>
   </div>
 </template>

@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from 'date-fns'
-import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
-import { collection, or, query, where } from 'firebase/firestore'
-import type { Ingredient } from '~/types/ingredient'
 import type { MealSource, MealType } from '~/types/meal'
 import type { MenuMealTypeRow } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
+import { DAILY_TARGETS } from '~/utils/dailyTargets'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
 import { buildWeekEntries, EXTRA_MEAL_KEY, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
@@ -34,35 +32,7 @@ const goToCurrentWeek = () => { selectedWeekStart.value = referenceWeekStart }
 
 const days = computed(() => buildWeekDays(selectedWeekStart.value))
 
-const db = useFirestore()
-const user = useCurrentUser()
-
-const recipes = useCollection<Recipe>(() => {
-  const uid = user.value?.uid
-  if (!uid) return null
-
-  return query(
-    collection(db, 'recipes'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    )
-  )
-})
-
-/** Catalogue d'ingrédients (privés de l'utilisateur + publics) pour calculer les kcal par part des recettes. */
-const ingredients = useCollection<Ingredient>(() => {
-  const uid = user.value?.uid
-  if (!uid) return null
-
-  return query(
-    collection(db, 'ingredients'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    )
-  )
-})
+const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
 const toast = useToast()
 
 /** Repas enregistrés (collection `meals`) de la semaine affichée et de la précédente. */
@@ -74,9 +44,6 @@ watch(meals.error, (error) => {
 
 // Une erreur de chargement des repas (droits, index manquant...) est signalée par le toast ci-dessus, sans bloquer la page.
 await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promise.value.catch(() => undefined)])
-
-const recipesById = computed(() => new Map(recipes.value.map(r => [r.id, r])))
-const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
 
 const mealTypes: MenuMealTypeRow[] = [
   { key: 'BREAKFAST', label: 'Petit déj' },
@@ -266,7 +233,7 @@ const selectEntry = (entryId: string) => {
 
         <MenuWeekStats
           :average-kcal="summary.averageKcal"
-          :target-kcal="1625"
+          :target-kcal="DAILY_TARGETS.calories"
           :overage-per-day-kcal="summary.overagePerDayKcal"
           :overage-count="summary.overageCount"
           :overage-total-kcal="summary.overageTotalKcal"

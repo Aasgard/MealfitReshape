@@ -158,6 +158,8 @@ export function entryFromMeal(meal: Meal, recipesById: Map<string, Recipe>, ingr
 /** Position du jour d'un repas dans la semaine commençant à `weekStart` (0 = lundi) ; hors de 0-6 s'il tombe une autre semaine. */
 const dayIndexOf = (meal: Meal, weekStart: Date) => differenceInCalendarDays(meal.date.toDate(), weekStart)
 
+const byCreation = (a: Meal, b: Meal) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0)
+
 /** Repas de la semaine commençant à `weekStart`, dans leur ordre d'ajout. */
 export function mealsOfWeek(meals: Meal[], weekStart: Date): Meal[] {
   return meals
@@ -165,7 +167,54 @@ export function mealsOfWeek(meals: Meal[], weekStart: Date): Meal[] {
       const index = dayIndexOf(meal, weekStart)
       return index >= 0 && index < DAY_KEYS.length
     })
-    .sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0))
+    .sort(byCreation)
+}
+
+/** Repas d'un jour (jour calendaire, heure locale), dans leur ordre d'ajout. */
+export function mealsOfDay(meals: Meal[], day: Date): Meal[] {
+  return meals
+    .filter(meal => differenceInCalendarDays(meal.date.toDate(), day) === 0)
+    .sort(byCreation)
+}
+
+/** Repas d'un jour rangés par ligne du calendrier (`BREAKFAST`, `LUNCH`...), prêts pour l'affichage. */
+export function buildDayEntries(
+  meals: Meal[],
+  day: Date,
+  recipesById: Map<string, Recipe>,
+  ingredientsById: Map<string, Ingredient>
+): Record<string, MenuEntry[]> {
+  const entries: Record<string, MenuEntry[]> = {}
+  for (const meal of mealsOfDay(meals, day)) {
+    (entries[meal.mealType] ??= []).push(entryFromMeal(meal, recipesById, ingredientsById))
+  }
+  return entries
+}
+
+export type DaySummary = {
+  /** Kcal du jour, "En plus" compris, "Non compté" exclu. */
+  kcal: number
+  /** Part "En plus" de ces kcal. */
+  extraKcal: number
+  /** Macros du jour (grammes arrondis), "Non compté" exclu. */
+  macros: MenuWeekMacroBalance
+}
+
+/** Totaux d'une journée : mêmes règles que `summarizeMenuWeek` (son total du jour est `kcal`). */
+export function summarizeDay(entries: Record<string, MenuEntry[]>): DaySummary {
+  const summary: DaySummary = { kcal: 0, extraKcal: 0, macros: { carbohydrates: 0, protein: 0, fat: 0 } }
+  for (const [mealKey, list] of Object.entries(entries)) {
+    if (mealKey === UNCOUNTED_MEAL_KEY) continue
+
+    for (const entry of list) {
+      summary.kcal += entry.kcal
+      summary.macros.carbohydrates += entry.carbohydrates
+      summary.macros.protein += entry.protein
+      summary.macros.fat += entry.fat
+      if (mealKey === EXTRA_MEAL_KEY) summary.extraKcal += entry.kcal
+    }
+  }
+  return summary
 }
 
 /** Repas d'une semaine (voir `mealsOfWeek`) rangés par jour puis par ligne du calendrier, prêts pour l'affichage. */

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
 import type { Recipe } from '~/types/recipe'
+import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, type MenuEntryDraft } from '~/utils/menuEntries'
 import { gramsForUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
+import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
@@ -25,6 +27,8 @@ const emit = defineEmits<{
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
 
+const ingredientCategoriesStore = useIngredientCategoriesStore()
+
 type Mode = 'recipe' | 'ingredient' | 'macros'
 
 const tabs = [
@@ -39,9 +43,23 @@ const GRAMS_UNIT = '__grams__'
 const mode = ref<Mode>('recipe')
 const submitted = ref(false)
 
-const recipeId = ref<string | undefined>(undefined)
-const parts = ref('1')
+const RECIPE_TYPE_FILTER_ALL = 'ALL'
+const recipeTypeFilterOptions = [
+  { value: RECIPE_TYPE_FILTER_ALL, label: 'Tous les types' },
+  ...RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) })),
+]
 
+const recipeTypeFilter = ref<typeof RECIPE_TYPE_FILTER_ALL | RecipeType>(RECIPE_TYPE_FILTER_ALL)
+const recipeId = ref<string | undefined>(undefined)
+const parts = ref<number | null>(1)
+
+const INGREDIENT_CATEGORY_FILTER_ALL = 'ALL'
+const ingredientCategoryFilterOptions = computed(() => [
+  { value: INGREDIENT_CATEGORY_FILTER_ALL, label: 'Toutes les catégories' },
+  ...ingredientCategoriesStore.categories.map(c => ({ value: c.id, label: c.label })),
+])
+
+const ingredientCategoryFilter = ref(INGREDIENT_CATEGORY_FILTER_ALL)
 const ingredientId = ref<string | undefined>(undefined)
 const unit = ref(GRAMS_UNIT)
 const quantity = ref('100')
@@ -56,8 +74,10 @@ watch(open, (isOpen) => {
   if (!isOpen) return
   mode.value = 'recipe'
   submitted.value = false
+  recipeTypeFilter.value = RECIPE_TYPE_FILTER_ALL
   recipeId.value = undefined
-  parts.value = '1'
+  parts.value = 1
+  ingredientCategoryFilter.value = INGREDIENT_CATEGORY_FILTER_ALL
   ingredientId.value = undefined
   unit.value = GRAMS_UNIT
   quantity.value = '100'
@@ -71,13 +91,31 @@ watch(open, (isOpen) => {
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'fr')
 
 const recipeOptions = computed(() =>
-  props.recipes.map(r => ({ id: r.id, label: r.title })).sort(byLabel)
+  props.recipes
+    .filter(r => recipeTypeFilter.value === RECIPE_TYPE_FILTER_ALL || r.type === recipeTypeFilter.value)
+    .map(r => ({ id: r.id, label: r.title }))
+    .sort(byLabel)
 )
+
+/** Le type filtre la liste ; une recette déjà choisie qui n'y correspond plus est désélectionnée. */
+const onRecipeTypeFilterChange = () => {
+  if (!selectedRecipe.value || selectedRecipe.value.type === recipeTypeFilter.value || recipeTypeFilter.value === RECIPE_TYPE_FILTER_ALL) return
+  recipeId.value = undefined
+}
 
 /** Seuls les ingrédients avec valeurs nutritionnelles sont proposés : sans elles, aucun macro n'est calculable. */
 const ingredientOptions = computed(() =>
-  props.ingredients.filter(i => i.valuesBy100).map(i => ({ id: i.id, label: i.label })).sort(byLabel)
+  props.ingredients
+    .filter(i => i.valuesBy100 && (ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL || i.category?.id === ingredientCategoryFilter.value))
+    .map(i => ({ id: i.id, label: i.label }))
+    .sort(byLabel)
 )
+
+/** La catégorie filtre la liste ; un aliment déjà choisi qui n'y correspond plus est désélectionné. */
+const onIngredientCategoryFilterChange = () => {
+  if (!selectedIngredient.value || selectedIngredient.value.category?.id === ingredientCategoryFilter.value || ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL) return
+  ingredientId.value = undefined
+}
 
 const selectedRecipe = computed(() => props.recipes.find(r => r.id === recipeId.value))
 const selectedIngredient = computed(() => ingredientId.value ? props.ingredientsById.get(ingredientId.value) : undefined)
@@ -102,7 +140,6 @@ const onUnitChange = () => {
   quantity.value = unit.value === GRAMS_UNIT ? '100' : '1'
 }
 
-const partsValue = computed(() => parsePositiveNumber(parts.value))
 const quantityValue = computed(() => parsePositiveNumber(quantity.value))
 
 /** Macro optionnelle : vide = 0, sinon un nombre positif ou nul. */
@@ -121,8 +158,8 @@ const manualMacros = computed(() => {
 /** Repas à ajouter selon l'onglet actif, `null` tant que le formulaire est incomplet ou invalide. */
 const draft = computed<MenuEntryDraft | null>(() => {
   if (mode.value === 'recipe') {
-    if (!selectedRecipe.value || partsValue.value === null) return null
-    return buildRecipeDraft(selectedRecipe.value, partsValue.value, props.ingredientsById)
+    if (!selectedRecipe.value || !parts.value) return null
+    return buildRecipeDraft(selectedRecipe.value, parts.value, props.ingredientsById)
   }
   if (mode.value === 'ingredient') {
     if (!selectedIngredient.value || quantityValue.value === null) return null
@@ -139,7 +176,7 @@ const numberError = (raw: string, parse: (v: string) => number | null, required:
 }
 
 const recipeError = computed(() => submitted.value && !recipeId.value ? 'Requis' : undefined)
-const partsError = computed(() => numberError(parts.value, parsePositiveNumber, true))
+const partsError = computed(() => submitted.value && !parts.value ? 'Requis' : undefined)
 const ingredientError = computed(() => submitted.value && !ingredientId.value ? 'Requis' : undefined)
 const quantityError = computed(() => numberError(quantity.value, parsePositiveNumber, true))
 const labelError = computed(() => submitted.value && !label.value.trim() ? 'Requis' : undefined)
@@ -148,7 +185,7 @@ const proteinError = computed(() => numberError(protein.value, parseNonNegativeN
 const fatError = computed(() => numberError(fat.value, parseNonNegativeNumber, false))
 const carbohydratesError = computed(() => numberError(carbohydrates.value, parseNonNegativeNumber, false))
 
-const closeModal = () => {
+const closeSlideover = () => {
   open.value = false
 }
 
@@ -156,16 +193,16 @@ const onSubmit = () => {
   submitted.value = true
   if (!draft.value) return
   emit('submit', draft.value)
-  closeModal()
+  closeSlideover()
 }
 </script>
 
 <template>
-  <UModal
+  <USlideover
     v-model:open="open"
     title="Ajouter un repas"
     :description="contextLabel"
-    :ui="{ footer: 'justify-end' }"
+    :ui="{ content: 'sm:max-w-md' }"
   >
     <template #body>
       <div class="flex flex-col gap-5">
@@ -179,6 +216,17 @@ const onSubmit = () => {
         />
 
         <template v-if="mode === 'recipe'">
+          <UFormField label="Type de plat">
+            <USelectMenu
+              v-model="recipeTypeFilter"
+              :items="recipeTypeFilterOptions"
+              value-key="value"
+              :search-input="false"
+              icon="i-lucide-utensils"
+              class="w-full"
+              @update:model-value="onRecipeTypeFilterChange"
+            />
+          </UFormField>
           <UFormField label="Recette" :error="recipeError">
             <USelectMenu
               v-model="recipeId"
@@ -195,11 +243,22 @@ const onSubmit = () => {
             :error="partsError"
             :hint="selectedRecipe ? `La recette fait ${selectedRecipe.persons ?? 1} part(s)` : undefined"
           >
-            <UInput v-model="parts" type="text" inputmode="decimal" placeholder="1" size="md" variant="outline" class="w-full" />
+            <UInputNumber v-model="parts" :min="0.5" :step="0.5" size="md" variant="outline" class="w-full" />
           </UFormField>
         </template>
 
         <template v-else-if="mode === 'ingredient'">
+          <UFormField label="Catégorie">
+            <USelectMenu
+              v-model="ingredientCategoryFilter"
+              :items="ingredientCategoryFilterOptions"
+              value-key="value"
+              :search-input="false"
+              icon="i-lucide-shapes"
+              class="w-full"
+              @update:model-value="onIngredientCategoryFilterChange"
+            />
+          </UFormField>
           <UFormField label="Aliment" :error="ingredientError">
             <USelectMenu
               v-model="ingredientId"
@@ -259,8 +318,8 @@ const onSubmit = () => {
     </template>
 
     <template #footer>
-      <UButton label="Annuler" color="neutral" variant="ghost" @click="closeModal" />
+      <UButton label="Annuler" color="neutral" variant="ghost" @click="closeSlideover" />
       <UButton label="Ajouter" color="primary" icon="i-lucide-plus" @click="onSubmit" />
     </template>
-  </UModal>
+  </USlideover>
 </template>

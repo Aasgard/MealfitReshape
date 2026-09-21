@@ -8,6 +8,9 @@ import { macrosForRecipe } from './recipeNutrition'
 /** Ligne "Hors plan" du calendrier : repas hors objectif, comptés comme dérapages. */
 export const EXTRA_MEAL_KEY = 'en-plus'
 
+/** Ligne "Non compté" du calendrier : repas exclus des totaux (kcal, macros, dérapages) du bas de page. */
+export const UNCOUNTED_MEAL_KEY = 'non-compte'
+
 export interface MenuWeekSummary {
   /** Total kcal du jour, par dayKey (uniquement les jours qui ont au moins un repas). */
   dayTotals: Record<string, number>
@@ -42,6 +45,8 @@ export function summarizeMenuWeek(entries: MenuWeekEntries): MenuWeekSummary {
 
   for (const [dayKey, meals] of Object.entries(entries)) {
     for (const [mealKey, list] of Object.entries(meals)) {
+      if (mealKey === UNCOUNTED_MEAL_KEY) continue
+
       for (const entry of list) {
         dayTotals[dayKey] = (dayTotals[dayKey] ?? 0) + entry.kcal
         kcalTotal += entry.kcal
@@ -93,8 +98,8 @@ function draftFromMacros(label: string, macros: IngredientMacros, extra: Partial
 export function buildRecipeDraft(recipe: Recipe, parts: number, ingredientsById: Map<string, Ingredient>): MenuEntryDraft {
   // macrosForRecipe divise le total par `persons` : passer persons / parts donne total * parts / persons, sans double arrondi.
   const macros = macrosForRecipe(recipe.ingredients, ingredientsById, (recipe.persons ?? 1) / parts)
-  const label = parts === 1 ? recipe.title : `${recipe.title} (${formatQuantity(parts)} parts)`
-  return draftFromMacros(label, macros, { recipeId: recipe.id })
+  const quantityLabel = `${formatQuantity(parts)} part${parts > 1 ? 's' : ''}`
+  return draftFromMacros(recipe.title, macros, { recipeId: recipe.id, quantityLabel })
 }
 
 /** Repas pour `quantity` grammes d'un ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités ; `null` si non calculable. */
@@ -104,7 +109,7 @@ export function buildIngredientDraft(ingredient: Ingredient, unitId: string | nu
 
   const unitLabel = unitId == null ? undefined : ingredient.units?.[unitId]?.label
   const quantityLabel = unitLabel ? `${formatQuantity(quantity)} × ${unitLabel}` : `${formatQuantity(quantity)} g`
-  return draftFromMacros(`${ingredient.label} (${quantityLabel})`, macros)
+  return draftFromMacros(ingredient.label, macros, { quantityLabel })
 }
 
 /** Repas saisi à la main : un libellé et des macros brutes. */

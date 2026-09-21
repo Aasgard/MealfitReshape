@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MenuDayHeader, MenuEntry, MenuMealTypeRow } from '~/types/menu'
+import { UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 const props = withDefaults(defineProps<{
   days: MenuDayHeader[]
@@ -24,10 +25,11 @@ const emit = defineEmits<{
 const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
   props.entries[dayKey]?.[mealTypeKey] ?? []
 
-/** Macros du jour : somme des macros (déjà arrondies) des repas affichés, comme `dayTotals` pour les kcal. */
+/** Macros du jour : somme des macros (déjà arrondies) des repas affichés (hors "Non compté"), comme `dayTotals` pour les kcal. */
 const macrosFor = (dayKey: string) => {
   const total = { carbohydrates: 0, protein: 0, fat: 0 }
-  for (const meals of Object.values(props.entries[dayKey] ?? {})) {
+  for (const [mealKey, meals] of Object.entries(props.entries[dayKey] ?? {})) {
+    if (mealKey === UNCOUNTED_MEAL_KEY) continue
     for (const entry of meals) {
       total.carbohydrates += entry.carbohydrates
       total.protein += entry.protein
@@ -91,6 +93,9 @@ const macrosFor = (dayKey: string) => {
               >
                 <p class="text-xs font-medium text-highlighted truncate">
                   {{ entry.label }}
+                </p>
+                <p v-if="entry.quantityLabel" class="text-xs text-dimmed truncate">
+                  {{ entry.quantityLabel }}
                 </p>
                 <!-- Deux lignes sur mobile, une seule ligne à partir de la tablette. -->
                 <p class="text-xs text-dimmed tabular-nums sm:truncate">

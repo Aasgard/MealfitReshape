@@ -6,7 +6,7 @@ import type { Ingredient } from '~/types/ingredient'
 import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { mergeMenuEntries, summarizeMenuWeek, type MenuEntryDraft } from '~/utils/menuEntries'
+import { mergeMenuEntries, summarizeMenuWeek, UNCOUNTED_MEAL_KEY, type MenuEntryDraft } from '~/utils/menuEntries'
 import { buildSampleWeek } from '~/utils/menuSample'
 
 useSeoMeta({
@@ -76,6 +76,7 @@ const mealTypes: MenuMealTypeRow[] = [
   { key: 'diner', label: 'Diner' },
   { key: 'collation', label: 'Collation' },
   { key: 'en-plus', label: 'En plus', avgLabel: 'Hors plan' },
+  { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux' },
 ]
 
 /** Bande des semaines sélectionnables, centrée sur la semaine actuellement affichée. */

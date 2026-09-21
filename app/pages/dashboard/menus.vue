@@ -3,18 +3,18 @@ import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from '
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import { collection, or, query, where } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
-import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries } from '~/types/menu'
+import type { MealSource, MealType } from '~/types/meal'
+import type { MenuMealTypeRow } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { mergeMenuEntries, summarizeMenuWeek, UNCOUNTED_MEAL_KEY, type MenuEntryDraft } from '~/utils/menuEntries'
-import { buildSampleWeek } from '~/utils/menuSample'
+import { buildWeekEntries, EXTRA_MEAL_KEY, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
   description: 'Dashboard - Menus de la semaine - Mealfit',
 })
 
-/** Semaine réellement en cours (celle contenant aujourd'hui) : sert de référence pour "Cette semaine" et les données de démo. */
+/** Semaine réellement en cours (celle contenant aujourd'hui) : sert de référence pour "Cette semaine". */
 const referenceWeekStart = startOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON })
 const selectedWeekStart = ref(referenceWeekStart)
 
@@ -63,19 +63,27 @@ const ingredients = useCollection<Ingredient>(() => {
     )
   )
 })
-await Promise.all([recipes.promise.value, ingredients.promise.value])
+const toast = useToast()
 
+/** Repas enregistrés (collection `meals`) de la semaine affichée et de la précédente. */
+const { meals, addMeal, replaceMeals } = useMeals(selectedWeekStart)
+watch(meals.error, (error) => {
+  if (!error) return
+  toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
+})
+
+// Une erreur de chargement des repas (droits, index manquant...) est signalée par le toast ci-dessus, sans bloquer la page.
+await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promise.value.catch(() => undefined)])
+
+const recipesById = computed(() => new Map(recipes.value.map(r => [r.id, r])))
 const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
 
-/** Semaine de démo bâtie à partir des recettes Firestore, le temps que la page lise/écrive de vrais menus. */
-const referenceWeek = computed<MenuWeekEntries>(() => buildSampleWeek(recipes.value ?? [], ingredientsById.value))
-
 const mealTypes: MenuMealTypeRow[] = [
-  { key: 'petit-dej', label: 'Petit déj' },
-  { key: 'dejeuner', label: 'Déjeuner' },
-  { key: 'diner', label: 'Diner' },
-  { key: 'collation', label: 'Collation' },
-  { key: 'en-plus', label: 'En plus', avgLabel: 'Hors plan' },
+  { key: 'BREAKFAST', label: 'Petit déj' },
+  { key: 'LUNCH', label: 'Déjeuner' },
+  { key: 'DINER', label: 'Diner' },
+  { key: 'SNACK', label: 'Collation' },
+  { key: EXTRA_MEAL_KEY, label: 'En plus', avgLabel: 'Hors plan' },
   { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux' },
 ]
 
@@ -85,63 +93,55 @@ const weekOptions = computed(() => buildWeekOptions(selectedWeekStart.value, WEE
 const selectedWeekId = computed(() => weekId(selectedWeekStart.value))
 const selectWeek = (id: string) => { selectedWeekStart.value = parseWeekId(id) }
 
-/** Repas ajoutés à la main (modale "Ajouter" ou copier puis +), par semaine : addedEntries[weekId]. Locaux à la session, pas encore persistés. */
-const addedEntries = ref<Record<string, MenuWeekEntries>>({})
-let addedEntryCount = 0
+const weekMeals = computed(() => mealsOfWeek(meals.value, selectedWeekStart.value))
+const previousWeekMeals = computed(() => mealsOfWeek(meals.value, subWeeks(selectedWeekStart.value, 1)))
+const isWeekEmpty = computed(() => !weekMeals.value.length)
+const isPreviousWeekEmpty = computed(() => !previousWeekMeals.value.length)
 
-/** Semaines vidées via "Vider" : la semaine de démo n'y est plus affichée. */
-const clearedWeekIds = ref<string[]>([])
-
-/** Repas d'une semaine : ceux de la semaine de référence (vides sur toute autre semaine, pas encore de données réelles, ou une fois vidée) plus ceux ajoutés à la main. */
-const entriesForWeek = (weekStart: Date): MenuWeekEntries => {
-  const id = weekId(weekStart)
-  const isReferenceWeek = isSameWeek(weekStart, referenceWeekStart, { weekStartsOn: WEEK_STARTS_ON })
-  return mergeMenuEntries(
-    isReferenceWeek && !clearedWeekIds.value.includes(id) ? referenceWeek.value : {},
-    addedEntries.value[id] ?? {}
-  )
-}
-const isEmptyWeek = (weekEntries: MenuWeekEntries) =>
-  Object.values(weekEntries).every(meals => Object.values(meals).every(list => !list.length))
-
-const entries = computed(() => entriesForWeek(selectedWeekStart.value))
-const previousWeekEntries = computed(() => entriesForWeek(subWeeks(selectedWeekStart.value, 1)))
-const isWeekEmpty = computed(() => isEmptyWeek(entries.value))
-const isPreviousWeekEmpty = computed(() => isEmptyWeek(previousWeekEntries.value))
+const entries = computed(() => buildWeekEntries(weekMeals.value, selectedWeekStart.value, recipesById.value, ingredientsById.value))
 const summary = computed(() => summarizeMenuWeek(entries.value))
 const dayTotals = computed(() => summary.value.dayTotals)
 
 /** Repas copié via l'icône des tuiles : le prochain clic sur un "+" en ajoute un exemplaire dans cette case. */
-const copiedEntry = ref<MenuEntry | null>(null)
+const copiedMeal = ref<{ id: string, source: MealSource } | null>(null)
 
 const toggleCopyEntry = (entryId: string) => {
-  if (copiedEntry.value?.id === entryId) {
-    copiedEntry.value = null
+  if (copiedMeal.value?.id === entryId) {
+    copiedMeal.value = null
     return
   }
-  copiedEntry.value = Object.values(entries.value)
-    .flatMap(meals => Object.values(meals).flat())
-    .find(e => e.id === entryId) ?? null
+  const meal = weekMeals.value.find(m => m.id === entryId)
+  copiedMeal.value = meal ? { id: meal.id, source: mealSourceOf(meal) } : null
 }
 
 /** Un clic ailleurs que sur une icône "copier" ou un "+" (marqués `data-copy-control`) annule la copie en cours. */
 const cancelCopyOnOutsideClick = (event: MouseEvent) => {
-  if (!copiedEntry.value) return
+  if (!copiedMeal.value) return
   if (event.target instanceof Element && event.target.closest('[data-copy-control]')) return
-  copiedEntry.value = null
+  copiedMeal.value = null
 }
 onMounted(() => document.addEventListener('click', cancelCopyOnOutsideClick))
 onBeforeUnmount(() => document.removeEventListener('click', cancelCopyOnOutsideClick))
 
-const insertEntry = (dayKey: string, mealTypeKey: string, draft: MenuEntryDraft) => {
-  const week = addedEntries.value[selectedWeekId.value] ??= {}
-  const day = week[dayKey] ??= {}
-  ;(day[mealTypeKey] ??= []).push({ ...draft, id: `added-${++addedEntryCount}` })
+/** Lance une écriture Firestore ; en cas d'échec (droits, réseau...), prévient l'utilisateur. Renvoie `true` si elle a réussi. */
+const runWrite = async (write: () => Promise<void>, failureMessage: string) => {
+  try {
+    await write()
+    return true
+  } catch (error: any) {
+    toast.add({ title: 'Erreur', description: `${failureMessage} : ${error.message || 'une erreur est survenue'}.`, color: 'error' })
+    return false
+  }
 }
+
+const dateOfDay = (dayKey: string) => addDays(selectedWeekStart.value, days.value.findIndex(d => d.key === dayKey))
+
+const saveMeal = (dayKey: string, mealType: MealType, source: MealSource) =>
+  runWrite(() => addMeal({ date: dateOfDay(dayKey), mealType, source }), 'Le repas n\'a pas pu être enregistré')
 
 /** Case pour laquelle la modale d'ajout est ouverte. */
 const addModalOpen = ref(false)
-const addTarget = ref<{ dayKey: string, mealTypeKey: string } | null>(null)
+const addTarget = ref<{ dayKey: string, mealTypeKey: MealType } | null>(null)
 
 const addContextLabel = computed(() => {
   const target = addTarget.value
@@ -152,54 +152,51 @@ const addContextLabel = computed(() => {
 })
 
 /** Colle le repas copié dans la case ; sans copie en cours, ouvre la modale d'ajout pour cette case. */
-const addEntry = (dayKey: string, mealTypeKey: string) => {
-  const copied = copiedEntry.value
+const addEntry = (dayKey: string, mealTypeKey: MealType) => {
+  const copied = copiedMeal.value
   if (!copied) {
     addTarget.value = { dayKey, mealTypeKey }
     addModalOpen.value = true
     return
   }
 
-  const { id: _id, ...draft } = copied
-  insertEntry(dayKey, mealTypeKey, draft)
-  copiedEntry.value = null
+  saveMeal(dayKey, mealTypeKey, copied.source)
+  copiedMeal.value = null
 }
 
-const submitAddedEntry = (draft: MenuEntryDraft) => {
+const submitAddedEntry = (source: MealSource) => {
   if (!addTarget.value) return
-  insertEntry(addTarget.value.dayKey, addTarget.value.mealTypeKey, draft)
+  saveMeal(addTarget.value.dayKey, addTarget.value.mealTypeKey, source)
 }
 
-/** Remplace tous les repas de la semaine affichée par `weekEntries` (les autres semaines ne bougent pas). */
-const replaceWeekEntries = (weekEntries: MenuWeekEntries) => {
-  const id = selectedWeekId.value
-  if (!clearedWeekIds.value.includes(id)) clearedWeekIds.value.push(id)
-  addedEntries.value[id] = weekEntries
-  copiedEntry.value = null
+const deleteEntry = (entryId: string) => {
+  const meal = weekMeals.value.find(m => m.id === entryId)
+  if (!meal) return
+  runWrite(() => replaceMeals([meal], []), 'Le repas n\'a pas pu être supprimé')
 }
 
 const clearDialogOpen = ref(false)
 
 const confirmClearWeek = () => {
-  replaceWeekEntries({})
   clearDialogOpen.value = false
+  copiedMeal.value = null
+  runWrite(() => replaceMeals(weekMeals.value, []), 'La semaine n\'a pas pu être vidée')
 }
 
-const toast = useToast()
 const copyPreviousDialogOpen = ref(false)
 
-/** Recopie les repas de la semaine précédente dans la semaine affichée, avec de nouveaux identifiants. */
-const copyPreviousWeek = () => {
-  const copy: MenuWeekEntries = {}
-  for (const [dayKey, meals] of Object.entries(previousWeekEntries.value)) {
-    for (const [mealTypeKey, list] of Object.entries(meals)) {
-      const day = copy[dayKey] ??= {}
-      day[mealTypeKey] = list.map(entry => ({ ...entry, id: `added-${++addedEntryCount}` }))
-    }
-  }
-  replaceWeekEntries(copy)
+/** Recopie les repas de la semaine précédente (+ 7 jours) dans la semaine affichée, dont les repas actuels sont remplacés. */
+const copyPreviousWeek = async () => {
   copyPreviousDialogOpen.value = false
-  toast.add({ title: 'Semaine copiée', description: 'Les repas de la semaine précédente ont été recopiés.', color: 'success' })
+  copiedMeal.value = null
+
+  const copies = previousWeekMeals.value.map(meal => ({
+    date: addWeeks(meal.date.toDate(), 1),
+    mealType: meal.mealType,
+    source: mealSourceOf(meal),
+  }))
+  const isCopied = await runWrite(() => replaceMeals(weekMeals.value, copies), 'La semaine n\'a pas pu être copiée')
+  if (isCopied) toast.add({ title: 'Semaine copiée', description: 'Les repas de la semaine précédente ont été recopiés.', color: 'success' })
 }
 
 /** Copie directement si la semaine affichée est vide ; sinon demande confirmation avant de remplacer ses repas. */
@@ -265,9 +262,10 @@ const selectEntry = (entryId: string) => {
           :meal-types="mealTypes"
           :entries="entries"
           :day-totals="dayTotals"
-          :copied-entry-id="copiedEntry?.id"
+          :copied-entry-id="copiedMeal?.id"
           @select-entry="selectEntry"
           @copy-entry="toggleCopyEntry"
+          @delete-entry="deleteEntry"
           @add="addEntry"
         />
       </div>

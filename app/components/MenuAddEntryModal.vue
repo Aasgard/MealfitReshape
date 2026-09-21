@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
+import type { MealSource } from '~/types/meal'
 import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, type MenuEntryDraft } from '~/utils/menuEntries'
@@ -10,7 +11,7 @@ import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeTy
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
  * une recette de la base (en nombre de parts), un ingrédient de la base (en grammes ou en unité),
- * ou des macros brutes avec un libellé. Émet un `MenuEntryDraft` ; le parent le place dans la case.
+ * ou des macros brutes avec un libellé. Émet un `MealSource` ; le parent l'enregistre dans la case.
  */
 const props = defineProps<{
   recipes: Recipe[]
@@ -21,7 +22,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  submit: [draft: MenuEntryDraft]
+  submit: [source: MealSource]
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
@@ -155,7 +156,26 @@ const manualMacros = computed(() => {
   return Object.values(values).some(v => v === null) ? null : values as { calories: number, protein: number, fat: number, carbohydrates: number }
 })
 
-/** Repas à ajouter selon l'onglet actif, `null` tant que le formulaire est incomplet ou invalide. */
+/** Ce qui est enregistré selon l'onglet actif, `null` tant que le formulaire est incomplet ou invalide. */
+const mealSource = computed<MealSource | null>(() => {
+  if (mode.value === 'recipe') {
+    if (!recipeId.value || !parts.value) return null
+    return { category: 'RECIPE', recipeId: recipeId.value, value: parts.value }
+  }
+  if (mode.value === 'ingredient') {
+    if (!ingredientId.value || quantityValue.value === null) return null
+    return {
+      category: 'INGREDIENT',
+      ingredientId: ingredientId.value,
+      unitId: unit.value === GRAMS_UNIT ? null : unit.value,
+      quantity: quantityValue.value,
+    }
+  }
+  if (!label.value.trim() || !manualMacros.value) return null
+  return { category: 'RAW', label: label.value.trim(), ...manualMacros.value }
+})
+
+/** Aperçu (kcal et macros) de ce qui sera ajouté ; `null` si le formulaire est incomplet ou si les macros ne sont pas calculables. */
 const draft = computed<MenuEntryDraft | null>(() => {
   if (mode.value === 'recipe') {
     if (!selectedRecipe.value || !parts.value) return null
@@ -191,8 +211,8 @@ const closeSlideover = () => {
 
 const onSubmit = () => {
   submitted.value = true
-  if (!draft.value) return
-  emit('submit', draft.value)
+  if (!mealSource.value || !draft.value) return
+  emit('submit', mealSource.value)
   closeSlideover()
 }
 </script>

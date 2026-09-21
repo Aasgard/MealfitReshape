@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MealType } from '~/types/meal'
 import type { MenuDayHeader, MenuEntry, MenuMealTypeRow } from '~/types/menu'
 import { UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
@@ -17,9 +18,10 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  add: [dayKey: string, mealTypeKey: string]
+  add: [dayKey: string, mealTypeKey: MealType]
   'select-entry': [entryId: string]
   'copy-entry': [entryId: string]
+  'delete-entry': [entryId: string]
 }>()
 
 const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
@@ -103,17 +105,27 @@ const macrosFor = (dayKey: string) => {
                   <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
                 </p>
               </button>
-              <button
-                type="button"
-                data-copy-control
-                :aria-label="entry.id === copiedEntryId ? 'Annuler la copie' : 'Copier'"
-                :aria-pressed="entry.id === copiedEntryId"
-                class="absolute top-1 right-1 rounded p-0.5 transition-colors"
-                :class="entry.id === copiedEntryId ? 'text-primary bg-primary/10' : 'text-dimmed hover:text-primary'"
-                @click="emit('copy-entry', entry.id)"
-              >
-                <UIcon name="i-lucide-copy" class="size-3.5 block" />
-              </button>
+              <div class="absolute top-1 right-1 flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  data-copy-control
+                  :aria-label="entry.id === copiedEntryId ? 'Annuler la copie' : 'Copier'"
+                  :aria-pressed="entry.id === copiedEntryId"
+                  class="rounded p-0.5 transition-colors"
+                  :class="entry.id === copiedEntryId ? 'text-primary bg-primary/10' : 'text-dimmed hover:text-primary'"
+                  @click="emit('copy-entry', entry.id)"
+                >
+                  <UIcon name="i-lucide-copy" class="size-3.5 block" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Supprimer"
+                  class="rounded p-0.5 text-dimmed transition-colors hover:text-error"
+                  @click="emit('delete-entry', entry.id)"
+                >
+                  <UIcon name="i-lucide-trash-2" class="size-3.5 block" />
+                </button>
+              </div>
             </div>
             <button
               type="button"

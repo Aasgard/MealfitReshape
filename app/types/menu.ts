@@ -1,3 +1,5 @@
+import type { MealType } from './meal'
+
 /** Une semaine sélectionnable dans le sélecteur de semaines (bande de petites cartes). */
 export interface MenuWeekOption {
   id: string
@@ -25,7 +27,7 @@ export interface MenuDayHeader {
 
 /** Une ligne du calendrier (un type de repas : Petit déj, Déjeuner, ...). */
 export interface MenuMealTypeRow {
-  key: string
+  key: MealType
   label: string
   /** Sous-titre affiché sous le libellé. Ex: "Hors plan" */
   avgLabel?: string

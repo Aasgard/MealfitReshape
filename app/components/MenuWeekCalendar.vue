@@ -22,10 +22,15 @@ const emit = defineEmits<{
   'select-entry': [entryId: string]
   'copy-entry': [entryId: string]
   'delete-entry': [entryId: string]
+  /** Carte déposée dans la case (jour, ligne) : à enregistrer côté données. */
+  'move-entry': [entryId: string, dayKey: string, mealTypeKey: MealType]
 }>()
 
+/** Liste vide partagée : une identité stable évite de réinitialiser inutilement les cases vides à chaque rendu. */
+const NO_ENTRIES: MenuEntry[] = []
+
 const entriesFor = (dayKey: string, mealTypeKey: string): MenuEntry[] =>
-  props.entries[dayKey]?.[mealTypeKey] ?? []
+  props.entries[dayKey]?.[mealTypeKey] ?? NO_ENTRIES
 
 /** Macros du jour : somme des macros (déjà arrondies) des repas affichés (hors "Non compté"), comme `dayTotals` pour les kcal. */
 const macrosFor = (dayKey: string) => {
@@ -76,68 +81,18 @@ const macrosFor = (dayKey: string) => {
               {{ mealType.avgLabel }}
             </p>
           </div>
-          <div
+          <MenuWeekCell
             v-for="day in days"
             :key="`${mealType.key}-${day.key}`"
-            class="border-b border-r border-default last:border-r-0 p-1.5 flex flex-col gap-1 min-h-20"
-            :class="day.isSelected ? 'bg-primary/5' : ''"
-          >
-            <div
-              v-for="entry in entriesFor(day.key, mealType.key)"
-              :key="entry.id"
-              class="relative rounded-md border bg-default transition-colors"
-              :class="entry.id === copiedEntryId ? 'border-primary' : 'border-default hover:border-primary/50'"
-            >
-              <button
-                type="button"
-                class="w-full px-2 py-1.5 pr-7 text-left"
-                @click="emit('select-entry', entry.id)"
-              >
-                <p class="text-xs font-medium text-highlighted truncate">
-                  {{ entry.label }}
-                </p>
-                <p v-if="entry.quantityLabel" class="text-xs text-dimmed truncate">
-                  {{ entry.quantityLabel }}
-                </p>
-                <!-- Deux lignes sur mobile, une seule ligne à partir de la tablette. -->
-                <p class="text-xs text-dimmed tabular-nums sm:truncate">
-                  {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
-                  <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
-                </p>
-              </button>
-              <div class="absolute top-1 right-1 flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  data-copy-control
-                  :aria-label="entry.id === copiedEntryId ? 'Annuler la copie' : 'Copier'"
-                  :aria-pressed="entry.id === copiedEntryId"
-                  class="rounded p-0.5 transition-colors"
-                  :class="entry.id === copiedEntryId ? 'text-primary bg-primary/10' : 'text-dimmed hover:text-primary'"
-                  @click="emit('copy-entry', entry.id)"
-                >
-                  <UIcon name="i-lucide-copy" class="size-3.5 block" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Supprimer"
-                  class="rounded p-0.5 text-dimmed transition-colors hover:text-error"
-                  @click="emit('delete-entry', entry.id)"
-                >
-                  <UIcon name="i-lucide-trash-2" class="size-3.5 block" />
-                </button>
-              </div>
-            </div>
-            <button
-              type="button"
-              data-copy-control
-              aria-label="Ajouter"
-              class="flex-1 flex items-center justify-center rounded-md border border-dashed px-2 py-1.5 transition-colors"
-              :class="copiedEntryId ? 'border-primary/50 text-primary bg-primary/5' : 'border-default text-dimmed hover:text-primary hover:border-primary/50'"
-              @click="emit('add', day.key, mealType.key)"
-            >
-              <UIcon name="i-lucide-plus" class="size-3.5 shrink-0" />
-            </button>
-          </div>
+            :entries="entriesFor(day.key, mealType.key)"
+            :copied-entry-id="copiedEntryId"
+            :is-highlighted="day.isSelected"
+            @add="emit('add', day.key, mealType.key)"
+            @select-entry="emit('select-entry', $event)"
+            @copy-entry="emit('copy-entry', $event)"
+            @delete-entry="emit('delete-entry', $event)"
+            @move-entry="emit('move-entry', $event, day.key, mealType.key)"
+          />
         </template>
 
         <div class="px-2 py-2 flex items-center bg-elevated">

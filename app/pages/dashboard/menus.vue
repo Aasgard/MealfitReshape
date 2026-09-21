@@ -66,7 +66,7 @@ const ingredients = useCollection<Ingredient>(() => {
 const toast = useToast()
 
 /** Repas enregistrés (collection `meals`) de la semaine affichée et de la précédente. */
-const { meals, addMeal, replaceMeals } = useMeals(selectedWeekStart)
+const { meals, addMeal, moveMeal, replaceMeals } = useMeals(selectedWeekStart)
 watch(meals.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
@@ -175,6 +175,22 @@ const deleteEntry = (entryId: string) => {
   runWrite(() => replaceMeals([meal], []), 'Le repas n\'a pas pu être supprimé')
 }
 
+/** Change la clé du calendrier pour le recréer, et réafficher les cartes telles que les données les décrivent. */
+const calendarKey = ref(0)
+
+/**
+ * Enregistre le déplacement d'une carte vers un autre jour / une autre ligne (glisser-déposer). Le calendrier l'a déjà
+ * déplacée à l'écran ; les totaux et les statistiques suivent dès que Firestore renvoie le repas à sa nouvelle place.
+ */
+const moveEntry = async (entryId: string, dayKey: string, mealType: MealType) => {
+  const meal = weekMeals.value.find(m => m.id === entryId)
+  const isMoved = !!meal && await runWrite(
+    () => moveMeal(meal.id, { date: dateOfDay(dayKey), mealType }),
+    'Le repas n\'a pas pu être déplacé'
+  )
+  if (!isMoved) calendarKey.value++
+}
+
 const clearDialogOpen = ref(false)
 
 const confirmClearWeek = () => {
@@ -258,6 +274,7 @@ const selectEntry = (entryId: string) => {
         />
 
         <MenuWeekCalendar
+          :key="calendarKey"
           :days="days"
           :meal-types="mealTypes"
           :entries="entries"
@@ -266,6 +283,7 @@ const selectEntry = (entryId: string) => {
           @select-entry="selectEntry"
           @copy-entry="toggleCopyEntry"
           @delete-entry="deleteEntry"
+          @move-entry="moveEntry"
           @add="addEntry"
         />
       </div>

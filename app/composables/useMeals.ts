@@ -1,5 +1,5 @@
 import { addWeeks, subWeeks } from 'date-fns'
-import { collection, doc, query, Timestamp, where, writeBatch } from 'firebase/firestore'
+import { collection, doc, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import type { Ref } from 'vue'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Meal, MealSource, MealType } from '~/types/meal'
@@ -56,5 +56,9 @@ export const useMeals = (weekStart: Ref<Date>) => {
 
   const addMeal = (meal: NewMeal) => replaceMeals([], [meal])
 
-  return { meals, addMeal, replaceMeals }
+  /** Déplace un repas vers un autre jour et/ou une autre ligne du calendrier ; ce qu'il contient (recette, quantité...) ne change pas. */
+  const moveMeal = (mealId: string, target: Pick<NewMeal, 'date' | 'mealType'>) =>
+    updateDoc(doc(db, 'meals', mealId), { date: Timestamp.fromDate(target.date), mealType: target.mealType })
+
+  return { meals, addMeal, moveMeal, replaceMeals }
 }

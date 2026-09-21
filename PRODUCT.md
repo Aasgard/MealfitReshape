@@ -38,7 +38,7 @@ Name: Mealfit (product), displayed as "MEALFIT RESHAPE" in the site header wordm
 
 ## Evidence on Hand
 
-No real user content, testimonials, or case studies on hand — dashboard currently seeds a fake demo recipe (`app/data/fakeRecipe.json`) for testing. Future work must not present this or invented data as real evidence.
+No real user content, testimonials, or case studies on hand. Future work must not present invented data as real evidence.
 
 ## Product Principles
 

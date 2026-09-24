@@ -33,6 +33,9 @@ const ingredients = useCollection<Ingredient>(() => {
 })
 await ingredients.promise.value
 
+/** Vrai tant que l'utilisateur n'est pas résolu (requête non lancée) ou que la première lecture Firestore n'est pas revenue. */
+const ingredientsLoading = computed(() => !user.value || ingredients.pending.value)
+
 const searchQuery = ref('')
 
 const ingredientCategoriesStore = useIngredientCategoriesStore()
@@ -336,7 +339,7 @@ const confirmDeleteIngredient = () => {
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <template v-if="ingredients.length === 0">
+        <template v-if="ingredientsLoading">
           <div
             v-for="i in 12"
             :key="`skeleton-${i}`"
@@ -357,6 +360,14 @@ const confirmDeleteIngredient = () => {
             </div>
           </div>
         </template>
+        <UEmpty
+          v-else-if="ingredients.length === 0"
+          class="col-span-full py-12"
+          icon="i-lucide-carrot"
+          title="Aucun ingrédient"
+          description="Ajoutez votre premier ingrédient pour le retrouver ici."
+          :actions="[{ label: 'Ajouter un ingrédient', icon: 'i-lucide-plus', onClick: openCreateForm }]"
+        />
         <UEmpty
           v-else-if="filteredIngredients.length === 0"
           class="col-span-full py-12"

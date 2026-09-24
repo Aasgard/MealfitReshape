@@ -29,6 +29,9 @@ const recipes = useCollection<Recipe>(() => {
 })
 await recipes.promise.value
 
+/** Vrai tant que l'utilisateur n'est pas résolu (requête non lancée) ou que la première lecture Firestore n'est pas revenue. */
+const recipesLoading = computed(() => !user.value || recipes.pending.value)
+
 /** Catalogue d'ingrédients (privés de l'utilisateur + publics) pour résoudre les macros affichées sur les cartes. */
 const ingredients = useCollection<Ingredient>(() => {
   const uid = user.value?.uid
@@ -259,7 +262,7 @@ const confirmDeleteRecipe = () => {
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <template v-if="recipes.length === 0">
+          <template v-if="recipesLoading">
             <div
               v-for="i in 8"
               :key="`skeleton-${i}`"
@@ -279,6 +282,14 @@ const confirmDeleteRecipe = () => {
               </div>
             </div>
           </template>
+          <UEmpty
+            v-else-if="recipes.length === 0"
+            class="col-span-full py-12"
+            icon="i-lucide-chef-hat"
+            title="Aucune recette"
+            description="Ajoutez votre première recette pour la retrouver ici."
+            :actions="[{ label: 'Ajouter une recette', icon: 'i-lucide-plus', onClick: addRecipe }]"
+          />
           <UEmpty
             v-else-if="filteredRecipes.length === 0"
             class="col-span-full py-12"

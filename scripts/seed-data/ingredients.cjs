@@ -8,8 +8,31 @@ admin.initializeApp({
 
 const db = admin.firestore()
 
+async function purgeExisting(categoryRef) {
+  const collectionRef = db.collection("ingredients")
+  let deleted = 0
+
+  while (true) {
+    const snapshot = await collectionRef.where("category", "==", categoryRef).limit(500).get()
+    if (snapshot.empty) break
+
+    const batch = db.batch()
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref))
+    await batch.commit()
+    deleted += snapshot.size
+  }
+
+  return deleted
+}
+
 async function seed() {
   const categoryRef = db.collection("ingredientCategories").doc("unknown")
+
+  const purged = await purgeExisting(categoryRef)
+  if (purged) {
+    console.log(`🗑️  ${purged} ingrédients de la catégorie "unknown" supprimés avant réimport`)
+  }
+
   const skipped = []
   const importedAsMl = []
   let count = 0

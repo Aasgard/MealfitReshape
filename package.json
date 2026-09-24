@@ -10,7 +10,9 @@
     "postinstall": "nuxt prepare",
     "seed:ingredient-categories": "node scripts/seed-data/ingredientCategories.cjs",
     "seed:ingredients": "node scripts/seed-data/ingredients.cjs",
-    "purge:ingredients": "node scripts/purge-ingredients.cjs"
+    "seed:ciqual": "node scripts/seed-data/ciqual.cjs",
+    "purge:ingredients": "node scripts/purge-ingredients.cjs",
+    "purge:recipes": "node scripts/purge-recipes.cjs"
   },
   "dependencies": {
     "@nuxt/ui": "^4.4.0",

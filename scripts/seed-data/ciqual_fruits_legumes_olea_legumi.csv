@@ -1,0 +1,548 @@
+﻿alim_code,alim_nom_fr,categorie_id,categorie,energie_kcal_100g,lipides_g_100g,proteines_g_100g,glucides_g_100g
+20067,"Artichaut, appertisé, égoutté",201,légumes,39.8,0.2,1.5,6.5
+20155,"Artichaut, coeur, appertisé, égoutté",201,légumes,24.2,0.0,1.8,2.31
+20052,"Artichaut, cru",201,légumes,45.4,0.15,3.27,4.84
+20000,"Artichaut, cuit",201,légumes,33.2,0.28,2.53,0.99
+20074,"Artichaut, cuit à la vapeur sous pression",201,légumes,46.4,0.0,2.63,3.24
+20156,"Artichaut, fond, appertisé, égoutté",201,légumes,23.4,0.0,1.2,3.02
+20232,"Artichaut, fond, surgelé, cru",201,légumes,54.5,0.42,1.89,7.02
+20277,"Asperge blanche, bouillie/cuite à l'eau",201,légumes,17.3,0.3,1.44,1.63
+20299,"Asperge verte, bouillie/cuite à l'eau",201,légumes,25.3,0.3,2.69,1.73
+20076,"Asperge, appertisée, égouttée",201,légumes,20.3,0.65,1.57,1.2
+20282,"Asperge, blanche ou violette, pelée, crue",201,légumes,21.0,0.12,2.2,1.62
+20349,"Asperge, bouillie/cuite à l'eau (aliment moyen)",201,légumes,20.7,0.3,1.97,1.67
+20279,"Asperge, verte, crue",201,légumes,24.7,0.27,2.46,2.03
+20300,"Aubergine, chair et peau, rôtie/cuite au four",201,légumes,31.1,0.0,1.31,3.83
+20053,"Aubergine, crue",201,légumes,22.9,0.18,0.98,2.7
+20002,"Aubergine, cuite",201,légumes,27.1,0.23,0.83,4.17
+13004,"Avocat, chair sans peau, sans noyau, cru",201,légumes,203.0,20.6,1.56,0.0
+20198,"Bambou, pousse, crue",201,légumes,29.1,0.3,2.6,2.57
+20188,"Bambou, pousses, appertisées, égouttées",201,légumes,19.3,0.31,1.63,1.9
+53100,"Banane plantain, crue",201,légumes,132.0,0.37,1.3,29.6
+20123,"Batavia, crue",201,légumes,14.9,0.0,1.25,1.78
+20004,"Bette ou blette, côte (sans feuille), crue",201,légumes,12.8,0.0,1.0,1.63
+20005,"Bette ou blette, côte (sans feuille), cuite",201,légumes,11.2,0.0,0.7,1.23
+20301,"Bette ou blette, côte et feuille, bouillie/cuite à l'eau",201,légumes,15.6,0.3,0.88,1.43
+20091,"Betterave rouge, crue",201,légumes,40.2,0.17,1.61,6.34
+20003,"Betterave rouge, cuite",201,légumes,41.5,0.4,1.44,7.13
+20350,"Brocoli, bouilli/cuit à l'eau (aliment moyen)",201,légumes,21.8,0.5,2.19,1.03
+20302,"Brocoli, bouilli/cuit à l'eau, croquant",201,légumes,22.2,0.4,2.5,1.23
+20303,"Brocoli, bouilli/cuit à l'eau, fondant",201,légumes,21.8,0.5,2.19,1.03
+20057,"Brocoli, cru",201,légumes,31.9,0.36,2.9,2.15
+20351,"Brocoli, cuit (aliment moyen)",201,légumes,30.0,0.6,3.17,1.79
+20304,"Brocoli, cuit à la vapeur",201,légumes,38.0,0.7,4.13,2.53
+20259,"Brocoli, purée",201,légumes,29.0,0.38,2.5,2.75
+20204,"Brocoli, surgelé, cru",201,légumes,26.4,0.42,2.78,1.5
+20296,"Brèdes chou de Chine ou bok choy ou pak choï, tiges et feuilles, cuites à la vapeur, prélevées à La Réunion (Brassica rapa subsp. Chinensis)",201,légumes,16.4,0.0,1.69,1.7
+20054,"Cardon, cru",201,légumes,13.7,0.1,0.7,1.7
+20241,"Cardon, cuit",201,légumes,22.0,0.11,0.76,3.63
+20007,"Carotte, appertisée, égouttée",201,légumes,21.8,0.19,0.7,3.29
+20352,"Carotte, bouillie/cuite à l'eau (aliment moyen)",201,légumes,29.6,0.0,0.25,5.73
+20305,"Carotte, bouillie/cuite à l'eau, croquante",201,légumes,33.1,0.0,0.75,6.33
+20306,"Carotte, bouillie/cuite à l'eau, fondante",201,légumes,29.6,0.0,0.25,5.73
+20009,"Carotte, crue",201,légumes,30.2,0.0,0.78,5.16
+20353,"Carotte, cuite (aliment moyen)",201,légumes,33.0,0.2,0.37,6.24
+20307,"Carotte, cuite à la vapeur",201,légumes,40.3,0.3,0.63,7.33
+20092,"Carotte, déshydratée",201,légumes,317.0,1.49,8.1,56.0
+20261,"Carotte, purée",201,légumes,30.1,0.0,0.88,5.06
+20298,"Carotte, purée cuisinée à la crème, préemballée",201,légumes,43.7,1.6,1.44,4.57
+20208,"Carotte, surgelée, crue",201,légumes,33.6,0.46,0.78,4.95
+20079,"Champignon de Paris ou champignon de couche, appertisé, égoutté",201,légumes,18.3,0.37,2.0,0.64
+20102,"Champignon de Paris ou champignon de couche, bouilli/cuit à l'eau",201,légumes,28.7,0.47,2.17,3.0
+20056,"Champignon de Paris ou champignon de couche, cru",201,légumes,21.0,0.36,2.11,1.83
+20125,"Champignon de Paris ou champignon de couche, sauté/poêlé, sans matière grasse",201,légumes,38.4,0.6,4.44,4.53
+20228,"Champignon de Paris ou champignon de couche, surgelé, cru",201,légumes,16.1,0.2,1.87,0.93
+20103,"Champignon, chanterelle ou girolle, crue",201,légumes,24.7,0.53,1.49,1.77
+20160,"Champignon, cèpe, cru",201,légumes,28.8,0.49,3.23,2.0
+20212,"Champignon, lentin comestible ou shiitaké, cuit",201,légumes,60.9,0.22,1.56,12.3
+20211,"Champignon, lentin comestible ou shiitaké, séché",201,légumes,316.0,0.99,9.58,63.9
+20105,"Champignon, morille, crue",201,légumes,23.5,0.57,3.12,0.1
+20114,"Champignon, pleurote, crue",201,légumes,26.8,0.41,3.31,1.5
+20011,"Champignon, tout type, appertisé, égoutté",201,légumes,24.9,0.29,1.87,2.56
+20010,"Champignon, tout type, cru",201,légumes,24.3,0.34,2.42,2.25
+13177,"Chayote ou christophine ou chouchou, bouillie/cuite à l'eau",201,légumes,21.6,0.48,0.62,2.29
+20297,"Chayote ou christophine ou chouchou, chair sans peau, sans noyau, cuite à la vapeur, prélevée à La Réunion (Sechium edule)",201,légumes,20.9,0.0,0.63,3.5
+13128,"Chayote ou christophine ou chouchou, crue",201,légumes,19.1,0.13,0.82,2.8
+20162,"Chicorée rouge, crue",201,légumes,18.9,0.1,1.4,1.6
+20163,"Chicorée verte, crue",201,légumes,16.1,0.5,1.9,0.5
+20308,"Chou blanc, bouilli/cuit à l'eau",201,légumes,20.8,0.0,1.0,3.23
+20116,"Chou blanc, cru",201,légumes,35.2,0.6,1.38,4.63
+20340,"Chou chinois pak choï ou pak choy (feuilles vertes ressemblant à des blettes), cru",201,légumes,14.6,0.2,1.5,1.2
+20339,"Chou chinois pak choï ou pak choy (feuilles vertes ressemblant à des blettes), cuit",201,légumes,12.8,0.16,1.56,0.78
+20167,"Chou chinois pé-tsaï, cru",201,légumes,16.4,0.2,1.25,2.1
+20221,"Chou chinois pé-tsaï, sauté/poêlé",201,légumes,18.9,0.0,1.06,2.77
+20077,"Chou de Bruxelles, appertisé, égoutté",201,légumes,37.8,0.53,2.5,4.1
+20309,"Chou de Bruxelles, bouilli/cuit à l'eau",201,légumes,44.4,0.0,3.19,5.4
+20058,"Chou de Bruxelles, cru",201,légumes,43.9,0.3,3.38,4.59
+20206,"Chou de Bruxelles, surgelé, cru",201,légumes,45.2,0.41,3.78,4.69
+20218,"Chou frisé, cru",201,légumes,49.5,0.93,4.28,4.2
+20219,"Chou frisé, cuit",201,légumes,29.7,0.4,1.9,3.63
+20346,"Chou kale, cru",201,légumes,34.6,1.49,2.92,0.32
+20280,"Chou romanesco ou brocoli à pomme, cru",201,légumes,29.7,0.3,2.95,2.2
+20290,"Chou romanesco ou brocoli à pomme, cuit",201,légumes,34.5,0.8,3.0,2.03
+20095,"Chou rouge, bouilli/cuit à l'eau",201,légumes,25.3,0.09,1.51,3.32
+20014,"Chou rouge, cru",201,légumes,26.4,0.0,1.13,4.33
+20355,"Chou rouge, cuit (aliment moyen)",201,légumes,31.8,0.14,1.26,5.13
+20310,"Chou rouge, cuit à l'étouffée",201,légumes,33.9,0.0,1.19,5.7
+20311,"Chou vert, bouilli/cuit à l'eau",201,légumes,19.0,0.0,1.63,1.83
+20069,"Chou vert, cru",201,légumes,24.4,0.14,1.43,2.74
+20015,"Chou vert, cuit",201,légumes,24.1,0.45,1.03,3.04
+20017,"Chou-fleur, bouilli/cuit à l'eau",201,légumes,20.9,0.46,1.6,1.6
+20016,"Chou-fleur, cru",201,légumes,24.9,0.7,1.81,2.13
+20312,"Chou-fleur, cuit à la vapeur",201,légumes,30.5,0.3,2.56,3.41
+20082,"Chou-fleur, surgelé, cru",201,légumes,25.1,0.27,2.01,2.5
+20094,"Chou-rave, bouilli/cuit à l'eau",201,légumes,28.0,0.11,1.8,4.4
+20065,"Chou-rave, cru",201,légumes,25.1,0.1,1.7,2.44
+20166,"Citrouille, chair sans peau, crue",201,légumes,29.7,0.1,1.0,5.79
+20018,"Coeur de palmier, appertisé, égoutté",201,légumes,41.5,0.56,2.51,5.5
+20019,"Concombre, chair et peau, cru",201,légumes,16.8,0.11,0.65,2.87
+20210,"Concombre, chair sans peau, cru",201,légumes,11.1,0.0,0.56,2.23
+20141,"Courge butternut (doubeurre), chair sans peau, bouillie/cuite à l'eau",201,légumes,28.2,0.2,0.69,4.56
+20138,"Courge butternut (doubeurre), chair sans peau, crue",201,légumes,30.5,0.1,1.0,5.4
+20292,"Courge butternut (doubeurre), chair sans peau, cuite",201,légumes,28.9,0.0,1.06,5.24
+20134,"Courge hokkaïdo, chair sans peau, crue",201,légumes,56.1,0.6,1.4,9.98
+20136,"Courge melonnette, chair sans peau, crue",201,légumes,30.8,0.13,0.75,5.98
+20128,"Courge musquée, chair sans peau, crue",201,légumes,23.5,0.1,0.55,4.6
+20145,"Courge spaghetti, chair sans peau, crue",201,légumes,32.3,0.57,0.64,5.41
+20143,"Courge spaghetti, chair sans peau, cuite",201,légumes,28.0,0.26,0.66,5.06
+20139,"Courge, crue",201,légumes,14.4,0.13,0.95,1.6
+20020,"Courgette, chair et peau, crue",201,légumes,16.7,0.32,1.21,1.75
+20021,"Courgette, chair et peau, cuite",201,légumes,15.5,0.36,0.93,1.4
+20313,"Courgette, chair et peau, rôtie/cuite au four",201,légumes,20.3,0.0,1.5,3.13
+20230,"Courgette, chair et peau, surgelée, crue",201,légumes,16.5,0.13,1.08,2.0
+20264,"Courgette, purée",201,légumes,57.3,1.9,2.8,6.5
+20199,"Cresson alénois, cru",201,légumes,23.8,0.7,2.6,1.22
+20022,"Cresson de fontaine, cru",201,légumes,15.5,0.1,2.3,1.11
+20590,"Crosne, cuit",201,légumes,49.0,0.0,2.13,9.11
+20231,"Crosne, surgelé, cru",201,légumes,51.8,0.03,7.38,5.51
+25616,"Crudité, sans assaisonnement (aliment moyen)",201,légumes,27.7,1.15,0.91,3.06
+20078,"Céleri branche, appertisé, égoutté",201,légumes,13.1,0.15,0.63,1.38
+20023,"Céleri branche, cru",201,légumes,15.4,0.0,0.63,2.41
+20354,"Céleri branche, cuit (aliment moyen)",201,légumes,13.1,0.15,0.63,1.38
+20314,"Céleri branche, cuit à l'étouffée",201,légumes,14.7,0.0,0.75,2.48
+20315,"Céleri rave, bouilli/cuit à l'eau",201,légumes,26.2,0.3,0.94,4.32
+20055,"Céleri-rave, cru",201,légumes,26.3,0.0,1.38,3.98
+20025,"Céleri-rave, cuit",201,légumes,36.5,0.86,1.3,4.6
+20278,"Céleri-rave, purée",201,légumes,26.2,0.18,1.37,2.83
+20026,"Endive, crue",201,légumes,16.6,0.0,1.19,2.83
+20316,"Endive, rôtie/cuite au four",201,légumes,22.0,0.0,1.13,4.38
+20083,"Epinard, haché ou purée ou en branches, surgelé, cru",201,légumes,28.0,0.54,3.32,1.0
+20118,"Fenouil, bouilli/cuit à l'eau",201,légumes,11.7,0.0,1.13,0.8
+20028,"Fenouil, cru",201,légumes,18.2,0.0,1.0,2.63
+20356,"Fenouil, cuit (aliment moyen)",201,légumes,11.8,0.0,0.36,1.8
+20317,"Fenouil, cuit à l'étouffée",201,légumes,11.8,0.0,0.25,1.94
+58100,"Gombo, fruit, cru",201,légumes,31.0,0.19,1.93,3.8
+58103,"Gombo, fruit, cuit",201,légumes,22.4,0.21,1.87,2.01
+20029,"Graine germée de haricot mungo ou pousse de ""soja"", appertisée, égouttée",201,légumes,22.4,0.15,1.48,2.57
+20183,"Graine germée de haricot mungo ou pousse de ""soja"", crue",201,légumes,28.3,0.0,2.57,3.4
+20521,"Graine germée de lentille, fraîche, crue",201,légumes,123.0,0.55,8.96,19.0
+15029,"Graine germée de luzerne, crue",201,légumes,29.2,0.69,3.38,0.81
+20063,"Haricot beurre, appertisé, égoutté",201,légumes,23.2,0.2,1.2,3.25
+20318,"Haricot beurre, bouilli/cuit à l'eau",201,légumes,35.0,0.3,2.19,4.45
+20195,"Haricot beurre, cru",201,légumes,37.6,0.12,1.82,5.6
+20203,"Haricot beurre, surgelé, cru",201,légumes,33.1,0.21,1.8,4.59
+20269,"Haricot plat, cru",201,légumes,32.4,0.12,1.93,4.47
+20062,"Haricot vert, appertisé, égoutté",201,légumes,23.2,0.32,1.34,2.07
+20320,"Haricot vert, bouilli/cuit à l'eau",201,légumes,27.0,0.0,1.75,3.39
+20061,"Haricot vert, cru",201,légumes,31.9,0.22,1.83,4.14
+20030,"Haricot vert, cuit",201,légumes,29.4,0.17,2.0,3.0
+20070,"Haricot vert, surgelé, cru",201,légumes,33.1,0.21,1.79,4.76
+20071,"Haricot vert, surgelé, cuit",201,légumes,33.7,0.17,1.49,5.1
+20257,"Haricots verts, purée",201,légumes,56.3,2.9,1.7,4.2
+20823,"Igname cousse-couche, pulpe, cuit à la vapeur, prélevé à la Martinique",201,légumes,88.9,0.3,1.65,17.9
+20824,"Igname jaune, pulpe, cuit à la vapeur, prélevé à la Martinique",201,légumes,127.0,0.37,2.04,27.6
+20825,"Igname saint martin, pulpe, cuit à la vapeur, prélevé à la Martinique",201,légumes,93.3,0.3,2.25,18.4
+20265,"Julienne ou brunoise de légumes, surgelée, crue",201,légumes,27.9,0.25,1.19,4.08
+20200,"Laitue iceberg, crue",201,légumes,17.3,0.14,0.95,2.5
+20171,"Laitue romaine, crue",201,légumes,17.2,0.3,1.23,1.35
+20031,"Laitue, crue",201,légumes,14.7,0.2,1.35,1.22
+20499,Légume cuit (aliment moyen),201,légumes,28.7,0.3,1.68,3.67
+20258,"Légumes (3-4 sortes en mélange), purée",201,légumes,61.2,3.4,1.94,4.25
+20497,"Légumes pour couscous, cuits",201,légumes,29.6,0.42,1.58,3.87
+20496,"Légumes pour couscous, surgelés, crus",201,légumes,44.3,0.63,1.93,6.47
+20263,"Légumes pour potages, surgelés, crus",201,légumes,33.9,0.0,1.33,5.83
+20266,"Légumes pour ratatouille, surgelés",201,légumes,21.0,0.089,1.01,3.23
+20101,"Légumes, mélange surgelé, crus",201,légumes,65.1,2.65,2.26,5.71
+20051,"Macédoine de légumes, appertisée, égouttée",201,légumes,40.4,0.28,2.32,5.59
+20271,"Macédoine de légumes, précuite, à finir de cuire, surgelée",201,légumes,62.4,0.5,4.0,7.5
+20066,"Maïs doux, appertisé, égoutté",201,légumes,105.0,1.68,2.66,18.3
+20049,"Maïs doux, en épis, cuit",201,légumes,106.0,1.5,3.41,18.6
+20108,"Maïs doux, en épis, surgelé, cru",201,légumes,97.4,1.19,3.36,17.0
+20233,"Maïs doux, surgelé, cru",201,légumes,105.0,0.78,3.28,19.8
+20272,"Mesclun ou salade, mélange de jeunes pousses",201,légumes,22.0,0.0,2.0,2.5
+20099,"Mâche, crue",201,légumes,15.0,0.0,2.0,0.5
+20321,"Navet, bouilli/cuit à l'eau",201,légumes,18.4,0.0,0.75,3.23
+20033,"Navet, cuit",201,légumes,25.0,0.2,0.9,3.8
+20064,"Navet, pelé, cru",201,légumes,25.6,0.1,0.9,4.39
+20234,"Navet, surgelé, cru",201,légumes,20.4,0.16,1.04,2.8
+20322,"Oignon blanc ou jaune, sauté/poêlé sans matière grasse",201,légumes,39.2,0.0,1.56,6.73
+20239,"Oignon jaune, cru",201,légumes,35.9,0.0,1.19,6.39
+20323,"Oignon nouveau ou oignon frais ou cébette, sauté/poêlé sans matière grasse",201,légumes,28.0,0.3,1.13,3.56
+20238,"Oignon rouge, cru",201,légumes,35.0,0.4,1.31,5.63
+20324,"Oignon rouge, sauté/poêlé",201,légumes,41.5,0.0,1.69,7.55
+20034,"Oignon, cru",201,légumes,39.0,0.62,1.1,6.25
+20035,"Oignon, cuit",201,légumes,34.6,0.2,1.3,6.2
+20235,"Oignon, surgelé, cru",201,légumes,30.3,0.06,0.89,5.22
+20180,"Oignon, séché",201,légumes,355.0,0.46,8.95,74.1
+20111,"Oseille, crue",201,légumes,23.4,0.65,1.89,1.6
+20181,"Panais, cru",201,légumes,67.9,0.3,1.2,12.6
+20325,"Panais, cuit à l'étouffée",201,légumes,91.2,0.5,1.94,16.6
+20832,"Patate douce, pulpe, cuite à la vapeur, prélevée à la Martinique",201,légumes,126.0,0.067,1.48,25.2
+20093,"Petits pois et carottes, appertisés, égouttés",201,légumes,53.8,0.37,2.52,8.58
+20214,"Petits pois et carottes, surgelés, crus",201,légumes,53.0,0.47,3.4,7.1
+20036,"Petits pois, appertisés, égouttés",201,légumes,92.5,0.8,4.87,13.7
+20326,"Petits pois, bouillis/cuits à l'eau",201,légumes,80.7,0.6,6.38,9.93
+20072,"Petits pois, crus",201,légumes,81.2,0.4,5.42,11.4
+20037,"Petits pois, cuits",201,légumes,61.4,0.87,5.8,4.7
+20284,"Petits pois, purée",201,légumes,86.0,2.8,4.8,8.0
+20084,"Petits pois, surgelés, crus",201,légumes,77.9,0.4,5.86,9.5
+20124,"Petits pois, surgelés, cuits",201,légumes,65.8,0.27,5.15,7.95
+20151,"Piment, cru",201,légumes,37.4,0.44,1.87,5.75
+20038,"Pissenlit, cru",201,légumes,48.5,0.7,2.7,6.1
+20327,"Poireau, bouilli/cuit à l'eau",201,légumes,24.7,0.0,2.56,2.23
+20039,"Poireau, cru",201,légumes,30.4,0.3,1.5,4.55
+20236,"Poireau, surgelé, cru",201,légumes,26.6,0.26,1.48,3.37
+20216,"Pois mange-tout ou pois gourmand, bouilli/cuit à l'eau",201,légumes,30.9,0.3,2.25,3.39
+20173,"Pois mange-tout ou pois gourmand, cru",201,légumes,43.0,0.2,2.8,6.2
+20243,"Pois mange-tout ou pois gourmands, cuits",201,légumes,47.3,0.38,3.5,5.92
+20168,"Poivron jaune, cru",201,légumes,29.4,0.3,0.94,4.73
+20328,"Poivron jaune, sauté/poêlé",201,légumes,34.5,0.6,1.0,5.33
+20275,"Poivron rouge, appertisé, égoutté",201,légumes,26.3,0.2,0.96,4.5
+20087,"Poivron rouge, cru",201,légumes,33.6,0.0,1.06,5.98
+20088,"Poivron rouge, cuit",201,légumes,37.9,0.35,1.17,6.41
+20329,"Poivron rouge, sauté/poêlé",201,légumes,33.0,0.0,0.94,6.53
+20085,"Poivron vert, cru",201,légumes,22.5,0.0,0.81,3.43
+20086,"Poivron vert, cuit",201,légumes,17.3,0.2,0.92,2.36
+20330,"Poivron vert, sauté/poêlé",201,légumes,27.3,0.3,1.25,3.53
+20041,"Poivron, vert, jaune ou rouge, cru",201,légumes,22.6,0.27,0.8,3.5
+19999,"Poivron, vert, jaune ou rouge, cuit (aliment moyen)",201,légumes,33.0,0.33,1.11,5.42
+20331,"Potimarron, chair sans peau, bouilli/cuit à l'eau",201,légumes,38.6,0.3,1.06,6.88
+20132,"Potimarron, chair sans peau, cru",201,légumes,22.1,0.28,0.95,3.1
+20357,"Potimarron, chair sans peau, cuit (aliment moyen)",201,légumes,38.6,0.3,1.06,6.88
+20291,"Potimarron, chair sans peau, cuit à l'étouffée",201,légumes,44.2,0.5,1.31,7.05
+20044,"Potiron, cru",201,légumes,20.1,0.1,1.05,3.5
+20096,"Potiron, cuit",201,légumes,26.1,0.07,0.81,4.47
+20332,"Potiron, rôti/cuit au four",201,légumes,28.2,0.0,0.25,5.66
+20267,"Printanière ou jardinière de légumes, surgelée, crue (petits pois, pommes de terre, haricots verts, carottes, oignon)",201,légumes,51.3,0.078,2.4,8.48
+20089,"Radis noir, cru",201,légumes,28.2,0.0,0.94,5.52
+20045,"Radis rouge, cru",201,légumes,11.0,0.0,0.94,1.53
+20217,"Roquette, crue",201,légumes,27.9,0.66,2.58,2.1
+20201,"Rutabaga, cru",201,légumes,33.2,0.16,1.08,5.7
+20165,"Rutabaga, cuit",201,légumes,26.0,0.18,0.93,4.26
+20295,"Salade feuille de chêne, crue",201,légumes,10.7,0.0,1.13,1.03
+20012,"Salade ou chicorée frisée, crue",201,légumes,26.0,0.3,1.7,2.13
+20288,"Salade sucrine, crue",201,légumes,16.6,0.0,1.13,2.58
+25604,"Salade verte, crue, sans assaisonnement",201,légumes,13.5,0.1,1.01,1.5
+20283,"Salicorne (Salicornia sp.), crue",201,légumes,13.1,0.17,1.02,0.98
+20197,"Salsifis noir, ou scorsonère d'Espagne, cru",201,légumes,83.0,0.3,3.13,15.3
+20081,"Salsifis, appertisé, égoutté",201,légumes,29.2,0.17,1.33,4.33
+20333,"Salsifis, bouilli/cuit à l'eau",201,légumes,56.9,0.0,2.63,9.29
+20046,"Salsifis, cuit",201,légumes,67.7,0.17,2.73,12.3
+20237,"Salsifis, surgelé, cru",201,légumes,41.1,0.16,2.34,4.68
+20090,"Scarole, crue",201,légumes,20.5,0.23,1.44,2.0
+20172,"Tomate cerise, crue",201,légumes,31.8,0.0,1.31,5.62
+20192,"Tomate côtelée ou coeur de boeuf, crue",201,légumes,17.4,0.0,0.5,3.4
+20584,"Tomate grappe, crue",201,légumes,19.8,0.0,0.5,3.67
+20276,"Tomate ronde, crue",201,légumes,17.5,0.0,0.5,3.42
+20385,"Tomate sans précision, crue (aliment moyen)",201,légumes,19.2,0.0,0.6,3.69
+20119,"Tomate verte, crue",201,légumes,24.8,0.2,1.2,4.0
+20242,"Tomate, chair et peau, bouillie/cuite à l'eau",201,légumes,17.4,0.11,0.95,2.8
+20358,"Tomate, chair et peau, cuite (aliment moyen)",201,légumes,19.8,0.21,0.97,3.06
+20289,"Tomate, chair et peau, rôtie/cuite au four",201,légumes,24.0,0.4,1.0,3.53
+20169,"Tomate, chair, appertisée",201,légumes,22.6,0.0,1.2,3.63
+20068,"Tomate, concentré, appertisé",201,légumes,99.2,0.53,4.4,17.1
+20260,"Tomate, coulis, appertisé (purée de tomates mi-réduite à 11%)",201,légumes,45.5,0.2,2.05,7.57
+20268,"Tomate, double concentré, appertisé",201,légumes,99.5,0.47,3.75,19.3
+20137,"Tomate, pelée, appertisée, au jus, non égouttée",201,légumes,21.8,0.25,0.79,3.15
+20048,"Tomate, pelée, appertisée, égouttée",201,légumes,16.4,0.28,0.9,1.61
+20170,"Tomate, purée, appertisée",201,légumes,47.6,0.2,1.5,8.42
+20158,"Tétragone cornue, cuite",201,légumes,13.5,0.17,1.3,1.0
+20097,"Échalote, crue",201,légumes,61.7,0.0,1.81,12.2
+20255,"Échalote, cuite",201,légumes,69.3,0.0,2.13,13.5
+20335,"Échalote, sautée/poêlée sans matière grasse",201,légumes,67.3,0.4,2.0,12.3
+20060,"Épinard, appertisé, égoutté",201,légumes,24.5,0.5,2.81,0.93
+20336,"Épinard, bouilli/cuit à l'eau",201,légumes,26.8,0.7,3.38,0.0
+20059,"Épinard, cru",201,légumes,33.3,0.39,2.68,3.06
+20027,"Épinard, cuit",201,légumes,19.6,0.14,3.2,0.25
+20270,"Épinard, jeunes pousses pour salades, cru",201,légumes,17.0,0.4,2.06,0.0
+53101,"Banane plantain, cuite",202,pommes de terre et autres tubercules,125.0,0.18,0.79,28.9
+4004,Chips de pommes de terre nature ou aromatisées,202,pommes de terre et autres tubercules,532.0,32.7,6.0,51.0
+4038,"Chips de pommes de terre nature ou aromatisées, allégées en matière grasse (et assimilés )",202,pommes de terre et autres tubercules,481.0,22.1,6.57,61.4
+4050,"Chips de pommes de terre nature ou aromatisées, sans sel ajouté",202,pommes de terre et autres tubercules,503.0,30.8,6.2,47.6
+4037,"Chips de pommes de terre nature ou aromatisées, à l'ancienne",202,pommes de terre et autres tubercules,551.0,36.9,5.62,46.7
+4049,"Croquette de pomme de terre, surgelée, à cuire",202,pommes de terre et autres tubercules,164.0,6.59,2.52,22.4
+4016,"Flocons de pomme de terre, au lait ou à la crème, déshydratés",202,pommes de terre et autres tubercules,376.0,3.97,10.1,71.0
+4022,"Flocons de pomme de terre, nature, déshydratés",202,pommes de terre et autres tubercules,346.0,0.41,8.0,73.5
+4032,"Frites de pommes de terre, surgelées, cuites en friteuse",202,pommes de terre et autres tubercules,258.0,11.9,3.28,32.7
+4044,"Frites de pommes de terre, surgelées, préfrites, pour cuisson au four",202,pommes de terre et autres tubercules,142.0,4.73,2.38,21.0
+4046,"Frites de pommes de terre, surgelées, préfrites, pour cuisson en friteuse",202,pommes de terre et autres tubercules,244.0,12.1,3.12,29.1
+4045,"Frites de pommes de terre, surgelées, préfrites, pour cuisson micro-onde",202,pommes de terre et autres tubercules,223.0,10.2,3.26,27.2
+4030,"Frites de pommes de terre, surgelées, rôties/cuites au four",202,pommes de terre et autres tubercules,213.0,6.6,3.75,32.6
+53672,"Igname, crue",202,pommes de terre et autres tubercules,111.0,0.2,1.25,23.9
+53502,"Igname, pelée, crue",202,pommes de terre et autres tubercules,111.0,0.17,1.53,23.7
+53503,"Igname, épluchée, bouillie/cuite à l'eau",202,pommes de terre et autres tubercules,109.0,0.14,1.49,23.6
+54031,"Manioc, racine crue",202,pommes de terre et autres tubercules,157.0,0.28,1.36,36.3
+54034,"Manioc, racine cuite",202,pommes de terre et autres tubercules,135.0,0.043,0.69,32.8
+4101,"Patate douce, crue",202,pommes de terre et autres tubercules,81.2,0.05,1.57,17.1
+4102,"Patate douce, cuite",202,pommes de terre et autres tubercules,79.1,0.15,1.69,16.3
+4103,"Patate douce, purée, cuisinée à la crème",202,pommes de terre et autres tubercules,79.8,2.0,1.1,12.1
+4021,"Pomme de terre dauphine, surgelée, cuite",202,pommes de terre et autres tubercules,302.0,17.7,4.5,30.2
+4020,"Pomme de terre dauphine, surgelée, à cuire",202,pommes de terre et autres tubercules,242.0,15.7,4.25,19.7
+4028,"Pomme de terre de conservation, sans peau, bouillie/cuite à l'eau",202,pommes de terre et autres tubercules,72.6,0.0,1.81,15.4
+4034,"Pomme de terre duchesse, surgelée, cuite",202,pommes de terre et autres tubercules,218.0,8.5,3.44,29.6
+4042,"Pomme de terre duchesse, surgelée, à cuire",202,pommes de terre et autres tubercules,157.0,6.26,2.41,21.4
+4053,"Pomme de terre grenaille, préfrite, surgelée, à cuire",202,pommes de terre et autres tubercules,133.0,5.3,2.4,17.9
+4035,"Pomme de terre noisette, surgelée, cuite",202,pommes de terre et autres tubercules,191.0,6.6,2.81,28.4
+4013,"Pomme de terre noisette, surgelée, à cuire",202,pommes de terre et autres tubercules,179.0,7.02,2.44,25.3
+4007,"Pomme de terre nouvelle ou primeur, bouillie/cuite à l'eau",202,pommes de terre et autres tubercules,71.6,0.3,1.44,15.0
+4029,"Pomme de terre nouvelle ou primeur, bouillie/cuite à l'eau, sans peau",202,pommes de terre et autres tubercules,71.1,0.0,1.84,14.9
+4023,"Pomme de terre nouvelle ou primeur, crue",202,pommes de terre et autres tubercules,76.4,0.3,1.94,15.8
+4015,"Pomme de terre poêlée, avec matière grasse",202,pommes de terre et autres tubercules,137.0,5.7,2.5,17.3
+4036,Pomme de terre sautée/poêlée/rissolée à la graisse de canard,202,pommes de terre et autres tubercules,200.0,11.4,2.44,20.8
+4027,"Pomme de terre sautée/poêlée/rissolée, préfrite, surgelée, cuite",202,pommes de terre et autres tubercules,156.0,4.8,2.81,23.0
+4043,"Pomme de terre sautée/poêlée/rissolée, préfrite, surgelée, à cuire",202,pommes de terre et autres tubercules,137.0,4.5,2.35,20.4
+4014,"Pomme de terre vapeur, sous vide",202,pommes de terre et autres tubercules,76.0,0.25,1.84,15.8
+4011,"Pomme de terre, appertisée, égouttée",202,pommes de terre et autres tubercules,57.2,0.41,1.58,10.7
+4003,"Pomme de terre, bouillie/cuite à l'eau",202,pommes de terre et autres tubercules,81.0,0.34,1.8,16.8
+4048,"Pomme de terre, cuite (aliment moyen)",202,pommes de terre et autres tubercules,94.9,1.58,2.05,17.2
+4026,"Pomme de terre, rôtie/cuite au four",202,pommes de terre et autres tubercules,91.4,0.13,2.5,19.0
+4008,"Pomme de terre, sans peau, crue",202,pommes de terre et autres tubercules,80.0,0.09,2.02,16.2
+4002,"Pomme de terre, sans peau, rôtie/cuite au four",202,pommes de terre et autres tubercules,91.9,0.1,1.96,20.1
+4025,"Potatoes ou wedges ou quartiers de pommes de terre épicés, surgelées, cuites",202,pommes de terre et autres tubercules,175.0,5.8,3.25,25.3
+4052,"Potatoes ou wedges ou quartiers de pommes de terre épicés, surgelées, à cuire",202,pommes de terre et autres tubercules,141.0,5.0,2.48,20.3
+4051,"Poêlée de pommes de terre à la sarladaise (graisse de canard, ail et persil), surgelée, à cuire",202,pommes de terre et autres tubercules,203.0,11.6,2.27,20.9
+4047,Purée de pomme de terre (aliment moyen),202,pommes de terre et autres tubercules,96.8,3.7,2.1,13.0
+4040,"Purée de pomme de terre, avec lait et beurre, salée",202,pommes de terre et autres tubercules,117.0,6.7,1.98,11.3
+4018,"Purée de pomme de terre, avec lait et beurre, sans sel ajouté",202,pommes de terre et autres tubercules,94.8,2.4,1.89,15.7
+4019,"Purée de pomme de terre, à base de flocons, reconstituée avec lait demi-écrémé et eau, non salée",202,pommes de terre et autres tubercules,68.5,0.53,2.63,12.4
+4017,"Purée de pomme de terre, à base de flocons, reconstituée avec lait entier et matière grasse",202,pommes de terre et autres tubercules,107.0,5.18,1.92,12.6
+4039,Rostis ou galette de pomme de terre,202,pommes de terre et autres tubercules,182.0,8.3,2.38,22.5
+4000,"Tapioca ou perles du Japon, cru",202,pommes de terre et autres tubercules,354.0,0.02,0.19,87.8
+53200,"Taro, tubercule, cru",202,pommes de terre et autres tubercules,105.0,0.2,1.5,22.4
+53201,"Taro, tubercule, cuit",202,pommes de terre et autres tubercules,131.0,0.11,0.52,29.5
+20196,"Topinambour, cru",202,pommes de terre et autres tubercules,74.7,0.01,2.0,15.8
+20050,"Topinambour, cuit",202,pommes de terre et autres tubercules,69.3,0.01,1.8,14.4
+20517,"Fève à écosser, fraîche, crue",203,légumineuses,61.5,0.67,6.76,4.2
+20500,"Fève, bouillie/cuite à l'eau",203,légumineuses,83.3,0.8,8.06,9.35
+20543,"Fève, fraîche, surgelée, bouillie/cuite à l'eau",203,légumineuses,63.6,0.0,5.6,7.4
+20542,"Fève, pelée, fraîche, surgelée, bouillie/cuite à l'eau",203,légumineuses,71.9,0.5,6.4,9.0
+20541,"Fève, pelée, fraîche, surgelée, crue",203,légumineuses,99.3,0.26,9.55,12.2
+20518,"Fève, sèche",203,légumineuses,301.0,1.53,26.1,33.3
+20511,"Haricot blanc, appertisé, égoutté",203,légumineuses,85.5,0.5,5.88,10.9
+20502,"Haricot blanc, bouilli/cuit à l'eau",203,légumineuses,112.0,1.1,6.75,12.0
+20501,"Haricot blanc, sec",203,légumineuses,307.0,0.85,23.4,43.9
+20293,"Haricot coco, bouilli/cuit à l'eau",203,légumineuses,130.0,0.5,9.63,13.7
+20529,"Haricot de Lima ou pois savon ou pois du Cap ou pois souche, cru",203,légumineuses,105.0,0.86,6.84,15.3
+20508,"Haricot flageolet, appertisé, égoutté",203,légumineuses,92.9,0.79,6.1,12.2
+20513,"Haricot flageolet, bouilli/cuit à l'eau",203,légumineuses,112.0,1.1,6.75,12.0
+20537,"Haricot flageolet, frais, surgelé, cru",203,légumineuses,153.0,0.52,9.32,25.6
+20540,"Haricot flageolet, vert, bouilli/cuit à l'eau",203,légumineuses,115.0,0.91,8.5,13.0
+20539,"Haricot flageolet, vert, sec",203,légumineuses,315.0,2.6,19.1,42.1
+20531,"Haricot mungo, frais, bouilli/cuit à l'eau",203,légumineuses,95.7,0.55,7.54,11.9
+20530,"Haricot mungo, sec",203,légumineuses,343.0,1.64,25.2,47.6
+20524,"Haricot rouge, appertisé, égoutté",203,légumineuses,108.0,0.97,8.31,13.0
+20503,"Haricot rouge, bouilli/cuit à l'eau",203,légumineuses,116.0,0.6,9.63,12.3
+20525,"Haricot rouge, sec",203,légumineuses,314.0,1.06,22.5,46.1
+20588,"Lentille blonde, bouillie/cuite à l'eau",203,légumineuses,122.0,0.7,9.7,16.3
+20586,"Lentille blonde, sèche",203,légumineuses,339.0,1.9,26.1,48.3
+20589,"Lentille corail, bouillie/cuite à l'eau",203,légumineuses,123.0,0.5,10.6,15.0
+20535,"Lentille corail, sèche",203,légumineuses,328.0,0.8,27.7,44.9
+20587,"Lentille verte, bouillie/cuite à l'eau",203,légumineuses,125.0,0.58,10.1,16.2
+20585,"Lentille verte, sèche",203,légumineuses,327.0,1.8,25.1,44.5
+20360,"Lentille, bouillie/cuite à l'eau (aliment moyen)",203,légumineuses,125.0,0.57,10.1,16.2
+20510,"Lentille, cuisinée, appertisée, égouttée",203,légumineuses,90.4,0.64,6.83,12.3
+20359,"Lentille, sèche (aliment moyen)",203,légumineuses,327.0,1.8,25.1,44.5
+20534,"Lupin, graine, sec",203,légumineuses,356.0,9.74,36.2,21.5
+20700,"Légume sec, cuit (aliment moyen)",203,légumineuses,113.0,0.78,8.22,13.8
+20506,"Pois cassé, bouilli/cuit à l'eau",203,légumineuses,129.0,1.49,8.6,16.3
+20515,"Pois cassé, sec",203,légumineuses,347.0,1.16,23.8,47.5
+20532,"Pois chiche, appertisé, égoutté",203,légumineuses,122.0,2.68,6.74,15.0
+20507,"Pois chiche, bouilli/cuit à l'eau",203,légumineuses,148.0,3.0,8.31,17.7
+20516,"Pois chiche, sec",203,légumineuses,350.0,6.04,20.5,47.5
+20527,"Pois d'Angole vert, frais, cru",203,légumineuses,129.0,1.64,7.2,18.8
+13704,"Abricot au sirop (sans précision sur léger ou classique), appertisé, égoutté (aliment moyen)",204,fruits,67.9,0.0,0.59,15.5
+13713,"Abricot au sirop léger, appertisé, non égoutté",204,fruits,62.5,0.043,0.81,14.0
+13712,"Abricot au sirop léger, appertisé, égoutté",204,fruits,61.1,0.0,0.94,13.5
+13715,"Abricot au sirop, appertisé, non égoutté",204,fruits,69.7,0.0,0.29,16.3
+13714,"Abricot au sirop, appertisé, égoutté",204,fruits,69.6,0.0,0.5,16.0
+13000,"Abricot, dénoyauté, cru",204,fruits,44.1,0.0,0.81,9.01
+13001,"Abricot, dénoyauté, sec",204,fruits,239.0,0.5,2.88,59.1
+13623,"Abricot, dénoyauté, sec, moelleux (réhydraté à 35-45%)",204,fruits,200.0,0.4,2.31,51.1
+13201,"Ananas Victoria ou Queen Victoria, chair sans peau, crue, prélevé à La Réunion",204,fruits,69.8,0.0,0.94,15.1
+13717,"Ananas au jus d'ananas, appertisé, non égoutté",204,fruits,55.0,0.0,0.25,12.9
+13716,"Ananas au jus d'ananas, appertisé, égoutté",204,fruits,56.0,0.0,0.25,12.9
+13719,"Ananas au sirop léger, appertisé, non égoutté",204,fruits,66.5,0.078,0.25,15.6
+13718,"Ananas au sirop léger, appertisé, égoutté",204,fruits,65.8,0.0,0.25,15.3
+13002,"Ananas, chair sans peau, cru",204,fruits,51.6,0.0,0.25,11.7
+13056,"Anone ou chérimole, chair sans peau, crue",204,fruits,80.0,0.68,1.57,15.4
+13183,"Baie de goji, séchée",204,fruits,300.0,2.9,12.1,49.0
+13005,"Banane, chair sans peau, crue",204,fruits,87.6,0.0,1.06,19.7
+13089,"Banane, chair sans peau, sèche",204,fruits,365.0,1.81,3.89,78.4
+13178,"Canneberge ou cranberry, séchée, sucrée",204,fruits,332.0,1.0,0.25,76.4
+13054,"Carambole, chair et peau, crue",204,fruits,28.4,0.33,1.04,3.83
+13007,"Cassis, cru",204,fruits,70.2,0.41,1.4,9.68
+13008,"Ceriser, chair et peau, sans noyau, crue",204,fruits,53.7,0.0,0.81,13.0
+13067,"Citron vert ou lime, chair sans peau, sans pépins, cru",204,fruits,39.3,0.0,1.13,3.14
+13009,"Citron, chair sans peau, sans pépins, cru",204,fruits,24.3,0.0,0.25,1.56
+13024,"Clémentine ou mandarine, chair sans peau, sans pépins, crue",204,fruits,45.5,0.0,0.81,9.17
+13010,"Coing, cru",204,fruits,59.0,0.1,0.4,12.5
+13205,"Compote d'abricot, préemballée",204,fruits,103.0,0.1,0.72,24.1
+13151,"Compote de pomme, allégée en sucres, rayon ambiant",204,fruits,64.3,0.13,0.25,15.1
+13038,"Compote de pomme, préemballée",204,fruits,107.0,0.23,0.25,25.8
+13212,"Compote de pomme, sans précision sur la teneur en sucres ni sur le rayon (aliment moyen)",204,fruits,93.5,0.2,0.25,22.4
+13204,"Compote de pêche, préemballée",204,fruits,106.0,0.1,0.63,24.9
+13206,"Compote de rhubarbe, préemballée",204,fruits,111.0,0.067,0.57,25.8
+13185,"Compote ou assimilé, tout type de fruits, sans précision sur la teneur en sucres (allégée en sucres ou non, sans sucres ajoutés…) ni sur le rayon (aliment moyen)",204,fruits,80.2,0.16,0.26,19.1
+13211,"Compote, autres fruits, préemballée",204,fruits,101.0,0.072,0.25,23.9
+13199,"Compote, tout type de fruits autres que pomme seule, allégée en sucres, préemballée, rayon ambiant",204,fruits,65.7,0.2,0.25,15.4
+13129,"Compote, tout type de fruits, allégée en sucres, préemballée, rayon frais",204,fruits,63.8,0.073,0.17,14.7
+13011,"Datte, chair et peau, sans noyau, sèche",204,fruits,287.0,0.25,1.81,64.7
+13152,"Dessert de fruits, tout type de fruits (en taux de sucres : compotes allégées en sucres < desserts de fruits < compotes), préemballé, rayon ambiant",204,fruits,89.3,0.21,0.33,20.6
+13207,"Dessert de fruits, tout type de fruits (en taux de sucres : compotes allégées en sucres < desserts de fruits < compotes), préemballé, rayon frais",204,fruits,77.3,0.22,0.35,17.7
+13213,"Dessert de fruits, tout type de fruits (en taux de sucres : compotes allégées en sucres < desserts de fruits < compotes), préemballé, sans précision sur le rayon (aliment moyen)",204,fruits,84.4,0.22,0.34,19.4
+13063,"Figue de Barbarie, chair et peau, avec pépins, crue",204,fruits,51.5,0.11,0.12,9.79
+13012,"Figue, crue",204,fruits,67.6,0.0,1.19,13.5
+13013,"Figue, sèche",204,fruits,261.0,1.22,2.9,55.0
+13014,"Fraise, crue",204,fruits,35.1,0.0,0.63,6.03
+13015,"Framboise, crue",204,fruits,47.9,0.8,1.19,5.83
+13999,Fruit cru (aliment moyen),204,fruits,56.6,0.26,0.69,12.1
+13016,"Fruit de la passion ou maracudja, chair sans peau, avec pépins, cru",204,fruits,102.0,3.0,2.13,10.9
+13996,Fruit séché (aliment moyen),204,fruits,267.0,0.56,2.13,61.3
+13083,"Goyave, chair sans peau, crue",204,fruits,68.3,0.95,2.55,9.02
+13018,"Grenade, chair sans peau, avec pépins, crue",204,fruits,81.0,1.2,1.44,14.3
+13020,"Groseille à maquereau, crue",204,fruits,39.4,0.58,0.88,4.45
+13019,"Groseille, crue",204,fruits,67.2,0.7,1.56,7.06
+13417,"Jus de mandarine commune, pur jus filtré, prélevée à la Martinique",204,fruits,42.1,0.57,0.61,8.63
+13418,"Jus de mandarine macaque, pur jus filtré, prélevée à la Martinique",204,fruits,45.5,0.0,0.6,10.8
+13421,"Jus de prune de cythère verte ""géante"" (variété locale), fruit mûr, pur jus filtré, prélevée à la Martinique",204,fruits,33.4,0.19,0.29,7.13
+13422,"Jus de prune de cythère verte ""géante"" (variété locale), fruit vert, pur jus filtré, prélevée à la Martinique",204,fruits,32.0,0.28,0.44,6.55
+13423,"Jus de prune de cythère verte ""naine"" (variété hybride), fruit mûr, pur jus filtré, prélevée à la Martinique",204,fruits,46.4,0.21,0.69,9.97
+13424,"Jus de prune de cythère verte ""naine"" (variété hybride), fruit vert, pur jus filtré, prélevée à la Martinique",204,fruits,31.9,0.26,0.67,6.34
+13066,"Kaki, chair et peau, cru",204,fruits,66.0,0.0,0.88,14.3
+13021,"Kiwi, chair sans peau, avec pépins, cru",204,fruits,60.9,0.6,0.88,11.0
+13724,"Litchi, chair sans peau, sans noyau,  au sirop léger, appertisé, égoutté",204,fruits,62.8,0.19,0.63,14.3
+13023,"Litchi, chair sans peau, sans noyau, cru",204,fruits,77.5,0.0,1.13,16.1
+13705,"Macédoine ou cocktail ou salade de fruits, au sirop (sans précision sur léger ou classique), appertisé, égouttée (aliment moyen)",204,fruits,64.9,0.0,0.25,15.2
+13709,"Macédoine ou cocktail ou salade de fruits, au sirop léger, appertisé, non égoutté",204,fruits,59.7,0.061,0.25,14.0
+13708,"Macédoine ou cocktail ou salade de fruits, au sirop léger, appertisé, égoutté",204,fruits,59.1,0.0,0.25,13.7
+13707,"Macédoine ou cocktail ou salade de fruits, au sirop, appertisé, non égoutté",204,fruits,74.8,0.0,0.25,17.8
+13706,"Macédoine ou cocktail ou salade de fruits, au sirop, appertisé, égoutté",204,fruits,71.3,0.0,0.25,16.8
+13200,"Mangue José, chair sans peau, sans noyau, crue, prélevée à La Réunion (Mangifera indica L.)",204,fruits,88.8,0.5,0.75,19.3
+13025,"Mangue, chair sans peau, sans noyau, crue",204,fruits,71.1,0.0,0.63,14.3
+13026,"Melon cantaloup (par ex.: Charentais), chair sans peau, sans pépins, cru",204,fruits,59.8,0.0,1.13,14.8
+13742,"Melon miel ou melon honeydew, chair sans peau, sans pépins, cru",204,fruits,22.2,0.14,0.54,4.3
+13028,"Myrtille, crue",204,fruits,57.7,0.33,0.87,10.6
+13051,"Mélange apéritif de fruits exotiques, sec",204,fruits,389.0,10.5,2.19,69.5
+13029,"Mûre (de ronce), crue",204,fruits,46.0,0.7,1.13,6.53
+13149,"Nectarine ou brugnon, blanche, chair et peau, sans noyau, crue",204,fruits,49.5,0.0,0.81,11.4
+13399,"Nectarine ou brugnon, chair et peau, sans noyau, crue (aliment moyen)",204,fruits,49.5,0.0,0.74,11.3
+13148,"Nectarine ou brugnon, jaune, chair et peau, sans noyau, crue",204,fruits,49.5,0.0,0.69,11.3
+13564,"Nèfle du Japon, chair et peau, sans noyau, crue",204,fruits,48.1,0.2,0.43,9.9
+13034,"Orange, chair sans peau, sans pépins, crue",204,fruits,42.0,0.0,0.75,8.03
+13614,"Pamplemousse chinois, chair sans peau, sans pépins, cru",204,fruits,38.4,0.04,0.76,7.14
+13202,"Papaye Colombo (fruit mûr), chair sans peau, sans pépins, crue, prélevée à La Réunion (Carica papaya L.)",204,fruits,38.0,0.0,0.56,7.88
+13035,"Papaye, chair sans peau, crue",204,fruits,39.6,0.0,0.75,8.53
+13036,"Pastèque, chair sans peau, sans pépins, crue",204,fruits,35.4,0.0,0.69,8.33
+13188,"Poire Conférence, chair sans peau, crue",204,fruits,49.1,0.0,0.25,11.4
+13189,"Poire Williams, chair sans peau, crue",204,fruits,50.2,0.0,0.25,11.5
+13735,"Poire au sirop léger, appertisée, non égouttée",204,fruits,62.6,0.12,0.3,14.5
+13734,"Poire au sirop léger, appertisée, égouttée",204,fruits,63.9,0.4,0.25,13.9
+13037,"Poire, chair et peau, crue",204,fruits,56.6,0.27,0.36,12.3
+13397,"Poire, chair, crue (aliment moyen)",204,fruits,49.7,0.0,0.25,11.4
+13040,"Pomelo (dit Pamplemousse), chair sans peau, sans pépins, cru",204,fruits,33.5,0.0,0.84,5.92
+13085,"Pomme Canada, chair sans peau, crue",204,fruits,51.1,0.1,0.4,11.6
+13190,"Pomme Chantecler, chair sans peau, crue",204,fruits,47.2,0.0,0.25,11.2
+13191,"Pomme Gala, chair sans peau, crue",204,fruits,51.6,0.0,0.25,11.9
+13620,"Pomme Golden, chair et peau, crue",204,fruits,54.1,0.0,0.25,12.8
+13086,"Pomme Golden, chair sans peau, crue",204,fruits,50.4,0.0,0.25,11.7
+13122,"Pomme Granny Smith, chair et peau, crue",204,fruits,48.6,0.0,0.25,10.7
+13121,"Pomme Granny Smith, chair sans peau, crue",204,fruits,51.0,0.0,0.25,11.4
+13192,"Pomme Pink lady, chair sans peau, crue",204,fruits,57.3,0.0,0.25,12.8
+13039,"Pomme, chair et peau, crue",204,fruits,54.0,0.25,0.25,11.6
+13176,"Pomme, chair sans peau, bouillie/cuite à l'eau",204,fruits,54.0,0.36,0.26,11.2
+13396,"Pomme, chair sans peau, crue (aliment moyen)",204,fruits,51.3,0.24,0.26,11.9
+13175,"Pomme, chair sans peau, rôtie/cuite au four",204,fruits,52.7,0.0,0.16,12.9
+13111,"Pomme, sèche",204,fruits,247.0,0.32,0.93,55.0
+13041,"Prune Reine-Claude, sans noyau, crue",204,fruits,69.0,0.0,0.94,16.4
+13027,"Prune mirabelle, sans noyau, crue",204,fruits,74.6,0.0,0.63,18.0
+13583,"Prune violette, sans noyau, crue",204,fruits,46.4,0.1,0.8,9.6
+13100,"Prune, sans noyau, crue",204,fruits,51.6,0.28,0.7,9.92
+13042,"Pruneau, sans noyau, sec",204,fruits,229.0,0.4,1.63,55.4
+13210,"Purée de fruits, tout type de fruits, type ""compote sans sucres ajoutés"", préemballée, rayon frais",204,fruits,58.7,0.29,0.43,12.7
+13153,"Purée de fruits, tout type de fruits, type ""compote sans sucres ajoutés"", rayon ambiant",204,fruits,56.4,0.0,0.25,13.3
+13214,"Purée de fruits, tout type de fruits, type ""compote sans sucres ajoutés"", sans précision sur le rayon (aliment moyen)",204,fruits,56.4,0.15,0.25,13.3
+13187,"Purée de pommes, type ""compote sans sucres ajoutés"", rayon ambiant",204,fruits,56.4,0.28,1.13,11.6
+13193,"Pêche blanche, chair et peau, sans noyau, crue",204,fruits,44.3,0.0,0.69,9.48
+13194,"Pêche blanche, chair sans peau, sans noyau, crue",204,fruits,44.3,0.0,0.63,9.63
+13195,"Pêche jaune, chair sans peau, sans noyau, crue",204,fruits,44.5,0.0,0.69,9.8
+13043,"Pêche, chair et peau, sans noyau, crue",204,fruits,37.9,0.25,0.91,7.55
+13118,"Pêche, chair et peau, sans noyau, sèche",204,fruits,329.0,1.0,5.0,65.4
+13398,"Pêche, chair sans peau, sans noyau, crue (aliment moyen)",204,fruits,44.4,0.0,0.67,9.74
+13731,"Pêche, sans noyau, au sirop léger, appertisée, non égouttée",204,fruits,60.0,0.038,0.31,14.0
+13730,"Pêche, sans noyau, au sirop léger, appertisée, égouttée",204,fruits,59.0,0.0,0.5,13.5
+13101,"Raisin Chasselas, cru",204,fruits,77.8,0.5,0.75,16.9
+13044,"Raisin blanc, à gros grain (type Italia ou Dattier), cru",204,fruits,71.6,0.0,0.75,16.6
+13395,Raisin cru (aliment moyen),204,fruits,71.0,0.25,0.7,16.3
+13621,"Raisin noir Muscat, cru",204,fruits,86.6,0.0,0.69,20.0
+13045,"Raisin noir, cru",204,fruits,69.5,0.25,0.57,15.6
+13046,Raisin sec,204,fruits,322.0,0.9,3.0,73.2
+13047,"Rhubarbe, tige, crue",204,fruits,18.1,0.16,0.73,1.12
+13203,"Rhubarbe, tige, cuite",204,fruits,18.8,0.0,0.94,1.35
+13134,"Salade de fruits, crue",204,fruits,79.3,0.24,0.61,18.0
+13208,"Spécialité de fruits divers, sucrée (mélange chairs et/ou purées de fruits, mais toujours avec autre ingrédient), préemballée, rayon frais",204,fruits,79.2,0.22,0.36,18.2
+13215,"Spécialité de fruits, tout type de fruits, (mélange chairs et/ou purées de fruits, mais toujours avec autre ingrédient), sans précision sur la teneur en sucres ni sur le rayon (aliment moyen)",204,fruits,72.7,0.41,0.28,16.5
+13174,"Spécialité de fruits, tout type de fruits, sans sucres ajoutés (mélange chairs et/ou purées de fruits, mais toujours avec autre ingrédient), préemballée, rayon ambiant",204,fruits,58.3,0.37,0.32,12.7
+13209,"Spécialité de fruits, tout type de fruits, sans sucres ajoutés (mélange chairs et/ou purées de fruits, mais toujours avec autre ingrédient), préemballée, rayon frais",204,fruits,55.6,0.3,0.38,12.2
+13154,"Spécialité de fruits, tout type de fruits, sucrée (mélange chairs et/ou purées de fruits, mais toujours avec autre ingrédient), préemballée, rayon ambiant",204,fruits,72.7,0.41,0.28,16.5
+15000,"Amande, avec peau, sans sel ajouté",205,fruits à coque et graines oléagineuses,615.0,51.3,18.8,9.51
+15042,"Amande, grillée, salée",205,fruits à coque et graines oléagineuses,647.0,53.9,20.0,12.2
+15062,"Amande, grillée, salée, goût fumé",205,fruits à coque et graines oléagineuses,629.0,54.0,18.6,9.01
+15041,"Amande, émondée, sans sel ajouté",205,fruits à coque et graines oléagineuses,631.0,52.5,21.4,8.76
+15202,Beurre de cacahuète ou pâte d'arachide,205,fruits à coque et graines oléagineuses,643.0,51.4,22.2,17.3
+15037,"Cacahuète, grillée à sec, salée",205,fruits à coque et graines oléagineuses,615.0,47.7,21.6,17.9
+15057,"Cacahuète, grillée, aromatisée",205,fruits à coque et graines oléagineuses,598.0,46.6,22.8,14.6
+15002,"Cacahuète, grillée, salée",205,fruits à coque et graines oléagineuses,635.0,50.8,22.9,14.2
+15053,"Cacahuète, grillée, sans sel ajouté",205,fruits à coque et graines oléagineuses,644.0,51.9,23.5,14.4
+15001,"Cacahuète, sans sel ajouté",205,fruits à coque et graines oléagineuses,623.0,49.1,22.8,14.8
+15063,"Chanvre ou chènevis, graine décortiquée",205,fruits à coque et graines oléagineuses,617.0,48.8,30.8,5.38
+15047,"Chia, graine, séchée",205,fruits à coque et graines oléagineuses,454.0,30.7,16.5,7.72
+15039,"Châtaigne ou marron, appertisé",205,fruits à coque et graines oléagineuses,145.0,1.4,1.96,28.8
+15020,"Châtaigne, bouillie/cuite à l'eau",205,fruits à coque et graines oléagineuses,123.0,1.38,2.0,23.0
+15024,"Châtaigne, crue",205,fruits à coque et graines oléagineuses,189.0,1.76,2.02,36.8
+15021,"Châtaigne, grillée",205,fruits à coque et graines oléagineuses,211.0,1.7,3.34,41.1
+15064,"Courge, graine, séchée",205,fruits à coque et graines oléagineuses,618.0,49.1,29.5,5.39
+15065,"Fruits à coques et cacahuète, salé (aliment moyen)",205,fruits à coque et graines oléagineuses,630.0,50.1,20.4,17.6
+15066,"Fruits à coques et cacahuète, sans sel ajouté (aliment moyen)",205,fruits à coque et graines oléagineuses,632.0,55.0,15.5,10.5
+15052,"Lin, brun, graine",205,fruits à coque et graines oléagineuses,533.0,42.2,18.0,3.56
+15034,"Lin, graine",205,fruits à coque et graines oléagineuses,528.0,40.3,19.0,6.49
+15032,"Luzerne, graine",205,fruits à coque et graines oléagineuses,426.0,12.6,29.7,39.3
+15048,"Mélange apéritif de graines et fruits séchés, sans sel ajouté",205,fruits à coque et graines oléagineuses,493.0,26.3,8.29,51.0
+15049,"Mélange apéritif de graines et raisins secs, sans sel ajouté",205,fruits à coque et graines oléagineuses,541.0,37.2,12.5,31.8
+15059,"Mélange apéritif de graines grillées, salées",205,fruits à coque et graines oléagineuses,637.0,54.7,18.6,9.69
+15017,Mélange apéritif de graines salées et fruits séchés,205,fruits à coque et graines oléagineuses,583.0,44.1,16.9,23.7
+15018,Mélange apéritif de graines salées et raisins secs,205,fruits à coque et graines oléagineuses,561.0,39.6,16.6,27.1
+15050,"Noisette grillée, salée",205,fruits à coque et graines oléagineuses,664.0,61.2,13.4,7.67
+15033,"Noisette grillée, sans sel ajouté",205,fruits à coque et graines oléagineuses,684.0,62.4,14.4,8.81
+15004,"Noisette, sans sel ajouté",205,fruits à coque et graines oléagineuses,632.0,56.9,14.4,7.16
+15055,"Noix de cajou, grillée à sec, sans sel ajouté",205,fruits à coque et graines oléagineuses,630.0,49.0,17.4,23.5
+15019,"Noix de cajou, grillée, salée",205,fruits à coque et graines oléagineuses,632.0,49.5,15.2,26.7
+15054,"Noix de cajou, grillée, sans sel ajouté",205,fruits à coque et graines oléagineuses,618.0,48.1,17.4,21.3
+15014,"Noix de coco, amande immature, fraîche",205,fruits à coque et graines oléagineuses,360.0,33.5,3.33,6.22
+15006,"Noix de coco, chair, fraîche",205,fruits à coque et graines oléagineuses,369.0,34.7,3.47,4.69
+15007,"Noix de coco, chair, sèche",205,fruits à coque et graines oléagineuses,692.0,66.8,6.83,7.81
+15043,"Noix de macadamia, grillée, salée",205,fruits à coque et graines oléagineuses,724.0,70.2,7.04,9.95
+15027,"Noix de macadamia, sans sel ajouté",205,fruits à coque et graines oléagineuses,757.0,75.8,7.91,5.22
+15046,"Noix de pécan, salées",205,fruits à coque et graines oléagineuses,731.0,73.0,10.2,5.0
+15026,"Noix de pécan, sans sel ajouté",205,fruits à coque et graines oléagineuses,727.0,72.0,9.17,4.25
+15008,"Noix du Brésil ou noix d'Amazonie, sans sel ajouté",205,fruits à coque et graines oléagineuses,701.0,67.1,14.3,4.23
+15005,"Noix, cerneau, séchée",205,fruits à coque et graines oléagineuses,709.0,67.3,13.3,6.88
+15025,Pignon de pin,205,fruits à coque et graines oléagineuses,712.0,68.4,13.7,2.93
+15009,"Pistache, grillée, salée",205,fruits à coque et graines oléagineuses,617.0,49.5,18.9,15.9
+15044,"Pistache, grillée, sans sel ajouté",205,fruits à coque et graines oléagineuses,631.0,51.6,18.4,14.9
+20901,"Soja, graine entière",205,fruits à coque et graines oléagineuses,441.0,19.9,36.5,20.9
+15010,"Sésame, graine",205,fruits à coque et graines oléagineuses,606.0,49.7,17.7,12.8
+15035,"Sésame, graine décortiquée",205,fruits à coque et graines oléagineuses,620.0,51.0,20.4,10.3
+15038,"Sésame, grillé, graine décortiquée",205,fruits à coque et graines oléagineuses,582.0,48.0,17.0,9.14
+15203,Tahin ou purée de sésame,205,fruits à coque et graines oléagineuses,631.0,53.4,17.7,13.8
+15011,"Tournesol, graine",205,fruits à coque et graines oléagineuses,653.0,55.5,21.3,10.1
+15045,"Tournesol, graine, grillé, salé",205,fruits à coque et graines oléagineuses,626.0,51.0,21.2,12.7

@@ -26,7 +26,8 @@ const categories = [
   { id: "herbs_spices", label: "Herbes & Épices", order: 16, icon: "sprout" },
   { id: "beverages", label: "Boissons", order: 17, icon: "glass-water" },
   { id: "processed_foods", label: "Produits transformés", order: 18, icon: "package" },
-  { id: "sports_nutrition", label: "Nutrition sportive", order: 19, icon: "dumbbell" }
+  { id: "sports_nutrition", label: "Nutrition sportive", order: 19, icon: "dumbbell" },
+  { id: "unknown", label: "Inconnu", order: 67, icon: "shield-question-mark" }
 ]
 
 async function seed() {

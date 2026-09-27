@@ -92,11 +92,14 @@ const cookingDayLabel = (day: Date) => {
   return format(day, 'EEEE', { locale: fr })
 }
 
-/** Recettes à préparer en une fois pour la fenêtre, parts cumulées ; les recettes supprimées depuis sont ignorées. */
+/**
+ * Recettes dont le premier repas de la fenêtre est aujourd'hui, à préparer en une fois pour toute la fenêtre (parts cumulées).
+ * Celles qui commencent un autre jour apparaîtront ce jour-là ; les recettes supprimées depuis sont ignorées.
+ */
 const cookingRecipes = computed<TodayCookingRecipe[]>(() =>
   recipesToCook(upcomingMeals.value, today, cookingEnd).flatMap((item) => {
     const recipe = recipesById.value.get(item.recipeId)
-    if (!recipe) return []
+    if (!recipe || differenceInCalendarDays(item.days[0]!, today) !== 0) return []
     return [{
       recipeId: recipe.id,
       title: recipe.title,

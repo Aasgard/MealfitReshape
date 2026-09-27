@@ -2,7 +2,7 @@
 import type { TodayCookingRecipe } from '~/types/today'
 
 defineProps<{
-  /** Recettes à préparer en une fois, dans l'ordre de leur premier repas. */
+  /** Recettes à préparer aujourd'hui, en une fois pour leurs repas des 7 prochains jours. */
   recipes: TodayCookingRecipe[]
 }>()
 
@@ -18,7 +18,7 @@ const formatParts = (parts: number) =>
 <template>
   <div class="overflow-hidden rounded-xl border border-default bg-default">
     <p v-if="!recipes.length" class="p-4 text-sm text-muted">
-      Aucune recette à cuisiner sur les 7 prochains jours.
+      Aucune recette à cuisiner aujourd'hui.
     </p>
 
     <ul v-else class="divide-y divide-default">

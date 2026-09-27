@@ -21,6 +21,8 @@ export type TodayMealRow = MealSlot & {
 export type TodayCookingRecipe = {
   recipeId: string
   title: string
+  /** Photo de la recette, affichée à la place de l'icône. */
+  imageUrl?: string
   /** Jours où elle est mangée. Ex : "Aujourd'hui, jeudi, samedi". */
   daysLabel: string
   /** Somme des parts de ces jours. */

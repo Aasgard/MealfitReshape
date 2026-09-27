@@ -89,19 +89,23 @@ await Promise.all([
 const dayEntries = computed(() => buildDayEntries(meals.value, selectedDay.value, recipesById.value, ingredientsById.value))
 const daySummary = computed(() => summarizeDay(dayEntries.value))
 
-/** Les 4 repas du plan, puis "En plus" / "Non compté" seulement s'ils contiennent quelque chose. */
-const mealRows = computed<TodayMealRow[]>(() => {
-  const toRow = (slot: MealSlot): TodayMealRow => {
-    const entries = dayEntries.value[slot.mealType] ?? []
-    return { ...slot, kcal: entries.reduce((total, entry) => total + entry.kcal, 0), entries }
-  }
-  return [
-    ...PLANNED_MEALS.map(toRow),
-    ...OUT_OF_PLAN_MEALS.filter(slot => dayEntries.value[slot.mealType]?.length).map(toRow),
-  ]
-})
-
 const ALL_MEAL_SLOTS = [...PLANNED_MEALS, ...OUT_OF_PLAN_MEALS]
+
+/** Repas rangés dans le panneau "Autres repas" (fermé par défaut) tant qu'ils sont vides. */
+const COLLAPSED_WHEN_EMPTY: MealType[] = ['SNACK', 'EXCESS']
+/** Repas toujours rangés dans le panneau. */
+const ALWAYS_COLLAPSED: MealType[] = ['NOTCOUNT']
+
+const allMealRows = computed(() => ALL_MEAL_SLOTS.map((slot): TodayMealRow => {
+  const entries = dayEntries.value[slot.mealType] ?? []
+  return { ...slot, kcal: entries.reduce((total, entry) => total + entry.kcal, 0), entries }
+}))
+
+const isCollapsed = (row: TodayMealRow) =>
+  ALWAYS_COLLAPSED.includes(row.mealType) || (COLLAPSED_WHEN_EMPTY.includes(row.mealType) && !row.entries.length)
+
+const mealRows = computed(() => allMealRows.value.filter(row => !isCollapsed(row)))
+const secondaryMealRows = computed(() => allMealRows.value.filter(isCollapsed))
 
 /** "aujourd'hui", "hier", "demain", puis le nom du jour : la fenêtre ne dure que 7 jours, il n'y a pas d'ambiguïté. */
 const cookingDayLabel = (day: Date) => {
@@ -123,6 +127,7 @@ const cookingRecipes = computed<TodayCookingRecipe[]>(() =>
     return [{
       recipeId: recipe.id,
       title: recipe.title,
+      imageUrl: recipe.imageUrl,
       daysLabel: capitalize(item.days.map(cookingDayLabel).join(', ')),
       parts: item.parts,
     }]
@@ -291,7 +296,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </NuxtLink>
             </div>
 
-            <TodayMeals :rows="mealRows" @add="openAddModal" @open="openEntryDetail" />
+            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" />
 
             <div class="flex items-baseline justify-between gap-3">
               <h2 class="text-lg font-bold tracking-tight text-highlighted">

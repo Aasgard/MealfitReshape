@@ -30,7 +30,14 @@ const formatParts = (parts: number) =>
           class="flex w-full cursor-pointer items-center gap-3 p-4 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
           @click="emit('open', recipe.recipeId, recipe.parts)"
         >
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-accented text-muted" aria-hidden="true">
+          <img
+            v-if="recipe.imageUrl"
+            :src="recipe.imageUrl"
+            alt=""
+            loading="lazy"
+            class="size-10 shrink-0 rounded-full bg-accented object-cover"
+          >
+          <div v-else class="flex size-10 shrink-0 items-center justify-center rounded-full bg-accented text-muted" aria-hidden="true">
             <UIcon name="i-lucide-chef-hat" class="size-4" />
           </div>
           <div class="min-w-0 flex-1">

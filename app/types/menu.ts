@@ -28,7 +28,10 @@ export interface MenuDayHeader {
 /** Une ligne du calendrier (un type de repas : Petit déj, Déjeuner, ...). */
 export interface MenuMealTypeRow {
   key: MealType
+  /** Nom complet, lu au survol et par les lecteurs d'écran (la colonne n'affiche que l'icône). */
   label: string
+  /** Icône affichée dans la première colonne du calendrier. Ex: "i-lucide-sun" */
+  icon: string
   /** Sous-titre affiché sous le libellé. Ex: "Hors plan" */
   avgLabel?: string
 }

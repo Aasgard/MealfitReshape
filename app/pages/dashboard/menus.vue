@@ -46,12 +46,12 @@ watch(meals.error, (error) => {
 await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promise.value.catch(() => undefined)])
 
 const mealTypes: MenuMealTypeRow[] = [
-  { key: 'BREAKFAST', label: 'Petit déj' },
-  { key: 'LUNCH', label: 'Déjeuner' },
-  { key: 'DINER', label: 'Diner' },
-  { key: 'SNACK', label: 'Collation' },
-  { key: EXTRA_MEAL_KEY, label: 'En plus', avgLabel: 'Hors plan' },
-  { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux' },
+  { key: 'BREAKFAST', label: 'Petit déj', icon: 'i-lucide-sunrise' },
+  { key: 'LUNCH', label: 'Déjeuner', icon: 'i-lucide-sun' },
+  { key: 'DINER', label: 'Diner', icon: 'i-lucide-sunset' },
+  { key: 'SNACK', label: 'Collation', icon: 'i-lucide-cookie' },
+  { key: EXTRA_MEAL_KEY, label: 'En plus', avgLabel: 'Hors plan', icon: 'i-lucide-candy-off' },
+  { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux', icon: 'i-lucide-save-off' },
 ]
 
 /** Bande des semaines sélectionnables, centrée sur la semaine actuellement affichée. */

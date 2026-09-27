@@ -78,7 +78,7 @@ const macrosFor = (dayKey: string) => {
 <template>
   <div class="rounded-xl border border-default bg-default overflow-hidden">
     <div ref="scrollContainer" class="overflow-x-auto">
-      <div class="min-w-220 grid grid-cols-[110px_repeat(7,minmax(0,1fr))]">
+      <div class="min-w-220 grid grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]">
         <div ref="stickyCorner" class="sticky left-0 z-10 border-b border-r border-default bg-elevated" />
         <div
           v-for="day in days"
@@ -102,13 +102,13 @@ const macrosFor = (dayKey: string) => {
         </div>
 
         <template v-for="mealType in mealTypes" :key="mealType.key">
-          <div class="sticky left-0 z-10 border-b border-r border-default px-2 py-2 flex flex-col justify-center gap-0.5 bg-elevated">
-            <p class="text-xs font-semibold text-highlighted truncate">
-              {{ mealType.label }}
-            </p>
-            <p v-if="mealType.avgLabel" class="text-xs text-dimmed truncate">
-              {{ mealType.avgLabel }}
-            </p>
+          <!-- Icône seule ; le libellé reste lisible au survol et par les lecteurs d'écran. -->
+          <div
+            class="sticky left-0 z-10 border-b border-r border-default px-1 py-2 flex items-center justify-center bg-elevated"
+            :title="[mealType.label, mealType.avgLabel].filter(Boolean).join(' · ')"
+          >
+            <UIcon :name="mealType.icon" class="size-5 shrink-0 text-muted" aria-hidden="true" />
+            <span class="sr-only">{{ mealType.label }}<template v-if="mealType.avgLabel"> ({{ mealType.avgLabel }})</template></span>
           </div>
           <MenuWeekCell
             v-for="day in days"
@@ -125,7 +125,7 @@ const macrosFor = (dayKey: string) => {
           />
         </template>
 
-        <div class="sticky left-0 z-10 border-r border-default px-2 py-2 flex items-center bg-elevated">
+        <div class="sticky left-0 z-10 border-r border-default px-1 py-2 flex items-center justify-center bg-elevated">
           <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
             Total
           </p>

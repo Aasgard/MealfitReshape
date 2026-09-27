@@ -15,7 +15,9 @@
     "purge:recipes": "node scripts/purge-recipes.cjs",
     "purge:meals": "node scripts/purge-meals.cjs",
     "publish:recipes": "node scripts/publish-recipes.cjs",
-    "publish:recipes:apply": "node scripts/publish-recipes.cjs --apply"
+    "publish:recipes:apply": "node scripts/publish-recipes.cjs --apply",
+    "publish:ingredients": "node scripts/publish-ingredients.cjs",
+    "publish:ingredients:apply": "node scripts/publish-ingredients.cjs --apply"
   },
   "dependencies": {
     "@nuxt/ui": "^4.4.0",

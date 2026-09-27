@@ -68,3 +68,10 @@ export function macrosForQuantity(ing: Ingredient, unitId: string | null, quanti
 
   return scaleMacros(base, (unitId == null ? grams : grams * quantity) / 100)
 }
+
+/** Unités / équivalents d'un ingrédient (hors grammes), triés par libellé. */
+export function ingredientUnitEntries(ing: Ingredient | null) {
+  if (!ing?.units) return []
+  return Object.entries(ing.units).map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+}

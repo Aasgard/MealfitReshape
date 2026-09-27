@@ -107,7 +107,7 @@ export function buildIngredientDraft(ingredient: Ingredient, unitId: string | nu
 
   const unitLabel = unitId == null ? undefined : ingredient.units?.[unitId]?.label
   const quantityLabel = unitLabel ? `${formatQuantity(quantity)} × ${unitLabel}` : `${formatQuantity(quantity)} g`
-  return draftFromMacros(ingredient.label, macros, { quantityLabel })
+  return draftFromMacros(ingredient.label, macros, { ingredientId: ingredient.id, quantityLabel })
 }
 
 /** Repas saisi à la main : un libellé et des macros brutes. */

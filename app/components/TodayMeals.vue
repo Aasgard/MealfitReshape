@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MealType } from '~/types/meal'
+import type { MenuEntry } from '~/types/menu'
 import type { TodayMealRow } from '~/types/today'
 
 defineProps<{
@@ -8,7 +9,11 @@ defineProps<{
 
 const emit = defineEmits<{
   add: [mealType: MealType]
+  /** Clic sur un repas issu d'une recette ou d'un aliment : ouvre sa fiche. */
+  open: [entry: MenuEntry]
 }>()
+
+const isOpenable = (entry: MenuEntry) => !!(entry.recipeId || entry.ingredientId)
 
 const RING_RADIUS = 16
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
@@ -64,22 +69,26 @@ const ringLength = (row: TodayMealRow) =>
         </div>
 
         <ul v-if="row.entries.length" class="mt-3 flex flex-col gap-2">
-          <li
-            v-for="entry in row.entries"
-            :key="entry.id"
-            class="flex items-center justify-between gap-3 rounded-lg border border-default bg-elevated/40 px-3 py-2"
-          >
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium text-highlighted">
-                {{ entry.label }}
+          <li v-for="entry in row.entries" :key="entry.id">
+            <component
+              :is="isOpenable(entry) ? 'button' : 'div'"
+              :type="isOpenable(entry) ? 'button' : undefined"
+              class="flex w-full items-center justify-between gap-3 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-start"
+              :class="isOpenable(entry) && 'cursor-pointer transition-colors hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary'"
+              @click="isOpenable(entry) && emit('open', entry)"
+            >
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-highlighted">
+                  {{ entry.label }}
+                </p>
+                <p v-if="entry.quantityLabel" class="truncate text-xs text-dimmed">
+                  {{ entry.quantityLabel }}
+                </p>
+              </div>
+              <p class="shrink-0 text-sm font-medium tabular-nums text-muted">
+                {{ entry.kcal }} kcal
               </p>
-              <p v-if="entry.quantityLabel" class="truncate text-xs text-dimmed">
-                {{ entry.quantityLabel }}
-              </p>
-            </div>
-            <p class="shrink-0 text-sm font-medium tabular-nums text-muted">
-              {{ entry.kcal }} kcal
-            </p>
+            </component>
           </li>
         </ul>
       </div>

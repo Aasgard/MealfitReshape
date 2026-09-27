@@ -44,6 +44,8 @@ export interface MenuEntry {
   id: string
   /** Recette (Firestore `recipes`) dont provient ce repas ; sert à ouvrir sa fiche au clic. Absent pour un aliment ou des macros saisies à la main. */
   recipeId?: string
+  /** Aliment (Firestore `ingredients`) dont provient ce repas ; sert à ouvrir sa fiche au clic. */
+  ingredientId?: string
   label: string
   /** Quantité affichée sur la carte : "2 parts" pour une recette, "150 g" / "2 × tranche" pour un aliment. Absent pour des macros saisies à la main. */
   quantityLabel?: string

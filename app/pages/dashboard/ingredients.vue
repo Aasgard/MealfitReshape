@@ -4,7 +4,7 @@ import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, deleteDoc, doc, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 import type { Recipe } from '~/types/recipe'
-import { macrosForUnit } from '~/utils/ingredientNutrition'
+import { ingredientUnitEntries } from '~/utils/ingredientNutrition'
 import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { categoryIconName } from '~/utils/categoryIcon'
@@ -15,7 +15,6 @@ useSeoMeta({
   description: 'Dashboard - Ingrédients - Mealfit',
 })
 
-const { formatDate } = useDateFormat()
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
@@ -86,7 +85,7 @@ const filteredIngredients = computed(() => {
     const matchesVisibility = selectedVisibility.value === 'all'
       || (selectedVisibility.value === 'public' ? !isOwnedByUser(i) : isOwnedByUser(i))
     const matchesSeason = !seasonOnly.value || isIngredientInSeason(i)
-    const matchesUnits = !unitsOnly.value || unitEntries(i).length > 0
+    const matchesUnits = !unitsOnly.value || ingredientUnitEntries(i).length > 0
     return matchesQuery && matchesCategory && matchesVisibility && matchesSeason && matchesUnits
   })
 })
@@ -133,29 +132,8 @@ const showMoreIngredients = () => {
   visibleCount.value += PAGE_SIZE
 }
 
-const monthAbbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
-const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
-
-const unitEntries = (ing: Ingredient | null) => {
-  if (!ing?.units) return []
-  return Object.entries(ing.units).map(([id, v]) => ({ id, ...v }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
-}
-
 const slideoverOpen = ref(false)
-useOverlayBackClose(slideoverOpen)
 const selectedIngredient = ref<Ingredient | null>(null)
-
-const selectedUnitRows = computed(() => {
-  const ing = selectedIngredient.value
-  if (!ing) return []
-  return unitEntries(ing).map((v) => ({
-    ...v,
-    scaled: macrosForUnit(ing, v.id),
-  }))
-})
-
-const selectedIngredientAllYear = computed(() => (selectedIngredient.value?.activeMonths?.length ?? 0) === 12)
 
 /** Slideover d'ajout/modification (voir IngredientFormSlideover) : `formIngredient` nul = création. */
 const formSlideoverOpen = ref(false)
@@ -425,126 +403,12 @@ const confirmDeleteIngredient = () => {
     </template>
   </UDashboardPanel>
 
-  <USlideover
+  <IngredientDetailSlideover
     v-model:open="slideoverOpen"
-  >
-    <template #title>
-      <div class="flex items-center gap-2">
-        <span>{{ selectedIngredient?.label }}</span>
-        <UButton
-          v-if="selectedIngredient && isOwnedByUser(selectedIngredient)"
-          icon="i-lucide-pencil"
-          color="neutral"
-          variant="ghost"
-          size="xs"
-          :aria-label="`Modifier ${selectedIngredient.label}`"
-          @click="openEditFromDetail"
-        />
-      </div>
-    </template>
-
-    <template #body>
-      <div class="flex flex-col gap-6">
-        <!-- Catégorie -->
-        <div v-if="selectedIngredient?.category?.label">
-          <p class="text-xs text-dimmed mb-1">Catégorie</p>
-          <p class="text-sm text-muted flex items-center gap-1.5">
-            <UIcon v-if="categoryIconName(selectedIngredient.category.icon)" :name="categoryIconName(selectedIngredient.category.icon)!" class="size-3.5 shrink-0" />
-            {{ selectedIngredient.category.label }}
-          </p>
-        </div>
-
-        <!-- Densité -->
-        <div v-if="selectedIngredient?.density != null">
-          <p class="text-xs text-dimmed mb-1">Densité</p>
-          <p class="text-sm text-muted">{{ selectedIngredient.density }} g/ml</p>
-        </div>
-
-        <!-- Valeurs nutritionnelles -->
-        <div v-if="selectedIngredient?.valuesBy100">
-          <p class="text-xs text-dimmed mb-2">Pour 100 g</p>
-          <IngredientMacroSummary :macros="selectedIngredient.valuesBy100" />
-        </div>
-
-        <!-- Disponibilité par mois -->
-        <div>
-          <p class="text-xs text-dimmed mb-2">Disponibilité</p>
-          <p v-if="selectedIngredientAllYear" class="text-sm text-muted">
-            Toute l'année
-          </p>
-          <div
-            v-else
-            class="grid grid-cols-12 gap-1"
-            role="group"
-            :aria-label="`Disponibilité : ${selectedIngredient?.activeMonths?.length ?? 0} mois sur 12`"
-          >
-            <div
-              v-for="(label, idx) in monthAbbreviations"
-              :key="idx"
-              role="img"
-              :aria-label="`${monthNames[idx]} — ${selectedIngredient?.activeMonths?.includes(idx + 1) ? 'en saison' : 'hors saison'}`"
-              :title="monthNames[idx]"
-              class="flex items-center justify-center rounded text-xs font-medium h-6 transition-colors"
-              :class="selectedIngredient?.activeMonths?.includes(idx + 1)
-                ? 'bg-primary text-white'
-                : 'bg-accented text-dimmed'"
-            >
-              {{ label }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Unités / équivalents -->
-        <div v-if="selectedIngredient && unitEntries(selectedIngredient).length">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
-            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Unités</p>
-          </div>
-          <p class="text-xs text-dimmed mb-3">
-            Autres portions équivalentes.
-          </p>
-          <ul class="flex flex-col gap-3">
-            <li
-              v-for="v in selectedUnitRows"
-              :key="v.id"
-              class="rounded-lg border border-default bg-elevated/30 overflow-hidden"
-            >
-              <div class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default/60">
-                <span class="text-sm font-medium text-highlighted truncate">{{ v.label }}</span>
-                <span class="text-sm tabular-nums text-muted shrink-0">
-                  {{ v.value }}&nbsp;{{ v.unit }}
-                </span>
-              </div>
-              <div
-                v-if="v.scaled"
-                class="p-3"
-              >
-                <IngredientMacroSummary :macros="v.scaled" :show-bar="false" />
-              </div>
-              <div
-                v-else
-                class="px-3 py-2 text-xs text-dimmed"
-              >
-                Ajoutez les valeurs nutritionnelles et, si cette unité est en ml, la densité de l’ingrédient pour afficher l’équivalent.
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Commentaire -->
-        <div v-if="selectedIngredient?.comment">
-          <p class="text-xs text-dimmed mb-1">Commentaire</p>
-          <p class="text-sm text-muted">{{ selectedIngredient.comment }}</p>
-        </div>
-
-        <!-- Modifié le -->
-        <div v-if="selectedIngredient">
-          <p class="text-xs text-dimmed mb-1">Modifié le</p>
-          <p class="text-sm text-muted">{{ formatDate(selectedIngredient.updatedAt) }}</p>
-        </div>
-      </div>
-    </template>
-  </USlideover>
+    :ingredient="selectedIngredient"
+    :editable="!!selectedIngredient && isOwnedByUser(selectedIngredient)"
+    @edit="openEditFromDetail"
+  />
 
   <IngredientFormSlideover v-model:open="formSlideoverOpen" :ingredient="formIngredient" :recipes="recipes" />
 

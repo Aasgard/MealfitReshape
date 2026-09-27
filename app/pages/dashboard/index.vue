@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { addDays, format, startOfDay, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import type { Ingredient } from '~/types/ingredient'
 import type { MealSource, MealType } from '~/types/meal'
+import type { MenuEntry } from '~/types/menu'
+import type { Recipe } from '~/types/recipe'
 import type { MealSlot, TodayMealRow, TodayTrendDay } from '~/types/today'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
 import { buildDayEntries, summarizeDay } from '~/utils/menuEntries'
@@ -58,6 +61,26 @@ const mealRows = computed<TodayMealRow[]>(() => {
 })
 
 const missingMeals = computed(() => PLANNED_MEALS.filter(slot => !todayEntries.value[slot.mealType]?.length))
+
+/** Fiche de la recette ou de l'aliment d'un repas, ouverte au clic sur celui-ci. */
+const recipeDetailOpen = ref(false)
+const selectedRecipe = ref<Recipe | null>(null)
+const ingredientDetailOpen = ref(false)
+const selectedIngredient = ref<Ingredient | null>(null)
+
+const openEntryDetail = (entry: MenuEntry) => {
+  const recipe = entry.recipeId ? recipesById.value.get(entry.recipeId) : undefined
+  if (recipe) {
+    selectedRecipe.value = recipe
+    recipeDetailOpen.value = true
+    return
+  }
+  const ingredient = entry.ingredientId ? ingredientsById.value.get(entry.ingredientId) : undefined
+  if (ingredient) {
+    selectedIngredient.value = ingredient
+    ingredientDetailOpen.value = true
+  }
+}
 
 /** Repas pour lequel la fenêtre d'ajout est ouverte (toujours à la date du jour). */
 const addModalOpen = ref(false)
@@ -125,7 +148,7 @@ const submitAddedMeal = async (source: MealSource) => {
         </div>
 
         <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <TodayMeals :rows="mealRows" @add="openAddModal" />
+          <TodayMeals :rows="mealRows" @add="openAddModal" @open="openEntryDetail" />
           <TodayChecklist :missing="missingMeals" :planned-count="PLANNED_MEALS.length" @add="openAddModal" />
         </div>
       </div>
@@ -140,4 +163,12 @@ const submitAddedMeal = async (source: MealSource) => {
     :context-label="addContextLabel"
     @submit="submitAddedMeal"
   />
+
+  <RecipeDetailSlideover
+    v-model:open="recipeDetailOpen"
+    :recipe="selectedRecipe"
+    :ingredients-by-id="ingredientsById"
+  />
+
+  <IngredientDetailSlideover v-model:open="ingredientDetailOpen" :ingredient="selectedIngredient" />
 </template>

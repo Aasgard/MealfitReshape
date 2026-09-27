@@ -32,21 +32,27 @@ const stickyCorner = useTemplateRef<HTMLElement>('stickyCorner')
 
 /**
  * Quand le calendrier défile horizontalement (mobile, fenêtre étroite), amène la colonne du jour courant
- * juste à droite de la colonne figée des types de repas. Sans défilement, le navigateur borne `scrollLeft` à 0.
+ * juste à droite de la colonne figée des types de repas ; une autre semaine revient au lundi.
+ * Sans défilement, le navigateur borne `scrollLeft` à 0.
  */
 const scrollToToday = () => {
   const container = scrollContainer.value
+  if (!container) return
+
   const todayKey = props.days.find(d => d.isSelected)?.key
-  const header = todayKey ? container?.querySelector<HTMLElement>(`[data-day-key="${todayKey}"]`) : null
-  if (!container || !header) return
+  const header = todayKey ? container.querySelector<HTMLElement>(`[data-day-key="${todayKey}"]`) : null
+  if (!header) {
+    container.scrollLeft = 0
+    return
+  }
 
   const offset = header.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft
   container.scrollLeft = offset - (stickyCorner.value?.offsetWidth ?? 0)
 }
 
 onMounted(scrollToToday)
-// Retour sur la semaine en cours depuis une autre semaine : la colonne du jour réapparaît.
-watch(() => props.days.find(d => d.isSelected)?.key, scrollToToday, { flush: 'post' })
+// `days` est recalculé à chaque changement de semaine.
+watch(() => props.days, scrollToToday, { flush: 'post' })
 
 /** Liste vide partagée : une identité stable évite de réinitialiser inutilement les cases vides à chaque rendu. */
 const NO_ENTRIES: MenuEntry[] = []

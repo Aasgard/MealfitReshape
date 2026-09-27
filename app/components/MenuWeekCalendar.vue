@@ -27,6 +27,27 @@ const emit = defineEmits<{
   'move-entry': [entryId: string, dayKey: string, mealTypeKey: MealType]
 }>()
 
+const scrollContainer = useTemplateRef<HTMLElement>('scrollContainer')
+const stickyCorner = useTemplateRef<HTMLElement>('stickyCorner')
+
+/**
+ * Quand le calendrier défile horizontalement (mobile, fenêtre étroite), amène la colonne du jour courant
+ * juste à droite de la colonne figée des types de repas. Sans défilement, le navigateur borne `scrollLeft` à 0.
+ */
+const scrollToToday = () => {
+  const container = scrollContainer.value
+  const todayKey = props.days.find(d => d.isSelected)?.key
+  const header = todayKey ? container?.querySelector<HTMLElement>(`[data-day-key="${todayKey}"]`) : null
+  if (!container || !header) return
+
+  const offset = header.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft
+  container.scrollLeft = offset - (stickyCorner.value?.offsetWidth ?? 0)
+}
+
+onMounted(scrollToToday)
+// Retour sur la semaine en cours depuis une autre semaine : la colonne du jour réapparaît.
+watch(() => props.days.find(d => d.isSelected)?.key, scrollToToday, { flush: 'post' })
+
 /** Liste vide partagée : une identité stable évite de réinitialiser inutilement les cases vides à chaque rendu. */
 const NO_ENTRIES: MenuEntry[] = []
 
@@ -50,12 +71,13 @@ const macrosFor = (dayKey: string) => {
 
 <template>
   <div class="rounded-xl border border-default bg-default overflow-hidden">
-    <div class="overflow-x-auto">
+    <div ref="scrollContainer" class="overflow-x-auto">
       <div class="min-w-220 grid grid-cols-[110px_repeat(7,minmax(0,1fr))]">
-        <div class="sticky left-0 z-10 border-b border-r border-default bg-elevated" />
+        <div ref="stickyCorner" class="sticky left-0 z-10 border-b border-r border-default bg-elevated" />
         <div
           v-for="day in days"
           :key="`head-${day.key}`"
+          :data-day-key="day.key"
           class="border-b border-r border-default last:border-r-0 px-2 py-2 text-center"
           :class="day.isSelected ? 'bg-primary/5' : 'bg-elevated'"
         >

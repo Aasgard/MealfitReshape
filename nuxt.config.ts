@@ -7,14 +7,20 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'Mealfit',
-      meta: [{ name: 'description', content: 'Mealfit' }],
-      link: [{
-        rel: 'icon',
-        type: 'image/x-png',
-        href: '/logo.png'
-      }]
-    },
-    
+      meta: [
+        { name: 'description', content: 'Mealfit' },
+        { name: 'theme-color', content: '#ffffff' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-title', content: 'Mealfit' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' }
+      ],
+      link: [
+        { rel: 'icon', type: 'image/x-png', href: '/logo.png' },
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' }
+      ]
+    }
   },
   routeRules: {
     '/': { ssr: true, appLayout: false },

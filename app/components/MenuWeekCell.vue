@@ -17,6 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   add: []
   'select-entry': [entryId: string]
+  'edit-entry': [entryId: string]
   'copy-entry': [entryId: string]
   'delete-entry': [entryId: string]
   'move-entry': [entryId: string]
@@ -61,7 +62,7 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
       <div
         role="button"
         tabindex="0"
-        class="w-full cursor-grab px-2 py-1.5 pr-7 text-left active:cursor-grabbing"
+        class="w-full min-h-16 cursor-grab px-2 py-1.5 pr-7 text-left active:cursor-grabbing"
         @click="emit('select-entry', entry.id)"
         @keydown.enter.self="emit('select-entry', entry.id)"
         @keydown.space.self.prevent="emit('select-entry', entry.id)"
@@ -79,6 +80,14 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
         </p>
       </div>
       <div class="absolute top-1 right-1 flex flex-col gap-0.5">
+        <button
+          type="button"
+          aria-label="Modifier"
+          class="rounded p-0.5 text-dimmed transition-colors hover:text-primary"
+          @click="emit('edit-entry', entry.id)"
+        >
+          <UIcon name="i-lucide-pencil" class="size-3.5 block" />
+        </button>
         <button
           type="button"
           data-copy-control

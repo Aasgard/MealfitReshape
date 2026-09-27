@@ -12,6 +12,7 @@ import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeTy
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
  * une recette de la base (en nombre de parts), un ingrédient de la base (en grammes ou en unité),
  * ou des macros brutes avec un libellé. Émet un `MealSource` ; le parent l'enregistre dans la case.
+ * Avec `initialSource`, la modale sert à modifier ce repas : elle s'ouvre pré-remplie.
  */
 const props = defineProps<{
   recipes: Recipe[]
@@ -19,7 +20,11 @@ const props = defineProps<{
   ingredientsById: Map<string, Ingredient>
   /** Case visée, ex : "Lun. 14 · Petit déj". */
   contextLabel: string
+  /** Repas à modifier ; absent = ajout d'un nouveau repas. */
+  initialSource?: MealSource | null
 }>()
+
+const isEditMode = computed(() => !!props.initialSource)
 
 const emit = defineEmits<{
   submit: [source: MealSource]
@@ -87,6 +92,24 @@ watch(open, (isOpen) => {
   protein.value = ''
   fat.value = ''
   carbohydrates.value = ''
+
+  const source = props.initialSource
+  if (source?.category === 'RECIPE') {
+    recipeId.value = source.recipeId
+    parts.value = source.value
+  } else if (source?.category === 'INGREDIENT') {
+    mode.value = 'ingredient'
+    ingredientId.value = source.ingredientId
+    unit.value = source.unitId ?? GRAMS_UNIT
+    quantity.value = String(source.quantity)
+  } else if (source?.category === 'RAW') {
+    mode.value = 'macros'
+    label.value = source.label
+    kcal.value = String(source.calories)
+    protein.value = String(source.protein)
+    fat.value = String(source.fat)
+    carbohydrates.value = String(source.carbohydrates)
+  }
 })
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'fr')
@@ -220,7 +243,7 @@ const onSubmit = () => {
 <template>
   <USlideover
     v-model:open="open"
-    title="Ajouter un repas"
+    :title="isEditMode ? 'Modifier le repas' : 'Ajouter un repas'"
     :description="contextLabel"
     :ui="{ content: 'sm:max-w-md' }"
   >
@@ -339,7 +362,12 @@ const onSubmit = () => {
 
     <template #footer>
       <UButton label="Annuler" color="neutral" variant="ghost" @click="closeSlideover" />
-      <UButton label="Ajouter" color="primary" icon="i-lucide-plus" @click="onSubmit" />
+      <UButton
+        :label="isEditMode ? 'Enregistrer' : 'Ajouter'"
+        color="primary"
+        :icon="isEditMode ? 'i-lucide-check' : 'i-lucide-plus'"
+        @click="onSubmit"
+      />
     </template>
   </USlideover>
 </template>

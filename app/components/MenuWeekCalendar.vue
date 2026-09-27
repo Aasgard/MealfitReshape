@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   add: [dayKey: string, mealTypeKey: MealType]
   'select-entry': [entryId: string]
+  'edit-entry': [entryId: string]
   'copy-entry': [entryId: string]
   'delete-entry': [entryId: string]
   /** Carte déposée dans la case (jour, ligne) : à enregistrer côté données. */
@@ -89,6 +90,7 @@ const macrosFor = (dayKey: string) => {
             :is-highlighted="day.isSelected"
             @add="emit('add', day.key, mealType.key)"
             @select-entry="emit('select-entry', $event)"
+            @edit-entry="emit('edit-entry', $event)"
             @copy-entry="emit('copy-entry', $event)"
             @delete-entry="emit('delete-entry', $event)"
             @move-entry="emit('move-entry', $event, day.key, mealType.key)"

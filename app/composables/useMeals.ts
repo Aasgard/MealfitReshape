@@ -1,5 +1,5 @@
 import { addWeeks, subWeeks } from 'date-fns'
-import { collection, doc, query, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { collection, doc, query, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import type { Ref } from 'vue'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Meal, MealSource, MealType } from '~/types/meal'
@@ -60,5 +60,18 @@ export const useMeals = (weekStart: Ref<Date>) => {
   const moveMeal = (mealId: string, target: Pick<NewMeal, 'date' | 'mealType'>) =>
     updateDoc(doc(db, 'meals', mealId), { date: Timestamp.fromDate(target.date), mealType: target.mealType })
 
-  return { meals, addMeal, moveMeal, replaceMeals }
+  /**
+   * Remplace ce qu'un repas contient (recette, aliment ou macros), sans changer son jour, sa ligne ni son ordre dans la case.
+   * Le document est réécrit en entier : passer d'une recette à un aliment ne doit pas laisser traîner `recipeId` / `value`.
+   */
+  const updateMealSource = (meal: Meal, source: MealSource) =>
+    setDoc(doc(db, 'meals', meal.id), {
+      ...source,
+      user: meal.user,
+      date: meal.date,
+      mealType: meal.mealType,
+      ...(meal.createdAt ? { createdAt: meal.createdAt } : {}),
+    })
+
+  return { meals, addMeal, moveMeal, updateMealSource, replaceMeals }
 }

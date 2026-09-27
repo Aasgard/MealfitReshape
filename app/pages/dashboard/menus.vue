@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from 'date-fns'
-import type { MealSource, MealType } from '~/types/meal'
+import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuMealTypeRow } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
@@ -36,7 +36,7 @@ const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
 const toast = useToast()
 
 /** Repas enregistrés (collection `meals`) de la semaine affichée et de la précédente. */
-const { meals, addMeal, moveMeal, replaceMeals } = useMeals(selectedWeekStart)
+const { meals, addMeal, moveMeal, updateMealSource, replaceMeals } = useMeals(selectedWeekStart)
 watch(meals.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
@@ -109,6 +109,9 @@ const saveMeal = (dayKey: string, mealType: MealType, source: MealSource) =>
 /** Case pour laquelle la modale d'ajout est ouverte. */
 const addModalOpen = ref(false)
 const addTarget = ref<{ dayKey: string, mealTypeKey: MealType } | null>(null)
+/** Repas modifié via la même modale ; `null` = ajout d'un nouveau repas dans `addTarget`. */
+const editingMeal = ref<Meal | null>(null)
+const editingSource = computed(() => editingMeal.value ? mealSourceOf(editingMeal.value) : null)
 
 const addContextLabel = computed(() => {
   const target = addTarget.value
@@ -122,6 +125,7 @@ const addContextLabel = computed(() => {
 const addEntry = (dayKey: string, mealTypeKey: MealType) => {
   const copied = copiedMeal.value
   if (!copied) {
+    editingMeal.value = null
     addTarget.value = { dayKey, mealTypeKey }
     addModalOpen.value = true
     return
@@ -131,7 +135,24 @@ const addEntry = (dayKey: string, mealTypeKey: MealType) => {
   copiedMeal.value = null
 }
 
+/** Ouvre la modale pré-remplie avec le contenu du repas ; son jour et sa ligne ne changent pas (le glisser-déposer s'en charge). */
+const editEntry = (entryId: string) => {
+  const meal = weekMeals.value.find(m => m.id === entryId)
+  const dayKey = Object.entries(entries.value)
+    .find(([, byMealType]) => byMealType[meal?.mealType ?? '']?.some(e => e.id === entryId))?.[0]
+  if (!meal || !dayKey) return
+
+  editingMeal.value = meal
+  addTarget.value = { dayKey, mealTypeKey: meal.mealType }
+  addModalOpen.value = true
+}
+
 const submitAddedEntry = (source: MealSource) => {
+  const meal = editingMeal.value
+  if (meal) {
+    runWrite(() => updateMealSource(meal, source), 'Le repas n\'a pas pu être modifié')
+    return
+  }
   if (!addTarget.value) return
   saveMeal(addTarget.value.dayKey, addTarget.value.mealTypeKey, source)
 }
@@ -248,6 +269,7 @@ const selectEntry = (entryId: string) => {
           :day-totals="dayTotals"
           :copied-entry-id="copiedMeal?.id"
           @select-entry="selectEntry"
+          @edit-entry="editEntry"
           @copy-entry="toggleCopyEntry"
           @delete-entry="deleteEntry"
           @move-entry="moveEntry"
@@ -263,6 +285,7 @@ const selectEntry = (entryId: string) => {
     :ingredients="ingredients"
     :ingredients-by-id="ingredientsById"
     :context-label="addContextLabel"
+    :initial-source="editingSource"
     @submit="submitAddedEntry"
   />
 

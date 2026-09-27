@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from 'date-fns'
 import type { Meal, MealSource, MealType } from '~/types/meal'
-import type { MenuMealTypeRow } from '~/types/menu'
+import type { MenuEntry, MenuMealTypeRow } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
@@ -212,16 +212,44 @@ const requestCopyPreviousWeek = () => {
 const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
 
-/** Ouvre la fiche de la recette dont provient le repas cliqué dans le calendrier. */
-const selectEntry = (entryId: string) => {
-  const recipeId = Object.values(entries.value)
-    .flatMap(meals => Object.values(meals).flat())
-    .find(e => e.id === entryId)?.recipeId
-  const recipe = recipes.value.find(r => r.id === recipeId)
+const findEntry = (entryId: string) => Object.values(entries.value)
+  .flatMap(meals => Object.values(meals).flat())
+  .find(e => e.id === entryId)
+
+/** Ouvre la fiche de la recette dont provient le repas. */
+const openEntryRecipe = (entry: MenuEntry | undefined) => {
+  const recipe = recipes.value.find(r => r.id === entry?.recipeId)
   if (!recipe) return
 
   selectedRecipe.value = recipe
   slideoverOpen.value = true
+}
+
+/** Repas dont le panneau d'actions (mobile) est ouvert. */
+const actionsEntry = ref<MenuEntry | null>(null)
+const actionsOpen = ref(false)
+
+/**
+ * Sur mobile, les cartes n'affichent pas leurs icônes d'action (place réservée au texte) : un appui ouvre un panneau
+ * avec ces actions. Au-delà, un clic ouvre directement la fiche recette. Même seuil que `sm:` (Tailwind) dans MenuWeekCell.
+ */
+const selectEntry = (entryId: string) => {
+  const entry = findEntry(entryId)
+  if (!entry) return
+
+  if (!window.matchMedia('(min-width: 40rem)').matches) {
+    actionsEntry.value = entry
+    actionsOpen.value = true
+    return
+  }
+  openEntryRecipe(entry)
+}
+
+/** Ferme le panneau d'actions puis lance l'action choisie sur son repas. */
+const runEntryAction = (action: (entryId: string) => void) => {
+  const entry = actionsEntry.value
+  actionsOpen.value = false
+  if (entry) action(entry.id)
 }
 </script>
 
@@ -308,6 +336,60 @@ const selectEntry = (entryId: string) => {
     confirm-icon="i-lucide-copy"
     @confirm="copyPreviousWeek"
   />
+
+  <UDrawer
+    v-model:open="actionsOpen"
+    :title="actionsEntry?.label"
+    :description="[actionsEntry?.quantityLabel, actionsEntry ? `${actionsEntry.kcal} kcal` : null].filter(Boolean).join(' · ')"
+  >
+    <template #body>
+      <div class="flex flex-col gap-1">
+        <UButton
+          v-if="actionsEntry?.recipeId"
+          label="Voir la recette"
+          icon="i-lucide-chef-hat"
+          color="neutral"
+          variant="ghost"
+          size="lg"
+          block
+          class="justify-start"
+          @click="runEntryAction(id => openEntryRecipe(findEntry(id)))"
+        />
+        <UButton
+          label="Modifier"
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="ghost"
+          size="lg"
+          block
+          class="justify-start"
+          @click="runEntryAction(editEntry)"
+        />
+        <!-- `data-copy-control` : sans lui, ce clic annulerait aussitôt la copie (voir cancelCopyOnOutsideClick). -->
+        <UButton
+          data-copy-control
+          :label="actionsEntry?.id === copiedMeal?.id ? 'Annuler la copie' : 'Copier (puis appuyer sur un +)'"
+          icon="i-lucide-copy"
+          color="neutral"
+          variant="ghost"
+          size="lg"
+          block
+          class="justify-start"
+          @click="runEntryAction(toggleCopyEntry)"
+        />
+        <UButton
+          label="Supprimer"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="ghost"
+          size="lg"
+          block
+          class="justify-start"
+          @click="runEntryAction(deleteEntry)"
+        />
+      </div>
+    </template>
+  </UDrawer>
 
   <RecipeDetailSlideover
     v-model:open="slideoverOpen"

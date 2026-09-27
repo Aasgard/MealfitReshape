@@ -21,6 +21,8 @@ const emit = defineEmits<{
   'copy-entry': [entryId: string]
   'delete-entry': [entryId: string]
   'move-entry': [entryId: string]
+  'drag-start': []
+  'drag-end': []
 }>()
 
 /** Copie locale des repas que le glisser-déposer modifie ; les données de la page (Firestore) la remplacent dès qu'elles changent. */
@@ -50,6 +52,8 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
     class="border-b border-r border-default last:border-r-0 p-1.5 flex flex-col gap-1 min-h-20"
     :class="isHighlighted ? 'bg-primary/5' : ''"
     @add="onAdd"
+    @start="emit('drag-start')"
+    @end="emit('drag-end')"
   >
     <div
       v-for="entry in list"
@@ -62,7 +66,7 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
       <div
         role="button"
         tabindex="0"
-        class="w-full min-h-16 cursor-grab px-2 py-1.5 pr-7 text-left active:cursor-grabbing"
+        class="w-full cursor-grab px-2 py-1.5 text-left active:cursor-grabbing sm:min-h-16 sm:pr-7"
         @click="emit('select-entry', entry.id)"
         @keydown.enter.self="emit('select-entry', entry.id)"
         @keydown.space.self.prevent="emit('select-entry', entry.id)"
@@ -79,7 +83,8 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
           <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
         </p>
       </div>
-      <div class="absolute top-1 right-1 flex flex-col gap-0.5">
+      <!-- Sur mobile, ces actions passent dans le panneau ouvert par un appui sur la carte (voir la page Menus). -->
+      <div class="absolute top-1 right-1 hidden sm:flex flex-col gap-0.5">
         <button
           type="button"
           aria-label="Modifier"

@@ -54,6 +54,12 @@ onMounted(scrollToToday)
 // `days` est recalculé à chaque changement de semaine.
 watch(() => props.days, scrollToToday, { flush: 'post' })
 
+/**
+ * Glisser-déposer en cours : l'aimantation par jour (mobile) est suspendue, sinon elle ramènerait
+ * le calendrier en arrière à chaque petit pas du défilement automatique pendant le glisser.
+ */
+const isDragging = ref(false)
+
 /** Liste vide partagée : une identité stable évite de réinitialiser inutilement les cases vides à chaque rendu. */
 const NO_ENTRIES: MenuEntry[] = []
 
@@ -77,14 +83,20 @@ const macrosFor = (dayKey: string) => {
 
 <template>
   <div class="rounded-xl border border-default bg-default overflow-hidden">
-    <div ref="scrollContainer" class="overflow-x-auto">
-      <div class="min-w-220 grid grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]">
+    <!-- Mobile : colonnes de jour plus larges, et le défilement s'arrête au début d'un jour (juste après la colonne figée). -->
+    <div
+      ref="scrollContainer"
+      class="overflow-x-auto"
+      :class="isDragging ? '' : 'max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-14'"
+    >
+      <!-- La grille doit être aussi large que ses colonnes (3.5rem + 7 × 9.5rem) : la colonne figée ne colle qu'à l'intérieur de sa grille. -->
+      <div class="grid min-w-280 grid-cols-[3.5rem_repeat(7,minmax(9.5rem,1fr))] sm:min-w-220 sm:grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]">
         <div ref="stickyCorner" class="sticky left-0 z-10 border-b border-r border-default bg-elevated" />
         <div
           v-for="day in days"
           :key="`head-${day.key}`"
           :data-day-key="day.key"
-          class="border-b border-r border-default last:border-r-0 px-2 py-2 text-center"
+          class="snap-start border-b border-r border-default last:border-r-0 px-2 py-2 text-center"
           :class="day.isSelected ? 'bg-primary/5' : 'bg-elevated'"
         >
           <p
@@ -122,6 +134,8 @@ const macrosFor = (dayKey: string) => {
             @copy-entry="emit('copy-entry', $event)"
             @delete-entry="emit('delete-entry', $event)"
             @move-entry="emit('move-entry', $event, day.key, mealType.key)"
+            @drag-start="isDragging = true"
+            @drag-end="isDragging = false"
           />
         </template>
 

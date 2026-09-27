@@ -4,7 +4,7 @@ import type { DailyTargets } from '~/utils/dailyTargets'
 
 const props = defineProps<{
   targets: DailyTargets
-  /** Kcal mangées aujourd'hui, "En plus" compris. */
+  /** Kcal mangées le jour affiché, "En plus" compris. */
   eatenKcal: number
   /** Part "En plus" des kcal mangées. */
   extraKcal: number

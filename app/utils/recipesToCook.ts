@@ -1,12 +1,11 @@
-import { differenceInCalendarDays, isSameWeek } from 'date-fns'
+import { differenceInCalendarDays } from 'date-fns'
 import type { Meal, RecipeMealSource } from '~/types/meal'
 import { MENU_MEAL_TYPES } from './menuEntries'
-import { WEEK_STARTS_ON } from './menuWeek'
 
-/** Une recette à cuisiner en une fois pour tous ses repas de la période. */
+/** Une fournée : une recette cuisinée en une fois pour tous ses repas des jours suivants. */
 export type RecipeToCook = {
   recipeId: string
-  /** Jours où elle est mangée (minuit, heure locale), dans l'ordre, sans doublon. */
+  /** Jours où elle est mangée (minuit, heure locale), dans l'ordre, sans doublon ; le premier est le jour où la cuisiner. */
   days: Date[]
   /** Somme des parts de ces repas. */
   parts: number
@@ -23,32 +22,28 @@ const chronological = (a: RecipeMeal, b: RecipeMeal) =>
   || (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0)
 
 /**
- * Recettes à cuisiner du jour `from` au jour `to` inclus, parts cumulées par recette, dans l'ordre de leur premier repas.
- * Une recette déjà mangée plus tôt dans la semaine de `from` est déjà cuisinée : ses repas de cette semaine sont des restes.
- * `meals` doit donc couvrir depuis le début de la semaine de `from`.
+ * Fournées des recettes de `meals`, dans l'ordre de leur jour de cuisine. Une recette est cuisinée à son premier repas,
+ * pour tous ses repas des `batchDays` jours à partir de celui-ci (les restes) ; un repas plus tardif lance une nouvelle fournée.
+ * Les fournées dépendent de celles qui précèdent : `meals` doit remonter assez loin avant la période qui intéresse.
  */
-export function recipesToCook(meals: Meal[], from: Date, to: Date): RecipeToCook[] {
+export function recipesToCook(meals: Meal[], batchDays: number): RecipeToCook[] {
   const recipeMeals = meals.filter((meal): meal is RecipeMeal => meal.category === 'RECIPE').sort(chronological)
-  const isThisWeek = (date: Date) => isSameWeek(date, from, { weekStartsOn: WEEK_STARTS_ON })
-
-  const alreadyCooked = new Set<string>()
-  const byRecipe = new Map<string, RecipeToCook>()
+  const batches: RecipeToCook[] = []
+  const currentBatch = new Map<string, RecipeToCook>()
 
   for (const meal of recipeMeals) {
     const date = meal.date.toDate()
-    if (differenceInCalendarDays(date, from) < 0) {
-      if (isThisWeek(date)) alreadyCooked.add(meal.recipeId)
-      continue
+    let batch = currentBatch.get(meal.recipeId)
+    if (!batch || differenceInCalendarDays(date, batch.days[0]!) >= batchDays) {
+      batch = { recipeId: meal.recipeId, days: [], parts: 0 }
+      batches.push(batch)
+      currentBatch.set(meal.recipeId, batch)
     }
-    if (differenceInCalendarDays(date, to) > 0) continue
-    if (isThisWeek(date) && alreadyCooked.has(meal.recipeId)) continue
 
-    const item = byRecipe.get(meal.recipeId) ?? { recipeId: meal.recipeId, days: [], parts: 0 }
-    byRecipe.set(meal.recipeId, item)
-    item.parts += meal.value
-    const lastDay = item.days.at(-1)
-    if (!lastDay || differenceInCalendarDays(date, lastDay) !== 0) item.days.push(date)
+    batch.parts += meal.value
+    const lastDay = batch.days.at(-1)
+    if (!lastDay || differenceInCalendarDays(date, lastDay) !== 0) batch.days.push(date)
   }
 
-  return [...byRecipe.values()]
+  return batches
 }

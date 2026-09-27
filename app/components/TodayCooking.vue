@@ -2,8 +2,10 @@
 import type { TodayCookingRecipe } from '~/types/today'
 
 defineProps<{
-  /** Recettes à préparer aujourd'hui, en une fois pour leurs repas des 7 prochains jours. */
+  /** Recettes à préparer le jour affiché, en une fois pour leurs repas des 7 jours suivants. */
   recipes: TodayCookingRecipe[]
+  /** Le jour affiché est aujourd'hui (message vide adapté). */
+  isToday?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -18,7 +20,7 @@ const formatParts = (parts: number) =>
 <template>
   <div class="overflow-hidden rounded-xl border border-default bg-default">
     <p v-if="!recipes.length" class="p-4 text-sm text-muted">
-      Aucune recette à cuisiner aujourd'hui.
+      Aucune recette à cuisiner {{ isToday ? "aujourd'hui" : 'ce jour-là' }}.
     </p>
 
     <ul v-else class="divide-y divide-default">

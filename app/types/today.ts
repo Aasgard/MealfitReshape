@@ -26,14 +26,3 @@ export type TodayCookingRecipe = {
   /** Somme des parts de ces jours. */
   parts: number
 }
-
-/** Un jour du graphique "7 derniers jours". */
-export type TodayTrendDay = {
-  key: string
-  /** Initiale du jour : "L", "M"... */
-  label: string
-  /** Ex : "lundi 21 septembre" (info-bulle). */
-  fullLabel: string
-  kcal: number
-  isToday: boolean
-}

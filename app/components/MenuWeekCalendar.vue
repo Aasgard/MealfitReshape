@@ -52,7 +52,7 @@ const macrosFor = (dayKey: string) => {
   <div class="rounded-xl border border-default bg-default overflow-hidden">
     <div class="overflow-x-auto">
       <div class="min-w-220 grid grid-cols-[110px_repeat(7,minmax(0,1fr))]">
-        <div class="border-b border-r border-default bg-elevated" />
+        <div class="sticky left-0 z-10 border-b border-r border-default bg-elevated" />
         <div
           v-for="day in days"
           :key="`head-${day.key}`"
@@ -74,7 +74,7 @@ const macrosFor = (dayKey: string) => {
         </div>
 
         <template v-for="mealType in mealTypes" :key="mealType.key">
-          <div class="border-b border-r border-default px-2 py-2 flex flex-col justify-center gap-0.5 bg-elevated">
+          <div class="sticky left-0 z-10 border-b border-r border-default px-2 py-2 flex flex-col justify-center gap-0.5 bg-elevated">
             <p class="text-xs font-semibold text-highlighted truncate">
               {{ mealType.label }}
             </p>
@@ -97,7 +97,7 @@ const macrosFor = (dayKey: string) => {
           />
         </template>
 
-        <div class="px-2 py-2 flex items-center bg-elevated">
+        <div class="sticky left-0 z-10 border-r border-default px-2 py-2 flex items-center bg-elevated">
           <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
             Total
           </p>

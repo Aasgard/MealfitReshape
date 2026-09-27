@@ -1,6 +1,6 @@
-import { addWeeks, subWeeks } from 'date-fns'
+import { addDays, addWeeks, startOfDay, subWeeks } from 'date-fns'
 import { collection, doc, query, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
-import type { Ref } from 'vue'
+import type { MaybeRefOrGetter, Ref } from 'vue'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Meal, MealSource, MealType } from '~/types/meal'
 
@@ -74,4 +74,29 @@ export const useMeals = (weekStart: Ref<Date>) => {
     })
 
   return { meals, addMeal, moveMeal, updateMealSource, replaceMeals }
+}
+
+/** Plage de jours, bornes incluses. */
+export type DayRange = { start: Date, end: Date }
+
+/**
+ * Repas de l'utilisateur connecté (lecture seule) du jour `start` au jour `end` inclus.
+ * `range` à `null` : aucune requête (ex. panneau fermé). Même index composite que `useMeals`.
+ */
+export const useMealsBetween = (range: MaybeRefOrGetter<DayRange | null>) => {
+  const db = useFirestore()
+  const user = useCurrentUser()
+
+  return useCollection<Meal>(() => {
+    const uid = user.value?.uid
+    const { start, end } = toValue(range) ?? {}
+    if (!uid || !start || !end) return null
+
+    return query(
+      collection(db, 'meals'),
+      where('user', '==', uid),
+      where('date', '>=', Timestamp.fromDate(startOfDay(start))),
+      where('date', '<', Timestamp.fromDate(addDays(startOfDay(end), 1)))
+    )
+  })
 }

@@ -1,7 +1,7 @@
 import { differenceInCalendarDays } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealSource, MealType } from '~/types/meal'
-import type { MenuEntry, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
+import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { macrosForQuantity, type IngredientMacros } from './ingredientNutrition'
 import { DAY_KEYS } from './menuWeek'
@@ -12,6 +12,16 @@ export const EXTRA_MEAL_KEY: MealType = 'EXCESS'
 
 /** Ligne "Non compté" du calendrier : repas exclus des totaux (kcal, macros, dérapages) du bas de page. */
 export const UNCOUNTED_MEAL_KEY: MealType = 'NOTCOUNT'
+
+/** Lignes du calendrier, dans leur ordre d'affichage. */
+export const MENU_MEAL_TYPES: MenuMealTypeRow[] = [
+  { key: 'BREAKFAST', label: 'Petit déj', icon: 'i-lucide-sunrise' },
+  { key: 'LUNCH', label: 'Déjeuner', icon: 'i-lucide-sun' },
+  { key: 'DINER', label: 'Diner', icon: 'i-lucide-sunset' },
+  { key: 'SNACK', label: 'Collation', icon: 'i-lucide-cookie' },
+  { key: EXTRA_MEAL_KEY, label: 'En plus', avgLabel: 'Hors plan', icon: 'i-lucide-candy-off' },
+  { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux', icon: 'i-lucide-save-off' },
+]
 
 export interface MenuWeekSummary {
   /** Total kcal du jour, par dayKey (uniquement les jours qui ont au moins un repas). */

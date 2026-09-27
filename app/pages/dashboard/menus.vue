@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from 'date-fns'
 import type { Meal, MealSource, MealType } from '~/types/meal'
-import type { MenuEntry, MenuMealTypeRow } from '~/types/menu'
+import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { buildWeekEntries, EXTRA_MEAL_KEY, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { buildWeekEntries, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -45,14 +45,7 @@ watch(meals.error, (error) => {
 // Une erreur de chargement des repas (droits, index manquant...) est signalée par le toast ci-dessus, sans bloquer la page.
 await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promise.value.catch(() => undefined)])
 
-const mealTypes: MenuMealTypeRow[] = [
-  { key: 'BREAKFAST', label: 'Petit déj', icon: 'i-lucide-sunrise' },
-  { key: 'LUNCH', label: 'Déjeuner', icon: 'i-lucide-sun' },
-  { key: 'DINER', label: 'Diner', icon: 'i-lucide-sunset' },
-  { key: 'SNACK', label: 'Collation', icon: 'i-lucide-cookie' },
-  { key: EXTRA_MEAL_KEY, label: 'En plus', avgLabel: 'Hors plan', icon: 'i-lucide-candy-off' },
-  { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux', icon: 'i-lucide-save-off' },
-]
+const mealTypes = MENU_MEAL_TYPES
 
 /** Bande des semaines sélectionnables, centrée sur la semaine actuellement affichée. */
 const WEEK_PICKER_RADIUS = 3
@@ -209,6 +202,10 @@ const requestCopyPreviousWeek = () => {
   else copyPreviousDialogOpen.value = true
 }
 
+const shoppingListOpen = ref(false)
+/** Plage proposée à l'ouverture de la liste de courses : la semaine affichée. */
+const shoppingListRange = computed(() => ({ start: selectedWeekStart.value, end: addDays(selectedWeekStart.value, 6) }))
+
 const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
 
@@ -276,6 +273,7 @@ const runEntryAction = (action: (entryId: string) => void) => {
           @this-week="goToCurrentWeek"
           @clear="clearDialogOpen = true"
           @copy-previous="requestCopyPreviousWeek"
+          @shopping-list="shoppingListOpen = true"
         />
 
         <MenuWeekPicker :model-value="selectedWeekId" :weeks="weekOptions" @update:model-value="selectWeek" />
@@ -390,6 +388,13 @@ const runEntryAction = (action: (entryId: string) => void) => {
       </div>
     </template>
   </UDrawer>
+
+  <ShoppingListSlideover
+    v-model:open="shoppingListOpen"
+    :recipes-by-id="recipesById"
+    :ingredients-by-id="ingredientsById"
+    :initial-range="shoppingListRange"
+  />
 
   <RecipeDetailSlideover
     v-model:open="slideoverOpen"

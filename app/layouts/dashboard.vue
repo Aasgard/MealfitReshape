@@ -88,6 +88,7 @@ const links = [{
           orientation="vertical"
           tooltip
           popover
+          :ui="{ link: 'max-lg:text-base' }"
         />
 
         <!-- <UNavigationMenu

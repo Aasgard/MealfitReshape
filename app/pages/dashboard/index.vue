@@ -46,9 +46,9 @@ const selectedDayTitle = computed(() => {
   if (offset === 1) return 'Demain'
   return capitalize(format(selectedDay.value, 'EEEE d MMMM', { locale: fr }))
 })
-/** Date complète sous un titre relatif ("Aujourd'hui" → "dimanche 27 septembre"). */
+/** Date courte à côté d'un titre relatif ("Aujourd'hui" → "dimanche 27/09"). */
 const selectedDaySubtitle = computed(() =>
-  Math.abs(differenceInCalendarDays(selectedDay.value, today)) <= 1 ? format(selectedDay.value, 'EEEE d MMMM', { locale: fr }) : ''
+  Math.abs(differenceInCalendarDays(selectedDay.value, today)) <= 1 ? format(selectedDay.value, 'EEEE dd/MM', { locale: fr }) : ''
 )
 
 const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
@@ -229,6 +229,46 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <UDashboardSidebarCollapse />
         </template>
       </UDashboardNavbar>
+
+      <!-- Dans l'en-tête du panneau (hors de la zone qui défile) : la ligne du jour reste visible au défilement. -->
+      <div
+        class="flex items-center justify-between gap-3 border-b border-default bg-default px-8 py-3 sm:px-12"
+        @touchstart.passive="onTouchStart"
+        @touchend.passive="onTouchEnd"
+      >
+        <div class="flex min-w-0 items-baseline gap-2" aria-live="polite">
+          <h1 class="truncate text-2xl font-bold tracking-tight text-highlighted" :class="selectedDaySubtitle && 'shrink-0'">
+            {{ selectedDayTitle }}
+          </h1>
+          <p v-if="selectedDaySubtitle" class="truncate text-sm text-dimmed">
+            {{ selectedDaySubtitle }}
+          </p>
+        </div>
+        <div class="flex shrink-0 items-center gap-1">
+          <UButton
+            v-if="!isTodaySelected"
+            label="Aujourd'hui"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            @click="goToDay(today)"
+          />
+          <UButton
+            icon="i-lucide-chevron-left"
+            color="neutral"
+            variant="ghost"
+            aria-label="Jour précédent"
+            @click="goToPreviousDay"
+          />
+          <UButton
+            icon="i-lucide-chevron-right"
+            color="neutral"
+            variant="ghost"
+            aria-label="Jour suivant"
+            @click="goToNextDay"
+          />
+        </div>
+      </div>
     </template>
 
     <template #body>
@@ -237,41 +277,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >
-        <div class="flex items-center justify-between gap-3">
-          <div class="min-w-0" aria-live="polite">
-            <h1 class="truncate text-2xl font-bold tracking-tight text-highlighted">
-              {{ selectedDayTitle }}
-            </h1>
-            <p v-if="selectedDaySubtitle" class="text-sm text-dimmed">
-              {{ selectedDaySubtitle }}
-            </p>
-          </div>
-          <div class="flex shrink-0 items-center gap-1">
-            <UButton
-              v-if="!isTodaySelected"
-              label="Aujourd'hui"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              @click="goToDay(today)"
-            />
-            <UButton
-              icon="i-lucide-chevron-left"
-              color="neutral"
-              variant="ghost"
-              aria-label="Jour précédent"
-              @click="goToPreviousDay"
-            />
-            <UButton
-              icon="i-lucide-chevron-right"
-              color="neutral"
-              variant="ghost"
-              aria-label="Jour suivant"
-              @click="goToNextDay"
-            />
-          </div>
-        </div>
-
         <Transition
           mode="out-in"
           enter-active-class="transition duration-200 ease-out motion-reduce:transition-none"

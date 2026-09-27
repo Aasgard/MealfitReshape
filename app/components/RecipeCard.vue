@@ -16,6 +16,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   select: []
   edit: []
+  duplicate: []
   delete: []
 }>()
 
@@ -34,7 +35,10 @@ const hasMacros = computed(() =>
 )
 
 const actionItems = computed(() => [
-  [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit') }],
+  [
+    { label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
+    { label: 'Dupliquer', icon: 'i-lucide-copy', onSelect: () => emit('duplicate') },
+  ],
   [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => emit('delete') }],
 ])
 </script>

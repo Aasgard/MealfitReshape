@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, or, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore'
-import type { Recipe } from '~/types/recipe'
+import { collection, or, query, where, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
+import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 
@@ -123,6 +123,59 @@ const editRecipe = (recipe: Recipe) => {
   slideoverOpen.value = false
   editingRecipe.value = recipe
   formOpen.value = true
+}
+
+/** Crée une copie privée de la recette (y compris une recette publique), suffixée par « (copie) ». */
+const duplicateRecipe = async (recipe: Recipe) => {
+  if (!user.value) return
+
+  const { id: _id, isPublic: _isPublic, owner: _owner, createdAt: _createdAt, updatedAt: _updatedAt, ingredients, ...rest } = recipe
+  const title = `${recipe.title} (copie)`
+  const now = Timestamp.now()
+
+  // VueFire résout les références : on reconstruit de vraies DocumentReference à partir des ids.
+  const ingredientLines: RecipeIngredientLine[] = (ingredients ?? [])
+    .filter(line => line.ingredientRef?.id)
+    .map((line) => {
+      const copy: RecipeIngredientLine = {
+        ingredientRef: doc(db, 'ingredients', line.ingredientRef.id),
+        quantity: line.quantity,
+      }
+      if (line.unit) copy.unit = line.unit
+      return copy
+    })
+
+  try {
+    const created = await addDoc(collection(db, 'recipes'), {
+      ...rest,
+      title,
+      ingredients: ingredientLines,
+      owner: user.value.uid,
+      createdAt: now,
+      updatedAt: now,
+    })
+    toast.add({
+      title: 'Recette dupliquée',
+      description: `« ${title} » a été ajoutée à vos recettes`,
+      color: 'success',
+      actions: [{
+        label: 'Modifier',
+        color: 'neutral',
+        variant: 'outline',
+        onClick: () => {
+          const copy = recipes.value.find(r => r.id === created.id)
+          if (copy) editRecipe(copy)
+        }
+      }]
+    })
+  } catch (error: any) {
+    console.error('Erreur lors de la duplication:', error)
+    toast.add({
+      title: 'Erreur',
+      description: `« ${recipe.title} » n'a pas pu être dupliquée : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error'
+    })
+  }
 }
 
 const slideoverOpen = ref(false)
@@ -315,6 +368,7 @@ const confirmDeleteRecipe = () => {
               :ingredients-by-id="ingredientsById"
               @select="selectRecipe(recipe)"
               @edit="editRecipe(recipe)"
+              @duplicate="duplicateRecipe(recipe)"
               @delete="askDeleteRecipe(recipe)"
             />
           </template>

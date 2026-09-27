@@ -57,7 +57,12 @@ const recipeTypeFilterOptions = [
 
 const recipeTypeFilter = ref<typeof RECIPE_TYPE_FILTER_ALL | RecipeType>(RECIPE_TYPE_FILTER_ALL)
 const recipeId = ref<string | undefined>(undefined)
-const parts = ref<number | null>(1)
+/** Parts mangées, par demi-part (minimum une demi-part). */
+const PARTS_STEP = 0.5
+const parts = ref(1)
+const stepParts = (direction: 1 | -1) => {
+  parts.value = Math.max(PARTS_STEP, parts.value + direction * PARTS_STEP)
+}
 
 const INGREDIENT_CATEGORY_FILTER_ALL = 'ALL'
 const ingredientCategoryFilterOptions = computed(() => [
@@ -219,7 +224,6 @@ const numberError = (raw: string, parse: (v: string) => number | null, required:
 }
 
 const recipeError = computed(() => submitted.value && !recipeId.value ? 'Requis' : undefined)
-const partsError = computed(() => submitted.value && !parts.value ? 'Requis' : undefined)
 const ingredientError = computed(() => submitted.value && !ingredientId.value ? 'Requis' : undefined)
 const quantityError = computed(() => numberError(quantity.value, parsePositiveNumber, true))
 const labelError = computed(() => submitted.value && !label.value.trim() ? 'Requis' : undefined)
@@ -283,10 +287,31 @@ const onSubmit = () => {
           </UFormField>
           <UFormField
             label="Nombre de parts"
-            :error="partsError"
             :hint="selectedRecipe ? `La recette fait ${selectedRecipe.persons ?? 1} part(s)` : undefined"
           >
-            <UInputNumber v-model="parts" :min="0.5" :step="0.5" size="md" variant="outline" class="w-full" />
+            <!-- Valeur affichée entre deux boutons, sans champ de saisie : aucun clavier ne s'ouvre sur mobile. -->
+            <div role="group" aria-label="Nombre de parts" class="flex items-center justify-between rounded-md ring ring-inset ring-accented">
+              <UButton
+                icon="i-lucide-minus"
+                color="neutral"
+                variant="link"
+                size="md"
+                aria-label="Retirer une demi-part"
+                :disabled="parts <= PARTS_STEP"
+                @click="stepParts(-1)"
+              />
+              <span class="text-sm font-medium text-highlighted tabular-nums" aria-live="polite">
+                {{ parts.toLocaleString('fr-FR') }}
+              </span>
+              <UButton
+                icon="i-lucide-plus"
+                color="neutral"
+                variant="link"
+                size="md"
+                aria-label="Ajouter une demi-part"
+                @click="stepParts(1)"
+              />
+            </div>
           </UFormField>
         </template>
 

@@ -15,6 +15,9 @@ const weightKg = ref('70')
 const bodyFatPercent = ref('')
 const activityLevel = ref('Modérément actif (exercice 3-5 j/semaine)')
 const goal = ref('Maintien')
+const proteinLevel = ref('Sport régulier ou musculation — 1,6 g/kg')
+const proteinBasis = ref('Poids actuel')
+const targetWeightKg = ref('')
 
 const sexeOptions = ['Homme', 'Femme']
 
@@ -28,14 +31,35 @@ const activityOptions = [
   'Extrêmement actif (travail physique + sport)',
 ]
 
-// Coefficients d'activité physique (PAL) — WHO/FAO/UNU (2004), validés par eau doublement marquée.
+// Coefficients d'activité habituellement associés à Mifflin-St Jeor (et Katch-McArdle), repris par la plupart des calculateurs.
+// Les PAL de la WHO/FAO/UNU (1,4 à 2,4) supposent un autre calcul du métabolisme de base : les combiner gonflait le maintien.
 const activityPalMap: Record<string, number> = {
-  'Sédentaire (peu ou pas d\'exercice)': 1.4,
-  'Légèrement actif (exercice léger 1-3 j/semaine)': 1.6,
-  'Modérément actif (exercice 3-5 j/semaine)': 1.8,
-  'Très actif (exercice intense 6-7 j/semaine)': 2.0,
-  'Extrêmement actif (travail physique + sport)': 2.4,
+  'Sédentaire (peu ou pas d\'exercice)': 1.2,
+  'Légèrement actif (exercice léger 1-3 j/semaine)': 1.375,
+  'Modérément actif (exercice 3-5 j/semaine)': 1.55,
+  'Très actif (exercice intense 6-7 j/semaine)': 1.725,
+  'Extrêmement actif (travail physique + sport)': 1.9,
 }
+
+// Apport en protéines, en g par kg de poids corporel, selon la pratique sportive.
+const proteinOptions = [
+  'Peu ou pas de sport — 0,8 g/kg',
+  'Perte de poids sans musculation — 1,2 g/kg',
+  'Sport régulier ou musculation — 1,6 g/kg',
+  'Musculation en déficit calorique — 2,0 g/kg',
+]
+// 0,8 : référence nutritionnelle adulte (EFSA, ANSES). 1,2 : apport souvent retenu en restriction calorique pour limiter la perte
+// de masse maigre. 1,6 : plateau de la méta-analyse de Morton et al. (2018) sur le gain de masse maigre en musculation.
+// 2,0 : haut de la fourchette ISSN (Jäger et al., 2017 : 1,4-2,0 g/kg chez les sportifs), utile en déficit.
+const proteinGramsPerKgMap: Record<string, number> = {
+  'Peu ou pas de sport — 0,8 g/kg': 0.8,
+  'Perte de poids sans musculation — 1,2 g/kg': 1.2,
+  'Sport régulier ou musculation — 1,6 g/kg': 1.6,
+  'Musculation en déficit calorique — 2,0 g/kg': 2.0,
+}
+
+// Poids sur lequel appliquer les g/kg : en surpoids, le poids visé évite de surestimer le besoin.
+const proteinBasisOptions = ['Poids actuel', 'Poids visé']
 
 const goalFactorMap: Record<string, number> = {
   'Perte de poids (-20 %)': 0.8,
@@ -48,6 +72,7 @@ const formulaLabel = ref(EMPTY_RESULT)
 const tdeeLabel = ref(EMPTY_RESULT)
 const targetCaloriesLabel = ref(EMPTY_RESULT)
 const proteinLabel = ref(EMPTY_RESULT)
+const proteinDetailLabel = ref(EMPTY_RESULT)
 const fatLabel = ref(EMPTY_RESULT)
 const carbsLabel = ref(EMPTY_RESULT)
 const bodyFatUsedLabel = ref(EMPTY_RESULT)
@@ -66,6 +91,8 @@ function formatKg(value: number): string {
 const ageValue = computed(() => parsePositiveNumber(age.value))
 const heightValue = computed(() => parsePositiveNumber(heightCm.value))
 const weightValue = computed(() => parsePositiveNumber(weightKg.value))
+const usesTargetWeight = computed(() => proteinBasis.value === 'Poids visé')
+const targetWeightValue = computed(() => parsePositiveNumber(targetWeightKg.value))
 const bodyFatValue = computed(() => (bodyFatPercent.value.trim() ? parsePositiveNumber(bodyFatPercent.value) : null))
 
 function requiredNumberError(value: string, parsed: number | null) {
@@ -76,6 +103,9 @@ function requiredNumberError(value: string, parsed: number | null) {
 const ageError = computed(() => requiredNumberError(age.value, ageValue.value))
 const heightError = computed(() => requiredNumberError(heightCm.value, heightValue.value))
 const weightError = computed(() => requiredNumberError(weightKg.value, weightValue.value))
+const targetWeightError = computed(() =>
+  usesTargetWeight.value ? requiredNumberError(targetWeightKg.value, targetWeightValue.value) : undefined
+)
 const bodyFatError = computed(() => {
   if (!bodyFatPercent.value.trim()) return undefined
   if (bodyFatValue.value === null) return 'Entrez un nombre valide'
@@ -84,7 +114,8 @@ const bodyFatError = computed(() => {
 })
 
 const canCalculate = computed(() =>
-  ageValue.value !== null && heightValue.value !== null && weightValue.value !== null,
+  ageValue.value !== null && heightValue.value !== null && weightValue.value !== null
+  && (!usesTargetWeight.value || targetWeightValue.value !== null),
 )
 
 const hasCalculated = computed(() => lastCalculatedGoal.value !== null)
@@ -95,6 +126,7 @@ function resetResults() {
   tdeeLabel.value = EMPTY_RESULT
   targetCaloriesLabel.value = EMPTY_RESULT
   proteinLabel.value = EMPTY_RESULT
+  proteinDetailLabel.value = EMPTY_RESULT
   fatLabel.value = EMPTY_RESULT
   carbsLabel.value = EMPTY_RESULT
   bodyFatUsedLabel.value = EMPTY_RESULT
@@ -201,7 +233,8 @@ function calculate() {
   const height = heightValue.value
   const weight = weightValue.value
 
-  if (ageYears === null || height === null || weight === null) {
+  const proteinWeight = usesTargetWeight.value ? targetWeightValue.value : weight
+  if (ageYears === null || height === null || weight === null || proteinWeight === null) {
     resetResults()
     return
   }
@@ -222,14 +255,15 @@ function calculate() {
     formulaLabel.value = 'Mifflin-St Jeor'
   }
 
-  const pal = activityPalMap[activityLevel.value] ?? 1.4
+  const pal = activityPalMap[activityLevel.value] ?? 1.2
   const tdee = bmr * pal
 
   const goalFactor = goalFactorMap[goal.value] ?? 1
   const targetCalories = tdee * goalFactor
 
-  // Répartition simple : protéines 1.8 g/kg (ISSN, 1.6-2.2 g/kg pour préserver la masse maigre), lipides 25 % des kcal, glucides le reste.
-  const proteinGrams = 1.8 * weight
+  // Répartition simple : protéines selon la pratique sportive (voir proteinGramsPerKgMap), lipides 25 % des kcal, glucides le reste.
+  const proteinPerKg = proteinGramsPerKgMap[proteinLevel.value] ?? 1.6
+  const proteinGrams = proteinPerKg * proteinWeight
   const proteinKcal = proteinGrams * 4
   const fatKcal = targetCalories * 0.25
   const fatGrams = fatKcal / 9
@@ -240,6 +274,7 @@ function calculate() {
   tdeeLabel.value = formatKcal(tdee)
   targetCaloriesLabel.value = formatKcal(targetCalories)
   proteinLabel.value = formatGrams(proteinGrams)
+  proteinDetailLabel.value = `${proteinPerKg.toLocaleString('fr-FR', { minimumFractionDigits: 1 })} g/kg × ${proteinWeight.toLocaleString('fr-FR')} kg (${proteinBasis.value.toLowerCase()})`
   fatLabel.value = formatGrams(fatGrams)
   carbsLabel.value = formatGrams(carbsGrams)
 
@@ -401,7 +436,7 @@ function handleChartPointerLeave() {
         <div class="w-full flex flex-col gap-6 text-default">
           <p class="text-sm text-muted max-w-2xl">
             Métabolisme de base estimé via Mifflin-St Jeor (ou Katch-McArdle si un % de masse grasse mesuré est renseigné),
-            multiplié par un facteur d'activité PAL (WHO/FAO/UNU, 2004). POC à affiner.
+            multiplié par un facteur d'activité (1,2 à 1,9). POC à affiner.
           </p>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -483,6 +518,37 @@ function handleChartPointerLeave() {
                 />
               </UFormField>
 
+              <UFormField label="Apport en protéines">
+                <USelectMenu
+                  v-model="proteinLevel"
+                  :items="proteinOptions"
+                  :search-input="false"
+                  class="w-full"
+                />
+              </UFormField>
+
+              <div class="grid grid-cols-2 gap-4">
+                <UFormField label="Protéines calculées sur">
+                  <USelectMenu
+                    v-model="proteinBasis"
+                    :items="proteinBasisOptions"
+                    :search-input="false"
+                    class="w-full"
+                  />
+                </UFormField>
+                <UFormField v-if="usesTargetWeight" label="Poids visé (kg)" :error="targetWeightError">
+                  <UInput
+                    v-model="targetWeightKg"
+                    type="text"
+                    inputmode="decimal"
+                    placeholder="65"
+                    size="md"
+                    variant="outline"
+                    class="w-full"
+                  />
+                </UFormField>
+              </div>
+
               <UButton
                 type="submit"
                 block
@@ -529,6 +595,9 @@ function handleChartPointerLeave() {
                   </p>
                   <p class="text-2xl font-semibold text-highlighted">
                     {{ proteinLabel }}
+                  </p>
+                  <p class="text-xs text-muted">
+                    {{ proteinDetailLabel }}
                   </p>
                 </div>
                 <div class="rounded-lg border border-default bg-elevated p-4 flex flex-col gap-1">
@@ -712,7 +781,7 @@ function handleChartPointerLeave() {
             <p class="text-xs text-muted max-w-2xl">
               Modèle simplifié inspiré de Hall (2011) et Thomas et al. (2011) : la dépense énergétique est recalculée
               à chaque jour à partir du poids courant (partition masse grasse / masse maigre via la constante de Forbes,
-              densités énergétiques constantes), niveau d'activité PAL supposé constant. Approximation à but illustratif,
+              densités énergétiques constantes), niveau d'activité supposé constant. Approximation à but illustratif,
               ne remplace pas un avis médical ou une mesure réelle.
             </p>
           </div>

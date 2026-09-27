@@ -2,6 +2,7 @@
 import { collection, addDoc, updateDoc, doc, Timestamp, deleteField } from 'firebase/firestore'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Ingredient } from '~/types/ingredient'
+import type { IngredientDefaultUnit } from '~/types/ingredientDefaultUnit'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
@@ -92,8 +93,8 @@ function addUnitRow() {
   unitRows.value.push({ key: generateFirestoreId(), label: '', value: '', unit: 'g' })
 }
 
-function addPredefinedUnitRow(defaultUnit: { label: string; value: number; unit: 'g' | 'ml' }) {
-  unitRows.value.push({ key: generateFirestoreId(), label: defaultUnit.label, value: String(defaultUnit.value), unit: defaultUnit.unit })
+function addPredefinedUnitRow(defaultUnit: IngredientDefaultUnit) {
+  unitRows.value.push({ key: generateFirestoreId(), label: defaultUnit.label, value: defaultUnit.value != null ? String(defaultUnit.value) : '', unit: defaultUnit.unit })
 }
 
 function removeUnitRow(key: string) {
@@ -330,7 +331,7 @@ async function handleSubmit() {
               <template #measure-label="{ item }">
                 <div class="flex items-center justify-between gap-3 w-full">
                   <span>{{ (item as any).label }}</span>
-                  <span class="text-dimmed text-xs">{{ (item as any).unitValue }} {{ (item as any).unitLabel }}</span>
+                  <span v-if="(item as any).unitValue != null" class="text-dimmed text-xs">{{ (item as any).unitValue }} {{ (item as any).unitLabel }}</span>
                 </div>
               </template>
             </UDropdownMenu>

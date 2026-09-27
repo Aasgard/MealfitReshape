@@ -5,7 +5,7 @@ import type { TodayMealRow } from '~/types/today'
 import { MEAL_TARGET_TOLERANCE, TARGET_STATUS_COLOR, targetStatus } from '~/utils/dailyTargets'
 import { MENU_MEAL_TYPES } from '~/utils/menuEntries'
 
-/** Un repas de la liste "Alimentation" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré. */
+/** Un repas de la liste "Manger" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré. */
 const props = defineProps<{
   row: TodayMealRow
 }>()

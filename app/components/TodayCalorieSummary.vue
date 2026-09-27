@@ -11,6 +11,9 @@ const props = defineProps<{
   macros: MenuWeekMacroBalance
 }>()
 
+/** Partagé entre les jours : le panneau garde son état quand on change de jour. */
+const open = useState('today-calorie-summary-open', () => true)
+
 const remainingKcal = computed(() => props.targets.calories - props.eatenKcal)
 const isOver = computed(() => remainingKcal.value < 0)
 /** Bleu tant que l'objectif n'est pas atteint, vert à ± 5 %, orange au-delà. */
@@ -48,65 +51,78 @@ const macroRows = computed(() => ([
 </script>
 
 <template>
-  <div class="flex flex-col rounded-xl border border-default bg-default p-4 sm:p-5">
-    <div class="flex items-baseline justify-between gap-3">
-      <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+  <UCollapsible v-model:open="open" class="flex flex-col rounded-xl border border-default bg-default" :ui="{ content: 'flex-1' }">
+    <button
+      type="button"
+      class="flex w-full cursor-pointer items-center gap-3 rounded-xl p-4 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:px-5"
+    >
+      <p class="flex-1 text-xs font-semibold uppercase tracking-wide text-dimmed">
         Résumé calorique
       </p>
-      <p class="text-xs text-dimmed">
+      <p v-if="open" class="text-xs text-dimmed">
         Objectif <span class="tabular-nums">{{ targets.calories }}</span> kcal
       </p>
-    </div>
+      <p v-else class="text-xs text-dimmed">
+        <span class="font-semibold tabular-nums" :class="TARGET_STATUS_TEXT_CLASS[kcalStatus]">{{ isOver ? '+' : '' }}{{ Math.abs(remainingKcal) }}</span>
+        {{ isOver ? 'kcal en trop' : 'kcal restantes' }}
+      </p>
+      <UIcon
+        name="i-lucide-chevron-down"
+        class="size-4 shrink-0 text-muted transition-transform duration-200"
+        :class="open && 'rotate-180'"
+      />
+    </button>
 
-    <div class="mt-4 flex flex-1 flex-col items-center gap-6 sm:flex-row">
-      <div
-        class="relative w-44 shrink-0 sm:w-48"
-        role="img"
-        :aria-label="isOver ? `${-remainingKcal} kcal au-dessus de l'objectif` : `${remainingKcal} kcal restantes sur l'objectif`"
-      >
-        <svg viewBox="0 0 200 172" class="block w-full" fill="none" stroke-width="16" stroke-linecap="round" aria-hidden="true">
-          <circle
-            cx="100"
-            cy="100"
-            :r="GAUGE_RADIUS"
-            transform="rotate(135 100 100)"
-            :stroke-dasharray="`${GAUGE_ARC} ${GAUGE_CIRCUMFERENCE}`"
-            style="stroke: var(--ui-bg-accented)"
-          />
-          <circle
-            v-if="plannedLength > 0"
-            class="transition-[stroke-dasharray] duration-500"
-            cx="100"
-            cy="100"
-            :r="GAUGE_RADIUS"
-            transform="rotate(135 100 100)"
-            :stroke-dasharray="`${plannedLength} ${GAUGE_CIRCUMFERENCE}`"
-            :style="{ stroke: TARGET_STATUS_COLOR[kcalStatus] }"
-          />
-          <circle
-            v-if="extraLength > 0"
-            class="transition-[stroke-dasharray] duration-500"
-            cx="100"
-            cy="100"
-            :r="GAUGE_RADIUS"
-            transform="rotate(135 100 100)"
-            :stroke-dasharray="`${extraLength} ${GAUGE_CIRCUMFERENCE}`"
-            :stroke-dashoffset="-plannedLength"
-            style="stroke: var(--ui-warning)"
-          />
-        </svg>
-        <div class="absolute inset-x-0 flex -translate-y-1/2 flex-col items-center" style="top: 58%">
-          <p class="text-4xl font-bold tabular-nums" :class="TARGET_STATUS_TEXT_CLASS[kcalStatus]">
-            {{ isOver ? '+' : '' }}{{ Math.abs(remainingKcal) }}
-          </p>
-          <p class="text-xs text-dimmed">
-            {{ isOver ? 'kcal en trop' : 'kcal restantes' }}
-          </p>
+    <template #content>
+      <!-- Mobile : kcal à droite de la jauge, macros dessous ; sm+ : kcal et macros empilés à droite. -->
+      <div class="grid h-full grid-cols-[auto_minmax(0,1fr)] content-center items-center gap-x-5 gap-y-5 px-4 pb-4 sm:gap-x-6 sm:px-5 sm:pb-5">
+        <div
+          class="relative w-32 sm:row-span-2 sm:w-48"
+          role="img"
+          :aria-label="isOver ? `${-remainingKcal} kcal au-dessus de l'objectif` : `${remainingKcal} kcal restantes sur l'objectif`"
+        >
+          <svg viewBox="0 0 200 172" class="block w-full" fill="none" stroke-width="16" stroke-linecap="round" aria-hidden="true">
+            <circle
+              cx="100"
+              cy="100"
+              :r="GAUGE_RADIUS"
+              transform="rotate(135 100 100)"
+              :stroke-dasharray="`${GAUGE_ARC} ${GAUGE_CIRCUMFERENCE}`"
+              style="stroke: var(--ui-bg-accented)"
+            />
+            <circle
+              v-if="plannedLength > 0"
+              class="transition-[stroke-dasharray] duration-500"
+              cx="100"
+              cy="100"
+              :r="GAUGE_RADIUS"
+              transform="rotate(135 100 100)"
+              :stroke-dasharray="`${plannedLength} ${GAUGE_CIRCUMFERENCE}`"
+              :style="{ stroke: TARGET_STATUS_COLOR[kcalStatus] }"
+            />
+            <circle
+              v-if="extraLength > 0"
+              class="transition-[stroke-dasharray] duration-500"
+              cx="100"
+              cy="100"
+              :r="GAUGE_RADIUS"
+              transform="rotate(135 100 100)"
+              :stroke-dasharray="`${extraLength} ${GAUGE_CIRCUMFERENCE}`"
+              :stroke-dashoffset="-plannedLength"
+              style="stroke: var(--ui-warning)"
+            />
+          </svg>
+          <div class="absolute inset-x-0 flex -translate-y-1/2 flex-col items-center" style="top: 58%">
+            <p class="text-3xl font-bold tabular-nums sm:text-4xl" :class="TARGET_STATUS_TEXT_CLASS[kcalStatus]">
+              {{ isOver ? '+' : '' }}{{ Math.abs(remainingKcal) }}
+            </p>
+            <p class="text-xs text-dimmed">
+              {{ isOver ? 'kcal en trop' : 'kcal restantes' }}
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div class="flex w-full min-w-0 flex-1 flex-col gap-5">
-        <div class="flex items-start gap-8">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-8 sm:self-end">
           <div>
             <p class="flex items-baseline gap-1">
               <span class="text-2xl font-bold tabular-nums text-highlighted">{{ eatenKcal }}</span>
@@ -129,7 +145,7 @@ const macroRows = computed(() => ([
           </div>
         </div>
 
-        <div class="grid grid-cols-3 gap-4">
+        <div class="col-span-2 grid grid-cols-3 gap-4 sm:col-span-1 sm:col-start-2 sm:self-start">
           <div v-for="macro in macroRows" :key="macro.key" class="min-w-0">
             <p class="text-xs text-dimmed">
               {{ macro.label }}
@@ -144,6 +160,6 @@ const macroRows = computed(() => ([
           </div>
         </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </UCollapsible>
 </template>

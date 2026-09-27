@@ -292,20 +292,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :macros="daySummary.macros"
             />
 
-            <div class="flex items-baseline justify-between gap-3">
-              <h2 class="text-lg font-bold tracking-tight text-highlighted">
-                Alimentation
-              </h2>
-              <NuxtLink to="/dashboard/menus" class="text-sm font-medium text-primary hover:underline">
-                Plus
-              </NuxtLink>
-            </div>
-
-            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" />
-
-            <div class="flex items-baseline justify-between gap-3">
-              <h2 class="text-lg font-bold tracking-tight text-highlighted">
-                À cuisiner
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+                <UIcon name="i-lucide-chef-hat" class="size-5 text-primary" aria-hidden="true" />
+                Cuisiner
               </h2>
               <NuxtLink to="/dashboard/menus" class="text-sm font-medium text-primary hover:underline">
                 Plus
@@ -313,6 +303,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             </div>
 
             <TodayCooking :recipes="cookingRecipes" :is-today="isTodaySelected" @open="openRecipeDetail" />
+
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+                <UIcon name="i-lucide-utensils" class="size-5 text-primary" aria-hidden="true" />
+                Manger
+              </h2>
+              <NuxtLink to="/dashboard/menus" class="text-sm font-medium text-primary hover:underline">
+                Plus
+              </NuxtLink>
+            </div>
+
+            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" />
           </div>
         </Transition>
       </div>

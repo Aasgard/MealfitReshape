@@ -11,13 +11,13 @@ export type MealSlot = {
   note?: string
 }
 
-/** Un repas de la liste "Alimentation" de l'accueil, avec ce qui a été enregistré dedans. */
+/** Un repas de la liste "Manger" de l'accueil, avec ce qui a été enregistré dedans. */
 export type TodayMealRow = MealSlot & {
   kcal: number
   entries: MenuEntry[]
 }
 
-/** Une recette de la liste "À cuisiner" de l'accueil, à préparer en une fois. */
+/** Une recette de la liste "Cuisiner" de l'accueil, à préparer en une fois. */
 export type TodayCookingRecipe = {
   recipeId: string
   title: string

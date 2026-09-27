@@ -2,6 +2,7 @@
 import type { MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { TodayMealRow } from '~/types/today'
+import { MEAL_TARGET_TOLERANCE, TARGET_STATUS_COLOR, targetStatus } from '~/utils/dailyTargets'
 import { MENU_MEAL_TYPES } from '~/utils/menuEntries'
 
 /** Un repas de la liste "Alimentation" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré. */
@@ -23,7 +24,10 @@ const icon = computed(() => MENU_MEAL_TYPES.find(type => type.key === props.row.
 const RING_RADIUS = 16
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
-const isOverTarget = computed(() => !!props.row.targetKcal && props.row.kcal > props.row.targetKcal)
+/** Bleu tant que l'objectif n'est pas atteint, vert à ± 10 %, orange au-delà. */
+const ringColor = computed(() =>
+  props.row.targetKcal ? TARGET_STATUS_COLOR[targetStatus(props.row.kcal, props.row.targetKcal, MEAL_TARGET_TOLERANCE)] : undefined
+)
 const ringLength = computed(() =>
   props.row.targetKcal ? Math.min(1, props.row.kcal / props.row.targetKcal) * RING_CIRCUMFERENCE : 0
 )
@@ -44,7 +48,7 @@ const ringLength = computed(() =>
             :r="RING_RADIUS"
             transform="rotate(-90 20 20)"
             :stroke-dasharray="`${ringLength} ${RING_CIRCUMFERENCE}`"
-            :style="{ stroke: isOverTarget ? 'var(--ui-warning)' : 'var(--ui-primary)' }"
+            :style="{ stroke: ringColor }"
           />
         </svg>
         <UIcon :name="icon" class="absolute inset-0 m-auto size-4 text-muted" />

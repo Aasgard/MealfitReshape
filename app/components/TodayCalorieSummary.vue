@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MenuWeekMacroBalance } from '~/types/menu'
-import type { DailyTargets } from '~/utils/dailyTargets'
+import { DAILY_TARGET_TOLERANCE, TARGET_STATUS_COLOR, TARGET_STATUS_TEXT_CLASS, targetStatus, type DailyTargets } from '~/utils/dailyTargets'
 
 const props = defineProps<{
   targets: DailyTargets
@@ -13,6 +13,8 @@ const props = defineProps<{
 
 const remainingKcal = computed(() => props.targets.calories - props.eatenKcal)
 const isOver = computed(() => remainingKcal.value < 0)
+/** Bleu tant que l'objectif n'est pas atteint, vert à ± 5 %, orange au-delà. */
+const kcalStatus = computed(() => targetStatus(props.eatenKcal, props.targets.calories, DAILY_TARGET_TOLERANCE))
 
 // Jauge : arc de 270° (ouvert vers le bas) tracé avec un cercle dont on ne garde que 75 % du pourtour.
 const GAUGE_RADIUS = 80
@@ -33,7 +35,15 @@ const macroRows = computed(() => ([
 ] as const).map(({ key, label, colorClass }) => {
   const eaten = props.macros[key]
   const target = props.targets[key]
-  return { key, label, colorClass, eaten, target, width: `${Math.min(1, eaten / target) * 100}%`, isOver: eaten > target }
+  return {
+    key,
+    label,
+    colorClass,
+    eaten,
+    target,
+    width: `${Math.min(1, eaten / target) * 100}%`,
+    statusClass: TARGET_STATUS_TEXT_CLASS[targetStatus(eaten, target, DAILY_TARGET_TOLERANCE)],
+  }
 }))
 </script>
 
@@ -71,7 +81,7 @@ const macroRows = computed(() => ([
             :r="GAUGE_RADIUS"
             transform="rotate(135 100 100)"
             :stroke-dasharray="`${plannedLength} ${GAUGE_CIRCUMFERENCE}`"
-            style="stroke: var(--ui-primary)"
+            :style="{ stroke: TARGET_STATUS_COLOR[kcalStatus] }"
           />
           <circle
             v-if="extraLength > 0"
@@ -86,7 +96,7 @@ const macroRows = computed(() => ([
           />
         </svg>
         <div class="absolute inset-x-0 flex -translate-y-1/2 flex-col items-center" style="top: 58%">
-          <p class="text-4xl font-bold tabular-nums" :class="isOver ? 'text-warning' : 'text-highlighted'">
+          <p class="text-4xl font-bold tabular-nums" :class="TARGET_STATUS_TEXT_CLASS[kcalStatus]">
             {{ isOver ? '+' : '' }}{{ Math.abs(remainingKcal) }}
           </p>
           <p class="text-xs text-dimmed">
@@ -128,7 +138,7 @@ const macroRows = computed(() => ([
               <div class="h-full rounded-full transition-all duration-500" :class="macro.colorClass" :style="{ width: macro.width }" />
             </div>
             <p class="mt-1.5 text-xs tabular-nums">
-              <span class="font-semibold" :class="macro.isOver ? 'text-warning' : 'text-highlighted'">{{ macro.eaten }}</span>
+              <span class="font-semibold" :class="macro.statusClass">{{ macro.eaten }}</span>
               <span class="text-dimmed"> / {{ macro.target }} g</span>
             </p>
           </div>

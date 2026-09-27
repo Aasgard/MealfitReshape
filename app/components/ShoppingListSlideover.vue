@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { format, isAfter, isValid, parse } from 'date-fns'
+import { getLocalTimeZone, parseDate, type DateValue } from '@internationalized/date'
+import { format } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
 import type { Meal } from '~/types/meal'
 import type { Recipe } from '~/types/recipe'
@@ -10,8 +11,8 @@ import { buildShoppingList, formatShoppingListText, formatShoppingQuantity, type
 
 /**
  * Liste de courses des repas planifiés sur une plage de jours, regroupés par recette / aliment. Les repas cochés
- * fournissent les ingrédients :
- * ceux des recettes (en recettes entières) et les aliments seuls, convertis en grammes et cumulés par ingrédient.
+ * fournissent les ingrédients : ceux des recettes (en recettes entières) et les aliments seuls, convertis en grammes
+ * et cumulés par ingrédient.
  * Les ingrédients cochés se copient en texte, un par ligne, prêts à coller dans Todoist (ou toute autre liste).
  */
 const props = defineProps<{
@@ -26,9 +27,11 @@ useOverlayBackClose(open)
 
 const toast = useToast()
 
-const DATE_INPUT_FORMAT = 'yyyy-MM-dd'
-const startInput = ref('')
-const endInput = ref('')
+/** Plage saisie dans le champ (dates du calendrier, sans heure ni fuseau). */
+const dateRange = shallowRef<{ start: DateValue | undefined, end: DateValue | undefined }>()
+const inputDate = useTemplateRef('inputDate')
+
+const toDateValue = (date: Date) => parseDate(format(date, 'yyyy-MM-dd'))
 
 /** Recettes / aliments décochés (mangés dehors, déjà cuisinés...), par clé de regroupement : leurs ingrédients sortent de la liste. */
 const excludedMealKeys = ref(new Set<string>())
@@ -37,29 +40,16 @@ const excludedIds = ref(new Set<string>())
 
 watch(open, (isOpen) => {
   if (!isOpen) return
-  startInput.value = format(props.initialRange.start, DATE_INPUT_FORMAT)
-  endInput.value = format(props.initialRange.end, DATE_INPUT_FORMAT)
+  dateRange.value = { start: toDateValue(props.initialRange.start), end: toDateValue(props.initialRange.end) }
   excludedMealKeys.value = new Set()
   excludedIds.value = new Set()
 }, { immediate: true })
 
-const parseDateInput = (value: string) => {
-  const date = parse(value, DATE_INPUT_FORMAT, new Date())
-  return isValid(date) ? date : null
-}
-
-/** `null` si une date manque ou si la fin précède le début. */
+/** `null` tant que la plage n'est pas complète ou si la fin précède le début. */
 const range = computed<DayRange | null>(() => {
-  const start = parseDateInput(startInput.value)
-  const end = parseDateInput(endInput.value)
-  if (!start || !end || isAfter(start, end)) return null
-  return { start, end }
-})
-
-const rangeError = computed(() => {
-  const start = parseDateInput(startInput.value)
-  const end = parseDateInput(endInput.value)
-  return start && end && isAfter(start, end) ? 'La date de fin doit suivre la date de début' : undefined
+  const { start, end } = dateRange.value ?? {}
+  if (!start || !end || start.compare(end) > 0) return null
+  return { start: start.toDate(getLocalTimeZone()), end: end.toDate(getLocalTimeZone()) }
 })
 
 /** Pas de requête tant que le panneau est fermé. */
@@ -186,17 +176,25 @@ const copyList = async () => {
   >
     <template #body>
       <div class="flex flex-col gap-5">
-        <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Du" :error="!!rangeError">
-            <UInput v-model="startInput" type="date" :max="endInput || undefined" size="md" variant="outline" class="w-full" />
-          </UFormField>
-          <UFormField label="Au" :error="!!rangeError">
-            <UInput v-model="endInput" type="date" :min="startInput || undefined" size="md" variant="outline" class="w-full" />
-          </UFormField>
-          <p v-if="rangeError" class="col-span-2 -mt-2 text-sm text-error">
-            {{ rangeError }}
-          </p>
-        </div>
+        <UFormField label="Période">
+          <UInputDate ref="inputDate" v-model="dateRange" range class="w-full">
+            <template #trailing>
+              <UPopover :reference="inputDate?.inputsRef[0]?.$el">
+                <UButton
+                  color="neutral"
+                  variant="link"
+                  size="sm"
+                  icon="i-lucide-calendar"
+                  aria-label="Choisir la période dans le calendrier"
+                  class="px-0"
+                />
+                <template #content>
+                  <UCalendar v-model="dateRange" range class="p-2" />
+                </template>
+              </UPopover>
+            </template>
+          </UInputDate>
+        </UFormField>
 
         <p v-if="isLoading" class="text-sm text-muted">
           Chargement des repas...

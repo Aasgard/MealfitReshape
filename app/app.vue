@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fr } from '@nuxt/ui/locale'
+
 const user = useCurrentUser()
 if (user.value) {
   console.log('user', user.value.uid)
@@ -6,7 +8,7 @@ if (user.value) {
 </script>
 
 <template>
-  <UApp>
+  <UApp :locale="fr">
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>

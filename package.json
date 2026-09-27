@@ -20,6 +20,7 @@
     "publish:ingredients:apply": "node scripts/publish-ingredients.cjs --apply"
   },
   "dependencies": {
+    "@internationalized/date": "^3.12.4",
     "@nuxt/ui": "^4.4.0",
     "@pinia/nuxt": "^0.11.3",
     "date-fns": "^4.1.0",

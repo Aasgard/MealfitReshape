@@ -49,6 +49,8 @@ export interface MenuEntry {
   label: string
   /** Quantité affichée sur la carte : "2 parts" pour une recette, "150 g" / "2 × tranche" pour un aliment. Absent pour des macros saisies à la main. */
   quantityLabel?: string
+  /** Parts de la recette mangées dans ce repas ; absent pour un aliment ou des macros saisies à la main. */
+  parts?: number
   kcal: number
   /** Macros d'une part, en grammes arrondis (affichées "G62 P41 L15" : glucides, protéines, lipides). */
   carbohydrates: number

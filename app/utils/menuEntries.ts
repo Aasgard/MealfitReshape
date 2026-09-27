@@ -97,7 +97,7 @@ export function buildRecipeDraft(recipe: Recipe, parts: number, ingredientsById:
   // macrosForRecipe divise le total par `persons` : passer persons / parts donne total * parts / persons, sans double arrondi.
   const macros = macrosForRecipe(recipe.ingredients, ingredientsById, (recipe.persons ?? 1) / parts)
   const quantityLabel = `${formatQuantity(parts)} part${parts > 1 ? 's' : ''}`
-  return draftFromMacros(recipe.title, macros, { recipeId: recipe.id, quantityLabel })
+  return draftFromMacros(recipe.title, macros, { recipeId: recipe.id, parts, quantityLabel })
 }
 
 /** Repas pour `quantity` grammes d'un ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités ; `null` si non calculable. */

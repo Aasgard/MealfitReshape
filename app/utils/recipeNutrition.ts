@@ -33,28 +33,35 @@ export function macrosForRecipeLine(
   return scaleMacros(ingredient.valuesBy100, (unitGrams * line.quantity) / 100)
 }
 
+/** Grammes entiers à partir de 100 g, au dixième en dessous ; jusqu'à 2 décimales pour un nombre d'unités (ex. 1,5 œuf). */
+const formatLineQuantity = (quantity: number, inGrams: boolean) =>
+  quantity.toLocaleString('fr-FR', { maximumFractionDigits: inGrams ? (quantity >= 100 ? 0 : 1) : 2 })
+
 /**
  * Intitulé lisible (nom de l'ingrédient parent, quelle que soit l'unité) et
  * quantité affichée d'une ligne de recette, résolus via `ingredientsById`.
+ * `factor` multiplie la quantité (ex. 5 parts d'une recette prévue pour 4 : 5 / 4).
  * `null` si l'ingrédient ou l'unité référencée est introuvable.
  */
 export function describeRecipeLine(
   line: Pick<RecipeIngredientLine, 'ingredientRef' | 'unit' | 'quantity'>,
-  ingredientsById: Map<string, Ingredient>
+  ingredientsById: Map<string, Ingredient>,
+  factor = 1
 ): { label: string; quantityLabel: string } | null {
   if (!line.ingredientRef) return null
 
   const ingredient = ingredientsById.get(line.ingredientRef.id)
   if (!ingredient) return null
 
+  const quantity = line.quantity * factor
   if (!line.unit) {
-    return { label: ingredient.label, quantityLabel: `${line.quantity} g` }
+    return { label: ingredient.label, quantityLabel: `${formatLineQuantity(quantity, true)} g` }
   }
 
   const unit = ingredient.units?.[line.unit]
   if (!unit) return null
 
-  return { label: ingredient.label, quantityLabel: `${line.quantity} × ${unit.label}` }
+  return { label: ingredient.label, quantityLabel: `${formatLineQuantity(quantity, false)} × ${unit.label}` }
 }
 
 /**

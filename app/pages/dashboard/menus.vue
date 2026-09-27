@@ -209,6 +209,8 @@ const shoppingListRange = computed(() => ({ start: selectedWeekStart.value, end:
 
 const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
+/** Parts du repas cliqué : la fiche recalcule les quantités d'ingrédients pour ce nombre de parts. */
+const selectedRecipeParts = ref<number | null>(null)
 
 const findEntry = (entryId: string) => Object.values(entries.value)
   .flatMap(meals => Object.values(meals).flat())
@@ -220,6 +222,7 @@ const openEntryRecipe = (entry: MenuEntry | undefined) => {
   if (!recipe) return
 
   selectedRecipe.value = recipe
+  selectedRecipeParts.value = entry?.parts ?? null
   slideoverOpen.value = true
 }
 
@@ -402,5 +405,6 @@ const runEntryAction = (action: (entryId: string) => void) => {
     v-model:open="slideoverOpen"
     :recipe="selectedRecipe"
     :ingredients-by-id="ingredientsById"
+    :parts="selectedRecipeParts"
   />
 </template>

@@ -17,6 +17,16 @@ export type TodayMealRow = MealSlot & {
   entries: MenuEntry[]
 }
 
+/** Une recette de la liste "À cuisiner" de l'accueil, à préparer en une fois. */
+export type TodayCookingRecipe = {
+  recipeId: string
+  title: string
+  /** Jours où elle est mangée. Ex : "Aujourd'hui, jeudi, samedi". */
+  daysLabel: string
+  /** Somme des parts de ces jours. */
+  parts: number
+}
+
 /** Un jour du graphique "7 derniers jours". */
 export type TodayTrendDay = {
   key: string

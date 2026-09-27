@@ -9,6 +9,8 @@ const props = defineProps<{
   recipe: Recipe | null
   /** Catalogue d'ingrédients (privés + publics) pour résoudre les noms, quantités et macros des lignes. */
   ingredientsById: Map<string, Ingredient>
+  /** Parts à préparer (ex. celles d'un repas) : les quantités d'ingrédients sont recalculées. Absent = parts de la recette. */
+  parts?: number | null
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
@@ -17,6 +19,11 @@ useOverlayBackClose(open)
 const { formatDate } = useDateFormat()
 
 const persons = computed(() => props.recipe?.persons ?? 1)
+const displayedParts = computed(() => props.parts || persons.value)
+const isScaled = computed(() => displayedParts.value !== persons.value)
+
+const formatParts = (parts: number) =>
+  `${parts.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} part${parts > 1 ? 's' : ''}`
 
 const macros = computed(() => macrosForRecipe(props.recipe?.ingredients, props.ingredientsById, persons.value))
 const hasMacros = computed(() => {
@@ -29,7 +36,7 @@ const lines = computed(() => {
   const recipe = props.recipe
   if (!recipe?.ingredients?.length) return []
   return recipe.ingredients.map((line, idx) => {
-    const described = describeRecipeLine(line, props.ingredientsById)
+    const described = describeRecipeLine(line, props.ingredientsById, displayedParts.value / persons.value)
     return {
       key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`,
       label: described?.label ?? 'Ingrédient introuvable',
@@ -73,8 +80,8 @@ const lines = computed(() => {
           />
           <UBadge
             icon="i-lucide-users"
-            :label="`${persons} part${persons > 1 ? 's' : ''}`"
-            color="neutral"
+            :label="formatParts(displayedParts)"
+            :color="isScaled ? 'primary' : 'neutral'"
             variant="subtle"
             size="sm"
           />
@@ -112,6 +119,9 @@ const lines = computed(() => {
             <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
             <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients</p>
           </div>
+          <p v-if="isScaled" class="mb-3 text-xs text-muted">
+            Quantités pour {{ formatParts(displayedParts) }} (recette prévue pour {{ formatParts(persons) }})
+          </p>
           <ul v-if="lines.length" class="rounded-lg border border-default bg-elevated overflow-hidden">
             <li
               v-for="line in lines"

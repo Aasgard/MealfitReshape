@@ -74,11 +74,14 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
         <p class="text-xs font-medium text-highlighted truncate">
           {{ entry.label }}
         </p>
-        <p v-if="entry.quantityLabel" class="text-xs text-dimmed truncate">
-          {{ entry.quantityLabel }}
-        </p>
-        <!-- Deux lignes sur mobile, une seule ligne à partir de la tablette. -->
-        <p class="text-xs text-dimmed tabular-nums sm:truncate">
+        <!--
+          Mobile : « 100 g · 45 kcal » puis les macros.
+          À partir de la tablette : la quantité, puis « 45 kcal - G5 P3 L0 ».
+        -->
+        <p class="text-xs text-dimmed tabular-nums truncate">
+          <template v-if="entry.quantityLabel">
+            {{ entry.quantityLabel }}<span class="sm:hidden"> · </span><br class="max-sm:hidden">
+          </template>
           {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
           <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
         </p>

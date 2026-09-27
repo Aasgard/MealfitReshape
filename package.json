@@ -12,7 +12,10 @@
     "seed:ingredients": "node scripts/seed-data/ingredients.cjs",
     "seed:ciqual": "node scripts/seed-data/ciqual.cjs",
     "purge:ingredients": "node scripts/purge-ingredients.cjs",
-    "purge:recipes": "node scripts/purge-recipes.cjs"
+    "purge:recipes": "node scripts/purge-recipes.cjs",
+    "purge:meals": "node scripts/purge-meals.cjs",
+    "publish:recipes": "node scripts/publish-recipes.cjs",
+    "publish:recipes:apply": "node scripts/publish-recipes.cjs --apply"
   },
   "dependencies": {
     "@nuxt/ui": "^4.4.0",

@@ -21,6 +21,7 @@ const isReferenceWeekSelected = computed(() =>
 )
 
 const weekLabel = computed(() => formatWeekLabel(selectedWeekStart.value, addDays(selectedWeekStart.value, 6)))
+const weekLabelShort = computed(() => formatWeekLabel(selectedWeekStart.value, addDays(selectedWeekStart.value, 6), { short: true }))
 const weekStatusLabel = computed(() => {
   if (isReferenceWeekSelected.value) return 'Semaine en cours'
   return isBefore(selectedWeekStart.value, referenceWeekStart) ? 'Semaine passée' : 'Semaine à venir'
@@ -264,6 +265,7 @@ const runEntryAction = (action: (entryId: string) => void) => {
       <div class="flex flex-col gap-6 p-4 sm:p-6">
         <MenuWeekHeader
           :week-label="weekLabel"
+          :week-label-short="weekLabelShort"
           :week-status-label="weekStatusLabel"
           :is-current-week="isReferenceWeekSelected"
           :clear-disabled="isWeekEmpty"

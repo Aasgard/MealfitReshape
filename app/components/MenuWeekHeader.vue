@@ -1,6 +1,8 @@
 <script setup lang="ts">
 withDefaults(defineProps<{
   weekLabel: string
+  /** Variante à mois abrégés, affichée sur mobile. */
+  weekLabelShort?: string
   weekStatusLabel?: string
   isCurrentWeek?: boolean
   /** Grise "Vider" quand la semaine affichée ne contient aucun repas. */
@@ -8,6 +10,7 @@ withDefaults(defineProps<{
   /** Grise "Copier la semaine précédente" quand la semaine précédente ne contient aucun repas. */
   copyPreviousDisabled?: boolean
 }>(), {
+  weekLabelShort: undefined,
   weekStatusLabel: undefined,
   isCurrentWeek: false,
   clearDisabled: false,
@@ -54,7 +57,8 @@ const emit = defineEmits<{
       <div class="flex flex-col gap-1">
         <div class="flex items-center gap-2 flex-wrap">
           <h1 class="text-2xl font-bold text-highlighted tracking-tight">
-            {{ weekLabel }}
+            <span class="sm:hidden">{{ weekLabelShort ?? weekLabel }}</span>
+            <span class="hidden sm:inline">{{ weekLabel }}</span>
           </h1>
           <UButton
             v-if="!isCurrentWeek"

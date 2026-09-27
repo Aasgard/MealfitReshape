@@ -21,16 +21,20 @@ export const parseWeekId = (id: string) => startOfWeek(parse(id, 'yyyy-MM-dd', n
 export const formatWeekRangeShort = (start: Date, end: Date) =>
   `${format(start, 'd')}-${format(end, 'd')} ${format(end, 'MMM', { locale: fr }).replace(/\.$/, '')}`
 
-/** "14 – 20 septembre" (ou "28 septembre – 4 octobre" si la semaine chevauche deux mois, année ajoutée si différente de l'année en cours). */
-export const formatWeekLabel = (start: Date, end: Date) => {
+/**
+ * "14 – 20 septembre" (ou "28 septembre – 4 octobre" si la semaine chevauche deux mois, année ajoutée si différente de
+ * l'année en cours). `short` abrège les mois ("28 sept – 4 oct") pour tenir sur une ligne sur mobile.
+ */
+export const formatWeekLabel = (start: Date, end: Date, { short = false } = {}) => {
   const currentYear = new Date().getFullYear()
   const yearSuffix = start.getFullYear() !== currentYear || end.getFullYear() !== currentYear
     ? ` ${format(end, 'yyyy')}`
     : ''
+  const month = (date: Date) => format(date, short ? 'MMM' : 'MMMM', { locale: fr }).replace(/\.$/, '')
   if (isSameMonth(start, end)) {
-    return `${format(start, 'd')} – ${format(end, 'd')} ${format(end, 'MMMM', { locale: fr })}${yearSuffix}`
+    return `${format(start, 'd')} – ${format(end, 'd')} ${month(end)}${yearSuffix}`
   }
-  return `${format(start, 'd MMMM', { locale: fr })} – ${format(end, 'd MMMM', { locale: fr })}${yearSuffix}`
+  return `${format(start, 'd')} ${month(start)} – ${format(end, 'd')} ${month(end)}${yearSuffix}`
 }
 
 /** En-têtes de colonnes du calendrier pour la semaine commençant à `weekStart` (lundi) ; marque la colonne du jour courant. */

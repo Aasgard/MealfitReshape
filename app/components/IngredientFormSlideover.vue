@@ -2,19 +2,25 @@
 import { collection, addDoc, updateDoc, doc, Timestamp, deleteField } from 'firebase/firestore'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Ingredient } from '~/types/ingredient'
+import type { Recipe } from '~/types/recipe'
 import type { IngredientDefaultUnit } from '~/types/ingredientDefaultUnit'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { categoryIconName } from '~/utils/categoryIcon'
+import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
 
 /**
  * Slideover d'ajout/modification d'ingrédient — un seul composant pour les deux modes.
  * `ingredient` nul = création ; non nul = édition (le formulaire est pré-rempli à l'ouverture).
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   ingredient: Ingredient | null
-}>()
+  /** Recettes accessibles, pour interdire la suppression d'une unité utilisée dans l'une d'elles. */
+  recipes?: Recipe[]
+}>(), {
+  recipes: () => [],
+})
 
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
@@ -97,8 +103,21 @@ function addPredefinedUnitRow(defaultUnit: IngredientDefaultUnit) {
   unitRows.value.push({ key: generateFirestoreId(), label: defaultUnit.label, value: defaultUnit.value != null ? String(defaultUnit.value) : '', unit: defaultUnit.unit })
 }
 
-function removeUnitRow(key: string) {
-  unitRows.value = unitRows.value.filter(r => r.key !== key)
+function removeUnitRow(row: UnitRow) {
+  // Une unité ajoutée dans ce formulaire a une clé neuve : seules les unités déjà enregistrées peuvent être utilisées.
+  const usedIn = props.ingredient ? recipesUsingIngredient(props.recipes, props.ingredient.id, row.key) : []
+  if (usedIn.length) {
+    const unitName = row.label.trim() ? `L'unité « ${row.label.trim()} »` : 'Cette unité'
+    toast.add({
+      title: 'Suppression impossible',
+      description: `${unitName} est utilisée dans ${usedIn.length > 1 ? `${usedIn.length} recettes` : 'la recette'} ${formatRecipeTitles(usedIn)}. Changez l'unité dans ces recettes avant de la supprimer.`,
+      color: 'warning',
+      icon: 'i-lucide-link',
+    })
+    return
+  }
+
+  unitRows.value = unitRows.value.filter(r => r.key !== row.key)
 }
 
 const addUnitMenuItems = computed<DropdownMenuItem[][]>(() => {
@@ -372,7 +391,7 @@ async function handleSubmit() {
                 size="md"
                 :aria-label="`Supprimer l'unité ${row.label || ''}`"
                 class="mt-0.5"
-                @click="removeUnitRow(row.key)"
+                @click="removeUnitRow(row)"
               />
             </div>
           </div>

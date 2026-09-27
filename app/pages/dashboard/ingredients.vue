@@ -3,7 +3,9 @@ import { watch } from 'vue'
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, deleteDoc, doc, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
+import type { Recipe } from '~/types/recipe'
 import { macrosForUnit } from '~/utils/ingredientNutrition'
+import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
@@ -31,7 +33,20 @@ const ingredients = useCollection<Ingredient>(() => {
     orderBy('label', 'asc')
   )
 })
-await ingredients.promise.value
+/** Recettes accessibles (privées + publiques), pour interdire la suppression d'un ingrédient ou d'une unité utilisés. */
+const recipes = useCollection<Recipe>(() => {
+  const uid = user.value?.uid
+  if (!uid) return null
+
+  return query(
+    collection(db, 'recipes'),
+    or(
+      where('owner', '==', uid),
+      where('owner', '==', null)
+    )
+  )
+})
+await Promise.all([ingredients.promise.value, recipes.promise.value])
 
 /** Vrai tant que l'utilisateur n'est pas résolu (requête non lancée) ou que la première lecture Firestore n'est pas revenue. */
 const ingredientsLoading = computed(() => !user.value || ingredients.pending.value)
@@ -173,6 +188,17 @@ const ingredientToDelete = ref<Ingredient | null>(null)
 const deleteDialogOpen = ref(false)
 
 const askDeleteIngredient = (ingredient: Ingredient) => {
+  const usedIn = recipesUsingIngredient(recipes.value, ingredient.id)
+  if (usedIn.length) {
+    toast.add({
+      title: 'Suppression impossible',
+      description: `« ${ingredient.label} » est utilisé dans ${usedIn.length > 1 ? `${usedIn.length} recettes` : 'la recette'} ${formatRecipeTitles(usedIn)}. Retirez-le de ces recettes avant de le supprimer.`,
+      color: 'warning',
+      icon: 'i-lucide-link',
+    })
+    return
+  }
+
   ingredientToDelete.value = ingredient
   deleteDialogOpen.value = true
 }
@@ -520,7 +546,7 @@ const confirmDeleteIngredient = () => {
     </template>
   </USlideover>
 
-  <IngredientFormSlideover v-model:open="formSlideoverOpen" :ingredient="formIngredient" />
+  <IngredientFormSlideover v-model:open="formSlideoverOpen" :ingredient="formIngredient" :recipes="recipes" />
 
   <ConfirmDialog
     v-model:open="deleteDialogOpen"

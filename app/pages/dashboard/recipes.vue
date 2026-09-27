@@ -55,13 +55,22 @@ const typeOptions: Array<{ value: 'Toutes' | RecipeType, label: string }> = [
 ]
 const selectedType = ref<'Toutes' | RecipeType>('Toutes')
 
-const sortOptions = [
-  { value: 'label-asc', label: 'Nom (A–Z)' },
-  { value: 'label-desc', label: 'Nom (Z–A)' },
-  { value: 'time-asc', label: 'Temps de préparation ↑' },
-  { value: 'time-desc', label: 'Temps de préparation ↓' },
-]
-const selectedSort = ref('label-asc')
+/** Ingrédients présents dans au moins une recette, pour ne proposer que des filtres utiles. */
+const ingredientOptions = computed(() => {
+  const usedIds = new Set<string>()
+  for (const r of recipes.value ?? []) {
+    for (const line of r.ingredients ?? []) {
+      if (line.ingredientRef?.id) usedIds.add(line.ingredientRef.id)
+    }
+  }
+  return [...usedIds]
+    .map(id => ingredientsById.value.get(id))
+    .filter((i): i is Ingredient => !!i)
+    .map(i => ({ id: i.id, label: i.label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+})
+/** Une recette doit contenir tous les ingrédients sélectionnés. */
+const selectedIngredientIds = ref<string[]>([])
 
 /** Recettes masquées immédiatement pendant le délai d'annulation d'une suppression (voir confirmDeleteRecipe). */
 const pendingDeleteIds = ref(new Set<string>())
@@ -72,17 +81,14 @@ const filteredRecipes = computed(() => {
   const list = (recipes.value ?? []).filter(r => !pendingDeleteIds.value.has(r.id)).filter((r) => {
     const matchesQuery = !q || r.title.toLowerCase().includes(q)
     const matchesType = selectedType.value === 'Toutes' || r.type === selectedType.value
-    return matchesQuery && matchesType
+    const matchesIngredients = selectedIngredientIds.value.length === 0 || (() => {
+      const recipeIngredientIds = new Set((r.ingredients ?? []).map(line => line.ingredientRef?.id))
+      return selectedIngredientIds.value.every(id => recipeIngredientIds.has(id))
+    })()
+    return matchesQuery && matchesType && matchesIngredients
   })
 
-  return [...list].sort((a, b) => {
-    switch (selectedSort.value) {
-      case 'label-desc': return b.title.localeCompare(a.title, 'fr')
-      case 'time-asc': return (a.prepTime ?? 0) - (b.prepTime ?? 0)
-      case 'time-desc': return (b.prepTime ?? 0) - (a.prepTime ?? 0)
-      default: return a.title.localeCompare(b.title, 'fr')
-    }
-  })
+  return [...list].sort((a, b) => a.title.localeCompare(b.title, 'fr'))
 })
 
 const recipeListHeaderLabel = computed(() => {
@@ -96,11 +102,13 @@ const recipeListHeaderLabel = computed(() => {
 const hasActiveFilters = computed(() =>
   !!searchQuery.value.trim()
   || selectedType.value !== 'Toutes'
+  || selectedIngredientIds.value.length > 0
 )
 
 const resetFilters = () => {
   searchQuery.value = ''
   selectedType.value = 'Toutes'
+  selectedIngredientIds.value = []
 }
 
 const formOpen = ref(false)
@@ -251,12 +259,14 @@ const confirmDeleteRecipe = () => {
               class="w-full sm:w-48 shrink-0"
             />
             <USelectMenu
-              v-model="selectedSort"
-              :items="sortOptions"
-              value-key="value"
-              :search-input="false"
-              icon="i-lucide-arrow-up-down"
-              class="w-full sm:w-52 shrink-0"
+              v-model="selectedIngredientIds"
+              :items="ingredientOptions"
+              value-key="id"
+              multiple
+              placeholder="Tous les ingrédients"
+              :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
+              icon="i-lucide-carrot"
+              class="w-full sm:w-56 shrink-0"
             />
           </div>
         </div>

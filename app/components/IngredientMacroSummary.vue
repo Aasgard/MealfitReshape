@@ -8,6 +8,7 @@ const props = withDefaults(defineProps<{
   showBar: true,
 })
 
+// Les kcal et grammes G/P/L sont arrondis à l'entier à l'affichage ; la barre garde les valeurs exactes.
 const macroTotal = computed(() => props.macros.carbohydrates + props.macros.protein + props.macros.fat)
 
 /** Segments de la barre de composition, dans l’ordre G/P/L utilisé partout ailleurs ; les macros à 0 sont omises pour éviter un segment invisible collé à un gap. */
@@ -28,18 +29,18 @@ const macroSegments = computed(() => {
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dimmed">
       <span class="flex items-center gap-1 shrink-0">
         <span class="size-2 rounded-full bg-green-500 shrink-0" />
-        G <span class="font-medium text-highlighted tabular-nums">{{ macros.carbohydrates }}g</span>
+        G <span class="font-medium text-highlighted tabular-nums">{{ Math.round(macros.carbohydrates) }}g</span>
       </span>
       <span class="flex items-center gap-1 shrink-0">
         <span class="size-2 rounded-full bg-red-700 shrink-0" />
-        P <span class="font-medium text-highlighted tabular-nums">{{ macros.protein }}g</span>
+        P <span class="font-medium text-highlighted tabular-nums">{{ Math.round(macros.protein) }}g</span>
       </span>
       <span class="flex items-center gap-1 shrink-0">
         <span class="size-2 rounded-full bg-amber-500 shrink-0" />
-        L <span class="font-medium text-highlighted tabular-nums">{{ macros.fat }}g</span>
+        L <span class="font-medium text-highlighted tabular-nums">{{ Math.round(macros.fat) }}g</span>
       </span>
       <p class="flex items-baseline gap-1 shrink-0 ml-auto">
-        <span class="font-semibold text-highlighted tabular-nums">{{ macros.calories }}</span>
+        <span class="font-semibold text-highlighted tabular-nums">{{ Math.round(macros.calories) }}</span>
         <span>kcal</span>
       </p>
     </div>

@@ -34,7 +34,7 @@ const actionItems = computed(() => [
     tabindex="0"
     :aria-label="[
       `Voir le détail de ${ingredient.label}`,
-      macros ? `${macros.calories} kcal pour 100 g` : null,
+      macros ? `${Math.round(macros.calories)} kcal pour 100 g` : null,
       inSeason ? 'de saison' : null,
     ].filter(Boolean).join(', ')"
     class="rounded-xl border border-default bg-default overflow-hidden flex flex-col cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"

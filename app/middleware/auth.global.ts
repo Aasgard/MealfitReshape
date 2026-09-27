@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, orderBy, query, setDoc } from 'firebase/firestore'
+import { collection, doc, orderBy, query, setDoc } from 'firebase/firestore'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import type { IngredientCategory } from '~/types/ingredientCategory'
@@ -19,42 +19,40 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
     const hasVisitedDashboard = useState('hasVisitedDashboard', () => false)
     if (!hasVisitedDashboard.value) {
-      hasVisitedDashboard.value = true
-
-      // TODO: debug temporaire, à retirer une fois la vérification terminée
       const db = useFirestore()
-      const userRef = doc(db, 'users', user.uid)
-      const userSnap = await getDoc(userRef)
-      console.log('Utilisateur connecté (/users/' + user.uid + '):', userSnap.exists() ? userSnap.data() : null)
 
-      await setDoc(userRef, {
+      // Pas d'await : hors ligne, la promesse n'aboutit qu'à la synchronisation et bloquerait la navigation.
+      setDoc(doc(db, 'users', user.uid), {
         account: {
           fullName: user.displayName,
           avatar: user.photoURL
         }
-      }, { merge: true })
+      }, { merge: true }).catch(error => console.error('Mise à jour du profil impossible', error))
 
-      const categoriesStore = useIngredientCategoriesStore()
-      const categories = useCollection<IngredientCategory>(
-        () => query(
-          collection(db, 'ingredientCategories'),
-          orderBy('order', 'asc')
-        ), 
-        { once: true }
-      )
-      await categories.promise.value
-      categoriesStore.setCategories(categories.value)
+      // Un échec de chargement ne doit pas bloquer le dashboard : on réessaie à la navigation suivante.
+      try {
+        const categories = useCollection<IngredientCategory>(
+          () => query(
+            collection(db, 'ingredientCategories'),
+            orderBy('order', 'asc')
+          ),
+          { once: true }
+        )
+        const defaultUnits = useCollection<IngredientDefaultUnit>(
+          () => query(
+            collection(db, 'ingredientDefaultUnits'),
+            orderBy('label', 'asc')
+          ),
+          { once: true }
+        )
+        await Promise.all([categories.promise.value, defaultUnits.promise.value])
 
-      const defaultUnitsStore = useIngredientDefaultUnitsStore()
-      const defaultUnits = useCollection<IngredientDefaultUnit>(
-        () => query(
-          collection(db, 'ingredientDefaultUnits'),
-          orderBy('label', 'asc')
-        ),
-        { once: true }
-      )
-      await defaultUnits.promise.value
-      defaultUnitsStore.setUnits(defaultUnits.value)
+        useIngredientCategoriesStore().setCategories(categories.value)
+        useIngredientDefaultUnitsStore().setUnits(defaultUnits.value)
+        hasVisitedDashboard.value = true
+      } catch (error) {
+        console.error('Chargement des catégories et unités impossible', error)
+      }
     }
   }
 })

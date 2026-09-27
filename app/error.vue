@@ -6,6 +6,7 @@ const props = defineProps<{
 }>()
 
 const user = useCurrentUser()
+const route = useRoute()
 
 const is404 = computed(() => props.error.status === 404)
 const canRetry = computed(() => (props.error.status ?? 500) >= 500)
@@ -46,6 +47,20 @@ const facts = computed<FactRow[]>(() =>
 useSeoMeta({
   title: () => (is404.value ? 'Page introuvable - Mealfit' : 'Erreur - Mealfit'),
   description: 'Une erreur est survenue sur Mealfit.',
+})
+
+/** Message d'origine, affiché sur l'écran pour diagnostiquer sans outils de développement (ex. sur un téléphone). */
+const technicalDetails = computed(() => {
+  const { error } = props
+  const cause = error.cause instanceof Error ? error.cause : undefined
+  return [
+    `${error.status ?? '?'} ${error.statusText ?? ''}`.trim(),
+    error.message,
+    cause && cause.message !== error.message ? `Cause : ${cause.message}` : undefined,
+    (cause ?? error).stack?.split('\n').slice(0, 3).join('\n'),
+    `Page : ${route.fullPath}`,
+    import.meta.client ? `Navigateur : ${navigator.userAgent}` : undefined,
+  ].filter(Boolean).join('\n\n')
 })
 
 function goHome() {
@@ -179,6 +194,13 @@ onMounted(() => {
             @click="retry"
           />
         </div>
+
+        <details v-if="!is404" class="mt-8 text-sm text-muted">
+          <summary class="cursor-pointer text-center">
+            Détails techniques
+          </summary>
+          <pre class="mt-3 p-3 rounded-lg border border-default bg-elevated text-xs whitespace-pre-wrap wrap-break-word select-all">{{ technicalDetails }}</pre>
+        </details>
       </div>
     </div>
   </div>

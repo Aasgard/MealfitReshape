@@ -54,6 +54,7 @@ const links = [{
 }, {
   label: 'Outils',
   icon: 'i-lucide-wrench',
+  defaultOpen: true,
   children: [{
     label: 'Calculateur de besoins journaliers',
     icon: 'i-lucide-calculator',

@@ -41,6 +41,7 @@ const links = [{
 }, {
   label: 'Suivi de mesures',
   icon: 'i-lucide-ruler',
+  defaultOpen: true,
   children: [{
     label: 'Suivi de poids',
     icon: 'i-lucide-scale',

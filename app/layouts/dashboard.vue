@@ -32,10 +32,24 @@ const links = [{
   }, {
     label: 'Liste de courses',
     icon: 'i-lucide-shopping-cart',
+    to: '/dashboard/liste-courses',
   }]
+// Masqué en attendant que la section soit prête.
+// }, {
+//   label: 'Activité physique',
+//   icon: 'i-lucide-heart',
 }, {
-  label: 'Activité physique',
-  icon: 'i-lucide-heart',
+  label: 'Suivi de mesures',
+  icon: 'i-lucide-ruler',
+  children: [{
+    label: 'Suivi de poids',
+    icon: 'i-lucide-scale',
+    to: '/dashboard/suivi-poids',
+  }, {
+    label: 'Suivi de mensurations',
+    icon: 'i-lucide-ruler-dimension-line',
+    to: '/dashboard/suivi-mensurations',
+  }]
 }, {
   label: 'Outils',
   icon: 'i-lucide-wrench',

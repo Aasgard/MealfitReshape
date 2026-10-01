@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, or, query, where, deleteDoc, doc, orderBy } from 'firebase/firestore'
+import { collection, query, deleteDoc, doc, orderBy } from 'firebase/firestore'
 import type { Ingredient } from '~/types/ingredient'
 import type { Recipe } from '~/types/recipe'
 import { ingredientUnitEntries } from '~/utils/ingredientNutrition'
@@ -25,10 +25,10 @@ const ingredients = useCollection<Ingredient>(() => {
 
   return query(
     collection(db, 'ingredients'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    ),
+    // or(
+    //   where('owner', '==', uid),
+    //   where('owner', '==', null)
+    // ),
     orderBy('label', 'asc')
   )
 })
@@ -39,10 +39,10 @@ const recipes = useCollection<Recipe>(() => {
 
   return query(
     collection(db, 'recipes'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    )
+    // or(
+    //   where('owner', '==', uid),
+    //   where('owner', '==', null)
+    // )
   )
 })
 await Promise.all([ingredients.promise.value, recipes.promise.value])

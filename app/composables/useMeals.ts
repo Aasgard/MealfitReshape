@@ -26,7 +26,7 @@ export const useMeals = (weekStart: Ref<Date>) => {
 
     return query(
       collection(db, 'meals'),
-      where('user', '==', uid),
+      // where('user', '==', uid),
       where('date', '>=', Timestamp.fromDate(subWeeks(weekStart.value, 1))),
       where('date', '<', Timestamp.fromDate(addWeeks(weekStart.value, 1)))
     )
@@ -94,7 +94,7 @@ export const useMealsBetween = (range: MaybeRefOrGetter<DayRange | null>) => {
 
     return query(
       collection(db, 'meals'),
-      where('user', '==', uid),
+      // where('user', '==', uid),
       where('date', '>=', Timestamp.fromDate(startOfDay(start))),
       where('date', '<', Timestamp.fromDate(addDays(startOfDay(end), 1)))
     )

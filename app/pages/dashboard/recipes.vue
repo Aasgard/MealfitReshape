@@ -20,10 +20,10 @@ const recipes = useCollection<Recipe>(() => {
 
   return query(
     collection(db, 'recipes'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    ),
+    // or(
+    //   where('owner', '==', uid),
+    //   where('owner', '==', null)
+    // ),
     orderBy('title', 'asc')
   )
 })

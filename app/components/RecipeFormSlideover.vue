@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { collection, addDoc, updateDoc, doc, Timestamp, deleteField, query, or, where, orderBy } from 'firebase/firestore'
+import { collection, addDoc, updateDoc, doc, Timestamp, deleteField, query, orderBy } from 'firebase/firestore'
 import { useCollection } from 'vuefire'
 import { VueDraggable } from 'vue-draggable-plus'
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
@@ -36,10 +36,10 @@ const ingredientsQuery = useCollection<Ingredient>(() => {
 
   return query(
     collection(db, 'ingredients'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    ),
+    // or(
+    //   where('owner', '==', uid),
+    //   where('owner', '==', null)
+    // ),
     orderBy('label', 'asc')
   )
 })

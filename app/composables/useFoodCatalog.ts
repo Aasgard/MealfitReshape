@@ -1,4 +1,4 @@
-import { collection, or, query, where } from 'firebase/firestore'
+import { collection, query } from 'firebase/firestore'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Ingredient } from '~/types/ingredient'
 import type { Recipe } from '~/types/recipe'
@@ -14,10 +14,10 @@ export const useFoodCatalog = () => {
 
     return query(
       collection(db, collectionName),
-      or(
-        where('owner', '==', uid),
-        where('owner', '==', null)
-      )
+      // or(
+      //   where('owner', '==', uid),
+      //   where('owner', '==', null)
+      // )
     )
   }
 

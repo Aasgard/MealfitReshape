@@ -17,7 +17,9 @@
     "publish:recipes": "node scripts/publish-recipes.cjs",
     "publish:recipes:apply": "node scripts/publish-recipes.cjs --apply",
     "publish:ingredients": "node scripts/publish-ingredients.cjs",
-    "publish:ingredients:apply": "node scripts/publish-ingredients.cjs --apply"
+    "publish:ingredients:apply": "node scripts/publish-ingredients.cjs --apply",
+    "reset:owners": "node scripts/reset-owners.cjs",
+    "reset:owners:apply": "node scripts/reset-owners.cjs --apply"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",

@@ -119,11 +119,14 @@ watch(open, (isOpen) => {
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'fr')
 
-/** Chaque recette avec ses kcal pour une part, affichées en fin de ligne. */
+/** Chaque recette avec ses kcal et sa répartition des macros pour une part, affichées en fin de ligne. */
 const recipeOptions = computed(() =>
   props.recipes
     .filter(r => recipeTypeFilter.value === RECIPE_TYPE_FILTER_ALL || r.type === recipeTypeFilter.value)
-    .map(r => ({ id: r.id, label: r.title, kcalLabel: `${buildRecipeDraft(r, 1, props.ingredientsById).kcal} kcal` }))
+    .map((r) => {
+      const { kcal, carbohydrates, protein, fat } = buildRecipeDraft(r, 1, props.ingredientsById)
+      return { id: r.id, label: r.title, kcalLabel: `${kcal} kcal`, macros: { carbohydrates, protein, fat } }
+    })
     .sort(byLabel)
 )
 
@@ -135,12 +138,15 @@ const onRecipeTypeFilterChange = () => {
 
 /**
  * Seuls les ingrédients avec valeurs nutritionnelles sont proposés : sans elles, aucun macro n'est calculable.
- * Leurs kcal pour 100 g sont affichées en fin de ligne.
+ * Leurs kcal pour 100 g et leur répartition des macros sont affichées en fin de ligne.
  */
 const ingredientOptions = computed(() =>
   props.ingredients
     .filter(i => i.valuesBy100 && (ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL || i.category?.id === ingredientCategoryFilter.value))
-    .map(i => ({ id: i.id, label: i.label, kcalLabel: `${Math.round(i.valuesBy100!.calories)} kcal/100 g` }))
+    .map((i) => {
+      const { calories, carbohydrates, protein, fat } = i.valuesBy100!
+      return { id: i.id, label: i.label, kcalLabel: `${Math.round(calories)} kcal/100 g`, macros: { carbohydrates, protein, fat } }
+    })
     .sort(byLabel)
 )
 
@@ -290,6 +296,7 @@ const onSubmit = () => {
             >
               <template #item-trailing="{ item }">
                 <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
+                <MacroPie v-bind="item.macros" />
               </template>
             </USelectMenu>
           </UFormField>
@@ -348,6 +355,7 @@ const onSubmit = () => {
             >
               <template #item-trailing="{ item }">
                 <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
+                <MacroPie v-bind="item.macros" />
               </template>
             </USelectMenu>
           </UFormField>

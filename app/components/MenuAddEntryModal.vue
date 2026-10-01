@@ -119,10 +119,11 @@ watch(open, (isOpen) => {
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'fr')
 
+/** Chaque recette avec ses kcal pour une part, affichées en fin de ligne. */
 const recipeOptions = computed(() =>
   props.recipes
     .filter(r => recipeTypeFilter.value === RECIPE_TYPE_FILTER_ALL || r.type === recipeTypeFilter.value)
-    .map(r => ({ id: r.id, label: r.title }))
+    .map(r => ({ id: r.id, label: r.title, kcalLabel: `${buildRecipeDraft(r, 1, props.ingredientsById).kcal} kcal` }))
     .sort(byLabel)
 )
 
@@ -132,11 +133,14 @@ const onRecipeTypeFilterChange = () => {
   recipeId.value = undefined
 }
 
-/** Seuls les ingrédients avec valeurs nutritionnelles sont proposés : sans elles, aucun macro n'est calculable. */
+/**
+ * Seuls les ingrédients avec valeurs nutritionnelles sont proposés : sans elles, aucun macro n'est calculable.
+ * Leurs kcal pour 100 g sont affichées en fin de ligne.
+ */
 const ingredientOptions = computed(() =>
   props.ingredients
     .filter(i => i.valuesBy100 && (ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL || i.category?.id === ingredientCategoryFilter.value))
-    .map(i => ({ id: i.id, label: i.label }))
+    .map(i => ({ id: i.id, label: i.label, kcalLabel: `${Math.round(i.valuesBy100!.calories)} kcal/100 g` }))
     .sort(byLabel)
 )
 
@@ -283,7 +287,11 @@ const onSubmit = () => {
               :search-input="{ placeholder: 'Rechercher...' }"
               icon="i-lucide-chef-hat"
               class="w-full"
-            />
+            >
+              <template #item-trailing="{ item }">
+                <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
+              </template>
+            </USelectMenu>
           </UFormField>
           <UFormField
             label="Nombre de parts"
@@ -337,7 +345,11 @@ const onSubmit = () => {
               icon="i-lucide-carrot"
               class="w-full"
               @update:model-value="onIngredientChange"
-            />
+            >
+              <template #item-trailing="{ item }">
+                <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
+              </template>
+            </USelectMenu>
           </UFormField>
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Quantité" :error="quantityError">

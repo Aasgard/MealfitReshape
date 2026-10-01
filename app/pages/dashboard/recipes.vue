@@ -49,11 +49,15 @@ const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id,
 
 const searchQuery = ref('')
 
-const typeOptions: Array<{ value: 'Toutes' | RecipeType, label: string }> = [
-  { value: 'Toutes', label: 'Tous les types' },
-  ...RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) })),
-]
-const selectedType = ref<'Toutes' | RecipeType>('Toutes')
+const typeOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
+/** Une recette doit être de l'un des types sélectionnés ; aucun = tous les types. */
+const selectedTypes = ref<RecipeType[]>([])
+
+const toggleType = (type: RecipeType) => {
+  selectedTypes.value = selectedTypes.value.includes(type)
+    ? selectedTypes.value.filter(t => t !== type)
+    : [...selectedTypes.value, type]
+}
 
 /** Ingrédients présents dans au moins une recette, pour ne proposer que des filtres utiles. */
 const ingredientOptions = computed(() => {
@@ -80,7 +84,7 @@ const filteredRecipes = computed(() => {
 
   const list = (recipes.value ?? []).filter(r => !pendingDeleteIds.value.has(r.id)).filter((r) => {
     const matchesQuery = !q || r.title.toLowerCase().includes(q)
-    const matchesType = selectedType.value === 'Toutes' || r.type === selectedType.value
+    const matchesType = selectedTypes.value.length === 0 || (!!r.type && selectedTypes.value.includes(r.type))
     const matchesIngredients = selectedIngredientIds.value.length === 0 || (() => {
       const recipeIngredientIds = new Set((r.ingredients ?? []).map(line => line.ingredientRef?.id))
       return selectedIngredientIds.value.every(id => recipeIngredientIds.has(id))
@@ -101,13 +105,13 @@ const recipeListHeaderLabel = computed(() => {
 
 const hasActiveFilters = computed(() =>
   !!searchQuery.value.trim()
-  || selectedType.value !== 'Toutes'
+  || selectedTypes.value.length > 0
   || selectedIngredientIds.value.length > 0
 )
 
 const resetFilters = () => {
   searchQuery.value = ''
-  selectedType.value = 'Toutes'
+  selectedTypes.value = []
   selectedIngredientIds.value = []
 }
 
@@ -294,23 +298,30 @@ const confirmDeleteRecipe = () => {
               @click="resetFilters"
             />
           </div>
-          <div class="flex flex-col sm:flex-row gap-3">
-            <UInput
-              v-model="searchQuery"
-              icon="i-lucide-search"
-              size="md"
-              variant="outline"
-              placeholder="Rechercher une recette..."
-              class="w-full"
-            />
-            <USelectMenu
-              v-model="selectedType"
-              :items="typeOptions"
-              value-key="value"
-              :search-input="false"
-              icon="i-lucide-utensils"
-              class="w-full sm:w-48 shrink-0"
-            />
+          <UInput
+            v-model="searchQuery"
+            icon="i-lucide-search"
+            size="md"
+            variant="outline"
+            placeholder="Rechercher une recette..."
+            class="w-full"
+          />
+          <!-- Sous la recherche : types puis ingrédients, côte à côte à partir de md, empilés en dessous. -->
+          <div class="flex flex-col md:flex-row md:items-center gap-3">
+            <!-- Boutons bascule, comme dans la fenêtre d'ajout d'un repas ; plusieurs types peuvent être actifs à la fois. -->
+            <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-1 md:shrink-0 md:flex-nowrap">
+              <UButton
+                v-for="option in typeOptions"
+                :key="option.value"
+                :label="option.label"
+                :color="selectedTypes.includes(option.value) ? 'primary' : 'neutral'"
+                :variant="selectedTypes.includes(option.value) ? 'solid' : 'ghost'"
+                size="sm"
+                :aria-pressed="selectedTypes.includes(option.value)"
+                class="flex-1 justify-center md:flex-none"
+                @click="toggleType(option.value)"
+              />
+            </div>
             <USelectMenu
               v-model="selectedIngredientIds"
               :items="ingredientOptions"
@@ -319,7 +330,7 @@ const confirmDeleteRecipe = () => {
               placeholder="Tous les ingrédients"
               :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
               icon="i-lucide-carrot"
-              class="w-full sm:w-56 shrink-0"
+              class="w-full md:min-w-0 md:flex-1"
             />
           </div>
         </div>

@@ -9,6 +9,7 @@ import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
+import { matchesSearch } from '~/utils/search'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -77,9 +78,8 @@ const pendingDeleteIds = ref(new Set<string>())
 
 const filteredIngredients = computed(() => {
   const list = [...(ingredients.value ?? [])].filter(i => !pendingDeleteIds.value.has(i.id))
-  const q = searchQuery.value.trim().toLowerCase()
   return list.filter((i) => {
-    const matchesQuery = !q || i.label.toLowerCase().includes(q)
+    const matchesQuery = matchesSearch(i.label, searchQuery.value)
     const matchesCategory = selectedCategoryIds.value.length === 0
       || (!!i.category?.id && selectedCategoryIds.value.includes(i.category.id))
     const matchesVisibility = selectedVisibility.value === 'all'

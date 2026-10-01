@@ -4,6 +4,7 @@ import { collection, or, query, where, orderBy, addDoc, deleteDoc, doc, Timestam
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { matchesSearch } from '~/utils/search'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -80,10 +81,8 @@ const selectedIngredientIds = ref<string[]>([])
 const pendingDeleteIds = ref(new Set<string>())
 
 const filteredRecipes = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-
   const list = (recipes.value ?? []).filter(r => !pendingDeleteIds.value.has(r.id)).filter((r) => {
-    const matchesQuery = !q || r.title.toLowerCase().includes(q)
+    const matchesQuery = matchesSearch(r.title, searchQuery.value)
     const matchesType = selectedTypes.value.length === 0 || (!!r.type && selectedTypes.value.includes(r.type))
     const matchesIngredients = selectedIngredientIds.value.length === 0 || (() => {
       const recipeIngredientIds = new Set((r.ingredients ?? []).map(line => line.ingredientRef?.id))

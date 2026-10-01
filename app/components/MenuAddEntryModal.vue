@@ -49,13 +49,11 @@ const GRAMS_UNIT = '__grams__'
 const mode = ref<Mode>('recipe')
 const submitted = ref(false)
 
-const RECIPE_TYPE_FILTER_ALL = 'ALL'
-const recipeTypeFilterOptions = [
-  { value: RECIPE_TYPE_FILTER_ALL, label: 'Tous les types' },
-  ...RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) })),
-]
+const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
 
-const recipeTypeFilter = ref<typeof RECIPE_TYPE_FILTER_ALL | RecipeType>(RECIPE_TYPE_FILTER_ALL)
+/** Filtres cumulatifs de la liste des recettes : l'un des types choisis, et tous les ingrédients choisis. Vides = pas de filtre. */
+const recipeTypeFilter = ref<RecipeType[]>([])
+const recipeIngredientFilter = ref<string[]>([])
 const recipeId = ref<string | undefined>(undefined)
 /** Parts mangées, par demi-part (minimum une demi-part). */
 const PARTS_STEP = 0.5
@@ -85,7 +83,8 @@ watch(open, (isOpen) => {
   if (!isOpen) return
   mode.value = 'recipe'
   submitted.value = false
-  recipeTypeFilter.value = RECIPE_TYPE_FILTER_ALL
+  recipeTypeFilter.value = []
+  recipeIngredientFilter.value = []
   recipeId.value = undefined
   parts.value = 1
   ingredientCategoryFilter.value = INGREDIENT_CATEGORY_FILTER_ALL
@@ -119,10 +118,29 @@ watch(open, (isOpen) => {
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'fr')
 
+/** Ingrédients présents dans au moins une recette, pour ne proposer que des filtres utiles. */
+const recipeIngredientFilterOptions = computed(() => {
+  const usedIds = new Set(props.recipes.flatMap(r => (r.ingredients ?? []).map(line => line.ingredientRef?.id)))
+  return [...usedIds]
+    .map(id => id ? props.ingredientsById.get(id) : undefined)
+    .filter((i): i is Ingredient => !!i)
+    .map(i => ({ id: i.id, label: i.label }))
+    .sort(byLabel)
+})
+
+const matchesRecipeFilters = (recipe: Recipe) => {
+  if (recipeTypeFilter.value.length && !(recipe.type && recipeTypeFilter.value.includes(recipe.type))) return false
+  if (!recipeIngredientFilter.value.length) return true
+  const recipeIngredientIds = new Set((recipe.ingredients ?? []).map(line => line.ingredientRef?.id))
+  return recipeIngredientFilter.value.every(id => recipeIngredientIds.has(id))
+}
+
+const hasRecipeFilters = computed(() => recipeTypeFilter.value.length > 0 || recipeIngredientFilter.value.length > 0)
+
 /** Chaque recette avec ses kcal et sa répartition des macros pour une part, affichées en fin de ligne. */
 const recipeOptions = computed(() =>
   props.recipes
-    .filter(r => recipeTypeFilter.value === RECIPE_TYPE_FILTER_ALL || r.type === recipeTypeFilter.value)
+    .filter(matchesRecipeFilters)
     .map((r) => {
       const { kcal, carbohydrates, protein, fat } = buildRecipeDraft(r, 1, props.ingredientsById)
       return { id: r.id, label: r.title, kcalLabel: `${kcal} kcal`, macros: { carbohydrates, protein, fat } }
@@ -130,10 +148,22 @@ const recipeOptions = computed(() =>
     .sort(byLabel)
 )
 
-/** Le type filtre la liste ; une recette déjà choisie qui n'y correspond plus est désélectionnée. */
-const onRecipeTypeFilterChange = () => {
-  if (!selectedRecipe.value || selectedRecipe.value.type === recipeTypeFilter.value || recipeTypeFilter.value === RECIPE_TYPE_FILTER_ALL) return
+/** Les filtres réduisent la liste ; une recette déjà choisie qui n'y correspond plus est désélectionnée. */
+const onRecipeFilterChange = () => {
+  if (!selectedRecipe.value || matchesRecipeFilters(selectedRecipe.value)) return
   recipeId.value = undefined
+}
+
+const toggleRecipeTypeFilter = (type: RecipeType) => {
+  recipeTypeFilter.value = recipeTypeFilter.value.includes(type)
+    ? recipeTypeFilter.value.filter(t => t !== type)
+    : [...recipeTypeFilter.value, type]
+  onRecipeFilterChange()
+}
+
+const resetRecipeFilters = () => {
+  recipeTypeFilter.value = []
+  recipeIngredientFilter.value = []
 }
 
 /**
@@ -273,18 +303,53 @@ const onSubmit = () => {
         />
 
         <template v-if="mode === 'recipe'">
-          <UFormField label="Type de plat">
-            <USelectMenu
-              v-model="recipeTypeFilter"
-              :items="recipeTypeFilterOptions"
-              value-key="value"
-              :search-input="false"
-              icon="i-lucide-utensils"
-              class="w-full"
-              @update:model-value="onRecipeTypeFilterChange"
-            />
-          </UFormField>
-          <UFormField label="Recette" :error="recipeError">
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm font-medium text-default">Filtres</span>
+              <UButton
+                v-if="hasRecipeFilters"
+                label="Réinitialiser"
+                color="neutral"
+                variant="link"
+                size="xs"
+                class="p-0"
+                @click="resetRecipeFilters"
+              />
+            </div>
+            <div class="flex flex-col gap-3">
+              <!-- Boutons bascule dans le style des onglets du dessus ; plusieurs types peuvent être actifs à la fois. -->
+              <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-1">
+                <UButton
+                  v-for="option in recipeTypeFilterOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :color="recipeTypeFilter.includes(option.value) ? 'primary' : 'neutral'"
+                  :variant="recipeTypeFilter.includes(option.value) ? 'solid' : 'ghost'"
+                  size="sm"
+                  :aria-pressed="recipeTypeFilter.includes(option.value)"
+                  class="flex-1 justify-center"
+                  @click="toggleRecipeTypeFilter(option.value)"
+                />
+              </div>
+              <USelectMenu
+                v-model="recipeIngredientFilter"
+                :items="recipeIngredientFilterOptions"
+                value-key="id"
+                multiple
+                placeholder="Tous les ingrédients"
+                :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
+                icon="i-lucide-carrot"
+                aria-label="Filtrer par ingrédient"
+                class="w-full"
+                @update:model-value="onRecipeFilterChange"
+              />
+            </div>
+          </div>
+          <UFormField
+            label="Recette"
+            :error="recipeError"
+            :hint="hasRecipeFilters ? `${recipeOptions.length} recette${recipeOptions.length > 1 ? 's' : ''}` : undefined"
+          >
             <USelectMenu
               v-model="recipeId"
               :items="recipeOptions"

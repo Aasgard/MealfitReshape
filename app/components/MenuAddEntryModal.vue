@@ -175,7 +175,7 @@ const ingredientOptions = computed(() =>
     .filter(i => i.valuesBy100 && (ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL || i.category?.id === ingredientCategoryFilter.value))
     .map((i) => {
       const { calories, carbohydrates, protein, fat } = i.valuesBy100!
-      return { id: i.id, label: i.label, kcalLabel: `${Math.round(calories)} kcal/100 g`, macros: { carbohydrates, protein, fat } }
+      return { id: i.id, label: i.label, kcalLabel: `${Math.round(calories)} kcal`, macros: { carbohydrates, protein, fat } }
     })
     .sort(byLabel)
 )

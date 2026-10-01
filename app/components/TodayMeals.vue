@@ -14,6 +14,7 @@ const emit = defineEmits<{
   add: [mealType: MealType]
   /** Clic sur un repas issu d'une recette ou d'un aliment : ouvre sa fiche. */
   open: [entry: MenuEntry]
+  delete: [entry: MenuEntry]
 }>()
 
 /** "Collation · En plus · Non compté" */
@@ -29,6 +30,7 @@ const secondaryCount = computed(() => props.secondaryRows.reduce((total, row) =>
       :row="row"
       @add="emit('add', $event)"
       @open="emit('open', $event)"
+      @delete="emit('delete', $event)"
     />
 
     <UCollapsible v-if="secondaryRows.length" :ui="{ content: 'divide-y divide-default border-t border-default' }">
@@ -65,6 +67,7 @@ const secondaryCount = computed(() => props.secondaryRows.reduce((total, row) =>
           :row="row"
           @add="emit('add', $event)"
           @open="emit('open', $event)"
+          @delete="emit('delete', $event)"
         />
       </template>
     </UCollapsible>

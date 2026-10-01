@@ -5,7 +5,7 @@ import type { TodayMealRow } from '~/types/today'
 import { MEAL_TARGET_TOLERANCE, TARGET_STATUS_COLOR, targetStatus } from '~/utils/dailyTargets'
 import { MENU_MEAL_TYPES } from '~/utils/menuEntries'
 
-/** Un repas de la liste "Manger" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré. */
+/** Un repas de la liste "Manger" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré (supprimable). */
 const props = defineProps<{
   row: TodayMealRow
 }>()
@@ -14,6 +14,7 @@ const emit = defineEmits<{
   add: [mealType: MealType]
   /** Clic sur un repas issu d'une recette ou d'un aliment : ouvre sa fiche. */
   open: [entry: MenuEntry]
+  delete: [entry: MenuEntry]
 }>()
 
 const isOpenable = (entry: MenuEntry) => !!(entry.recipeId || entry.ingredientId)
@@ -85,11 +86,16 @@ const ringLength = computed(() =>
     </div>
 
     <ul v-if="row.entries.length" class="mt-3 flex flex-col gap-2">
-      <li v-for="entry in row.entries" :key="entry.id">
+      <!-- Le bouton de suppression est à côté de la zone cliquable, pas dedans : un <button> ne peut pas en contenir un autre. -->
+      <li
+        v-for="entry in row.entries"
+        :key="entry.id"
+        class="flex items-center gap-1 rounded-lg border border-default bg-elevated/40 pr-1.5"
+      >
         <component
           :is="isOpenable(entry) ? 'button' : 'div'"
           :type="isOpenable(entry) ? 'button' : undefined"
-          class="flex w-full items-center justify-between gap-3 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-start"
+          class="flex min-w-0 flex-1 items-center rounded-s-lg px-3 py-2 text-start"
           :class="isOpenable(entry) && 'cursor-pointer transition-colors hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary'"
           @click="isOpenable(entry) && emit('open', entry)"
         >
@@ -107,6 +113,15 @@ const ringLength = computed(() =>
             </p>
           </div>
         </component>
+        <UButton
+          icon="i-lucide-trash-2"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          class="shrink-0 text-dimmed hover:text-error"
+          :aria-label="`Supprimer ${entry.label}`"
+          @click="emit('delete', entry)"
+        />
       </li>
     </ul>
   </div>

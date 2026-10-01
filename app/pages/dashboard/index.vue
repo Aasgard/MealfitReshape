@@ -2,7 +2,7 @@
 import { addDays, differenceInCalendarDays, format, startOfDay, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { Ingredient } from '~/types/ingredient'
-import type { MealSource, MealType } from '~/types/meal'
+import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import type { MealSlot, TodayCookingRecipe, TodayMealRow } from '~/types/today'
@@ -56,7 +56,7 @@ const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
 const selectedWeekStart = computed(() => startOfWeek(selectedDay.value, { weekStartsOn: WEEK_STARTS_ON }))
 
 // Semaine du jour affiché (et la précédente) : naviguer dans une même semaine ne relance pas de requête.
-const { meals, addMeal } = useMeals(selectedWeekStart)
+const { meals, addMeal, replaceMeals } = useMeals(selectedWeekStart)
 watch(meals.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
@@ -86,7 +86,13 @@ await Promise.all([
   upcomingMeals.promise.value.catch(() => undefined),
 ])
 
-const dayEntries = computed(() => buildDayEntries(meals.value, selectedDay.value, recipesById.value, ingredientsById.value))
+/** Repas masqués immédiatement pendant le délai d'annulation d'une suppression (voir deleteEntry). */
+const pendingDeleteIds = ref(new Set<string>())
+const isNotPendingDelete = (meal: Meal) => !pendingDeleteIds.value.has(meal.id)
+
+const dayEntries = computed(() =>
+  buildDayEntries(meals.value.filter(isNotPendingDelete), selectedDay.value, recipesById.value, ingredientsById.value)
+)
 const daySummary = computed(() => summarizeDay(dayEntries.value))
 
 const ALL_MEAL_SLOTS = [...PLANNED_MEALS, ...OUT_OF_PLAN_MEALS]
@@ -121,7 +127,7 @@ const cookingDayLabel = (day: Date) => {
  * dans les 6 jours précédents, même la semaine d'avant, est un reste ; les recettes supprimées depuis sont ignorées.
  */
 const cookingRecipes = computed<TodayCookingRecipe[]>(() =>
-  recipesToCook(upcomingMeals.value, COOKING_DAYS).flatMap((item) => {
+  recipesToCook(upcomingMeals.value.filter(isNotPendingDelete), COOKING_DAYS).flatMap((item) => {
     const recipe = recipesById.value.get(item.recipeId)
     if (!recipe || differenceInCalendarDays(item.days[0]!, selectedDay.value) !== 0) return []
     return [{
@@ -182,6 +188,59 @@ const submitAddedMeal = async (source: MealSource) => {
       color: 'error',
     })
   }
+}
+
+const DELETE_GRACE_PERIOD_MS = 6000
+/** Handles des suppressions programmées mais pas encore exécutées (délai d'annulation en cours), par id de repas. */
+const pendingDeleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+const performDelete = async (meal: Meal, label: string) => {
+  try {
+    await replaceMeals([meal], [])
+  } catch (error: any) {
+    toast.add({
+      title: 'Erreur',
+      description: `« ${label} » n'a pas pu être supprimé : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error',
+    })
+  }
+  // Après un échec, le repas réapparaît ; après une réussite, Firestore l'a déjà retiré de `meals`.
+  pendingDeleteIds.value.delete(meal.id)
+}
+
+/** Masque le repas tout de suite et ne le supprime qu'après un court délai, le temps d'annuler depuis le toast. */
+const deleteEntry = (entry: MenuEntry) => {
+  const meal = meals.value.find(m => m.id === entry.id)
+  if (!meal || pendingDeleteTimeouts.has(meal.id)) return
+
+  const { id } = meal
+  const { label } = entry
+  pendingDeleteIds.value.add(id)
+
+  const timeout = setTimeout(() => {
+    pendingDeleteTimeouts.delete(id)
+    performDelete(meal, label)
+  }, DELETE_GRACE_PERIOD_MS)
+  pendingDeleteTimeouts.set(id, timeout)
+
+  toast.add({
+    title: 'Repas supprimé',
+    description: `« ${label} » sera définitivement supprimé.`,
+    color: 'neutral',
+    actions: [{
+      label: 'Annuler',
+      color: 'neutral',
+      variant: 'outline',
+      onClick: () => {
+        const pending = pendingDeleteTimeouts.get(id)
+        if (!pending) return
+        clearTimeout(pending)
+        pendingDeleteTimeouts.delete(id)
+        pendingDeleteIds.value.delete(id)
+        toast.add({ title: 'Suppression annulée', description: `« ${label} » a été conservé`, color: 'success' })
+      },
+    }],
+  })
 }
 
 /** Balayage horizontal (mobile, tablette) : vers la gauche = jour suivant, vers la droite = jour précédent. */
@@ -314,7 +373,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </NuxtLink>
             </div>
 
-            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" />
+            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" @delete="deleteEntry" />
           </div>
         </Transition>
       </div>

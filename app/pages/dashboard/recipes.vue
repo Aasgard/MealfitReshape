@@ -314,7 +314,7 @@ const confirmDeleteRecipe = () => {
                 :key="option.value"
                 :label="option.label"
                 :color="selectedTypes.includes(option.value) ? 'primary' : 'neutral'"
-                :variant="selectedTypes.includes(option.value) ? 'solid' : 'ghost'"
+                :variant="selectedTypes.includes(option.value) ? 'solid' : 'outline'"
                 size="sm"
                 :aria-pressed="selectedTypes.includes(option.value)"
                 class="flex-1 justify-center md:flex-none"

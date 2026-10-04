@@ -324,7 +324,7 @@ const onSubmit = () => {
                   :key="option.value"
                   :label="option.label"
                   :color="recipeTypeFilter.includes(option.value) ? 'primary' : 'neutral'"
-                  :variant="recipeTypeFilter.includes(option.value) ? 'solid' : 'ghost'"
+                  :variant="recipeTypeFilter.includes(option.value) ? 'solid' : 'outline'"
                   size="sm"
                   :aria-pressed="recipeTypeFilter.includes(option.value)"
                   class="flex-1 justify-center"

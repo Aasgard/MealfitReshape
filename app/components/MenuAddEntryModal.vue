@@ -74,6 +74,61 @@ const ALL_TARGET_KEYS = TARGET_FILTERS.map(t => t.key)
 /** Masque les recettes qui, au nombre de parts choisi, feraient dépasser l'un des objectifs actifs. */
 const activeTargets = ref<TargetKey[]>([...ALL_TARGET_KEYS])
 const recipeId = ref<string | undefined>(undefined)
+/**
+ * Lignes de la liste : un clic choisit la recette ; un appui prolongé (ou un clic droit, ou Maj+Entrée au clavier)
+ * ouvre sa fiche sans changer le choix.
+ */
+const recipeDetailOpen = ref(false)
+const viewedRecipeId = ref<string | undefined>(undefined)
+const viewedRecipe = computed(() => props.recipes.find(r => r.id === viewedRecipeId.value) ?? null)
+const viewRecipe = (id: string) => {
+  viewedRecipeId.value = id
+  recipeDetailOpen.value = true
+}
+
+const LONG_PRESS_MS = 500
+/** Au-delà de ce déplacement (px), l'appui est un défilement de la liste, pas un appui prolongé. */
+const LONG_PRESS_MOVE_TOLERANCE = 10
+let pressTimer: ReturnType<typeof setTimeout> | undefined
+let pressStart: { x: number, y: number } | null = null
+/** Vrai quand l'appui en cours a déjà ouvert la fiche : le clic qui suit ne doit pas choisir la recette. */
+let longPressFired = false
+
+const cancelPress = () => {
+  clearTimeout(pressTimer)
+  pressTimer = undefined
+  pressStart = null
+}
+const onRowPointerDown = (id: string, event: PointerEvent) => {
+  if (event.button !== 0) return
+  cancelPress()
+  longPressFired = false
+  pressStart = { x: event.clientX, y: event.clientY }
+  pressTimer = setTimeout(() => {
+    longPressFired = true
+    pressTimer = undefined
+    viewRecipe(id)
+  }, LONG_PRESS_MS)
+}
+const onRowPointerMove = (event: PointerEvent) => {
+  if (!pressStart) return
+  if (Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y) > LONG_PRESS_MOVE_TOLERANCE) cancelPress()
+}
+const onRowClick = (id: string) => {
+  if (longPressFired) {
+    longPressFired = false
+    return
+  }
+  recipeId.value = id
+}
+/** Clic droit (et appui prolongé sur Android, qui déclenche aussi `contextmenu`) : ouvre la fiche, une seule fois. */
+const onRowContextMenu = (id: string) => {
+  cancelPress()
+  if (longPressFired) return
+  longPressFired = true
+  viewRecipe(id)
+}
+onBeforeUnmount(cancelPress)
 /** Bloc des filtres de recettes, repliable ; ouvert à chaque ouverture de la modale. */
 const filtersOpen = ref(true)
 /** Filtre de saison (actif par défaut) : masque les recettes contenant au moins un aliment hors saison. */
@@ -428,34 +483,27 @@ const onSubmit = () => {
                 <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 transition-transform" :class="!filtersOpen && '-rotate-90'" aria-hidden="true" />
                 Filtres
               </button>
-              <UButton
-                v-if="hasRecipeFilters"
-                label="Réinitialiser"
-                color="neutral"
-                variant="link"
-                size="xs"
-                class="p-0"
-                @click="resetRecipeFilters"
-              />
+              <UTooltip v-if="hasRecipeFilters" text="Réinitialiser les filtres">
+                <UButton
+                  icon="i-lucide-funnel-x"
+                  aria-label="Réinitialiser les filtres"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  @click="resetRecipeFilters"
+                />
+              </UTooltip>
             </div>
             <div v-show="filtersOpen" id="recipe-filters" class="flex flex-col gap-3">
-              <!-- Boutons bascule dans le style des onglets du dessus ; plusieurs types peuvent être actifs à la fois. -->
-              <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-1">
-                <UButton
-                  v-for="option in recipeTypeFilterOptions"
-                  :key="option.value"
-                  :label="option.label"
-                  :color="recipeTypeFilter.includes(option.value) ? 'primary' : 'neutral'"
-                  :variant="recipeTypeFilter.includes(option.value) ? 'solid' : 'outline'"
-                  size="sm"
-                  :aria-pressed="recipeTypeFilter.includes(option.value)"
-                  class="flex-1 justify-center"
-                  @click="toggleRecipeTypeFilter(option.value)"
-                />
-              </div>
-              <!-- Un bouton par objectif, tous actifs par défaut ; chacun affiche ce qui reste dans la journée. -->
-              <div v-if="dayBudget" class="flex flex-col gap-1">
-                <div role="group" aria-label="Rester dans les objectifs du jour" class="flex gap-1 rounded-lg bg-elevated p-1">
+              <!--
+                Objectifs du jour puis types de plat, dans une même grille : une colonne d'icônes (cible, repas, ingrédient),
+                puis 4 colonnes qui prennent chacune la largeur de leur bouton le plus large (puis partagent le reste),
+                pour que les deux rangées s'alignent verticalement. En mobile, boutons plus compacts pour tenir sur 343 px.
+              -->
+              <div class="grid grid-cols-[max-content_repeat(4,minmax(max-content,1fr))] gap-1 rounded-lg bg-elevated p-1">
+                <!-- Un bouton par objectif, tous actifs par défaut ; chacun affiche ce qui reste dans la journée. -->
+                <div v-if="dayBudget" role="group" aria-label="Rester dans les objectifs du jour" class="col-span-5 grid grid-cols-subgrid">
+                  <span class="flex items-center justify-center px-0.5 text-muted" title="Cible"><UIcon name="i-lucide-crosshair" class="size-4" aria-hidden="true" /></span>
                   <UButton
                     v-for="target in TARGET_FILTERS"
                     :key="target.key"
@@ -464,7 +512,7 @@ const onSubmit = () => {
                     size="xs"
                     :aria-pressed="activeTargets.includes(target.key)"
                     :aria-label="`${target.label} : reste ${remainingOf(target.key)} ${target.unit}${isExceeded(target.key) ? ', objectif déjà dépassé' : ''}`"
-                    class="flex-auto justify-center gap-1 px-1.5 text-[11px] sm:text-xs tabular-nums whitespace-nowrap"
+                    class="h-8 justify-center gap-0.5 sm:gap-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums whitespace-nowrap"
                     @click="toggleTarget(target.key)"
                   >
                     <!-- « cible + macro : reste unité » ; la cible devient une alerte quand l'objectif est déjà dépassé. -->
@@ -472,34 +520,49 @@ const onSubmit = () => {
                     <span>{{ target.short }} : {{ remainingOf(target.key) }} {{ target.unit }}</span>
                   </UButton>
                 </div>
-                <p class="text-xs text-muted">
-                  Reste du jour ; les recettes sont comptées pour {{ parts.toLocaleString('fr-FR') }} part{{ parts > 1 ? 's' : '' }}.
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <USelectMenu
-                  v-model="recipeIngredientFilter"
-                  :items="recipeIngredientFilterOptions"
-                  value-key="id"
-                  multiple
-                  placeholder="Tous les ingrédients"
-                  :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
-                  icon="i-lucide-carrot"
-                  aria-label="Filtrer par ingrédient"
-                  class="flex-1 min-w-0"
-                  @update:model-value="onRecipeFilterChange"
-                />
-                <!-- Saison, actif par défaut : même bouton que sur la page Ingrédients. -->
-                <UTooltip text="Uniquement les recettes de saison">
+                <!-- Plusieurs types peuvent être actifs à la fois. -->
+                <div role="group" aria-label="Filtrer par type de plat" class="col-span-5 grid grid-cols-subgrid">
+                  <span class="flex items-center justify-center px-0.5 text-muted" title="Repas"><UIcon name="i-lucide-utensils" class="size-4" aria-hidden="true" /></span>
                   <UButton
-                    :color="seasonOnly ? 'primary' : 'neutral'"
-                    :variant="seasonOnly ? 'solid' : 'outline'"
-                    icon="i-lucide-leaf"
-                    aria-label="Uniquement les recettes sans aliment hors saison"
-                    :aria-pressed="seasonOnly"
-                    @click="toggleSeasonOnly"
+                    v-for="option in recipeTypeFilterOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :color="recipeTypeFilter.includes(option.value) ? 'primary' : 'neutral'"
+                    :variant="recipeTypeFilter.includes(option.value) ? 'solid' : 'outline'"
+                    size="xs"
+                    :aria-pressed="recipeTypeFilter.includes(option.value)"
+                    class="h-8 justify-center px-1 sm:px-1.5 text-[10px] sm:text-xs whitespace-nowrap"
+                    @click="toggleRecipeTypeFilter(option.value)"
                   />
-                </UTooltip>
+                </div>
+                <!-- Ingrédients et saison : l'icône dans la colonne des libellés, le champ et la saison alignés sur les 4 colonnes de boutons. -->
+                <div class="col-span-5 grid grid-cols-subgrid">
+                  <span class="flex items-center justify-center px-0.5 text-muted" title="Ingrédient"><UIcon name="i-lucide-carrot" class="size-4" aria-hidden="true" /></span>
+                  <div class="col-span-4 flex items-center gap-1">
+                    <USelectMenu
+                      v-model="recipeIngredientFilter"
+                      :items="recipeIngredientFilterOptions"
+                      value-key="id"
+                      multiple
+                      placeholder="Tous les ingrédients"
+                      :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
+                      aria-label="Filtrer par ingrédient"
+                      class="flex-1 min-w-0"
+                      @update:model-value="onRecipeFilterChange"
+                    />
+                    <!-- Saison, actif par défaut : même bouton que sur la page Ingrédients. -->
+                    <UTooltip text="Uniquement les recettes de saison">
+                      <UButton
+                        :color="seasonOnly ? 'primary' : 'neutral'"
+                        :variant="seasonOnly ? 'solid' : 'outline'"
+                        icon="i-lucide-leaf"
+                        aria-label="Uniquement les recettes sans aliment hors saison"
+                        :aria-pressed="seasonOnly"
+                        @click="toggleSeasonOnly"
+                      />
+                    </UTooltip>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -531,9 +594,18 @@ const onSubmit = () => {
                   type="button"
                   role="radio"
                   :aria-checked="recipeId === option.id"
-                  class="w-full flex flex-col gap-1 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                  class="w-full flex flex-col gap-1 px-3 py-2 text-left select-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                   :class="recipeId === option.id ? 'bg-primary/10' : 'hover:bg-elevated/60'"
-                  @click="recipeId = option.id"
+                  :aria-describedby="'recipe-row-hint'"
+                  style="-webkit-touch-callout: none"
+                  @click="onRowClick(option.id)"
+                  @pointerdown="onRowPointerDown(option.id, $event)"
+                  @pointermove="onRowPointerMove"
+                  @pointerup="cancelPress"
+                  @pointerleave="cancelPress"
+                  @pointercancel="cancelPress"
+                  @contextmenu.prevent="onRowContextMenu(option.id)"
+                  @keydown.enter.shift.prevent="viewRecipe(option.id)"
                 >
                   <span class="flex items-center gap-2 min-w-0">
                     <span class="truncate text-sm font-medium" :class="recipeId === option.id ? 'text-primary' : 'text-highlighted'">{{ option.label }}</span>
@@ -570,6 +642,7 @@ const onSubmit = () => {
                     </span>
                   </span>
                 </button>
+                <p id="recipe-row-hint" class="sr-only">Maj+Entrée pour afficher la fiche de la recette.</p>
                 <p v-if="!recipeOptions.length" class="px-3 py-6 text-center text-sm text-muted">
                   Aucune recette ne correspond.
                 </p>
@@ -692,4 +765,12 @@ const onSubmit = () => {
       </div>
     </template>
   </USlideover>
+
+  <!-- Fiche de la recette (appui prolongé), au-dessus de la modale ; ses quantités suivent le nombre de parts choisi. -->
+  <RecipeDetailSlideover
+    v-model:open="recipeDetailOpen"
+    :recipe="viewedRecipe"
+    :ingredients-by-id="ingredientsById"
+    :parts="parts"
+  />
 </template>

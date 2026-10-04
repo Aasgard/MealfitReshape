@@ -10,6 +10,8 @@ import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
 import { matchesSearch } from '~/utils/search'
+import { sortList, type SortState } from '~/utils/listSort'
+import { DEFAULT_INGREDIENT_SORT, INGREDIENT_CARD_SORT_OPTIONS, INGREDIENT_SORT_OPTIONS, ingredientSortValue, type IngredientSortKey } from '~/utils/ingredientSort'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -61,11 +63,14 @@ const categoryOptions = computed(() =>
 )
 
 const visibilityOptions = [
-  { value: 'all', label: 'Tous' },
-  { value: 'private', label: 'Privés' },
-  { value: 'public', label: 'Publics' },
+  { value: 'all', label: 'Tous', icon: 'i-lucide-eye' },
+  { value: 'private', label: 'Privés', icon: 'i-lucide-lock' },
+  { value: 'public', label: 'Publics', icon: 'i-lucide-globe' },
 ]
 const selectedVisibility = ref<'all' | 'private' | 'public'>('all')
+const selectedVisibilityOption = computed(() =>
+  visibilityOptions.find(o => o.value === selectedVisibility.value) ?? visibilityOptions[0]!
+)
 const seasonOnly = ref(false)
 const unitsOnly = ref(false)
 
@@ -114,22 +119,39 @@ const resetFilters = () => {
   unitsOnly.value = false
 }
 
+const viewMode = useViewMode('ingredients')
+
+
+/** Tri commun aux deux vues (non mémorisé) : en-têtes de colonnes en vue liste desktop, champ « Trier par » ailleurs. */
+const sort = ref<SortState<IngredientSortKey>>({ ...DEFAULT_INGREDIENT_SORT })
+
+/** Critères du champ « Trier par » : réduits en vue cartes ; un critère retiré repasse au tri par nom. */
+const sortOptions = computed(() => viewMode.value === 'cards' ? INGREDIENT_CARD_SORT_OPTIONS : INGREDIENT_SORT_OPTIONS)
+watch(sortOptions, (options) => {
+  if (!options.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_INGREDIENT_SORT }
+})
+const sortedIngredients = computed(() =>
+  sortList(filteredIngredients.value, i => ingredientSortValue(i, sort.value.key), sort.value.direction, i => i.label)
+)
+
 /**
  * Le catalogue (public + privé) n'a pas de limite côté requête Firestore : les filtres
  * (recherche, catégorie...) doivent porter sur l'ensemble des résultats déjà chargés.
- * On limite donc le nombre de cartes montées dans le DOM plutôt que la requête elle-même.
+ * On limite donc le nombre d'éléments montés dans le DOM plutôt que la requête elle-même,
+ * par pages plus longues en vue liste où les lignes sont denses.
+ * Changer de vue garde le nombre d'éléments déjà affichés : on ne monte pas d'un coup toute une page de plus.
  */
-const PAGE_SIZE = 24
-const visibleCount = ref(PAGE_SIZE)
-const displayedIngredients = computed(() => filteredIngredients.value.slice(0, visibleCount.value))
-const hasMoreIngredients = computed(() => filteredIngredients.value.length > visibleCount.value)
+const pageSize = computed(() => viewMode.value === 'list' ? 50 : 24)
+const visibleCount = ref(pageSize.value)
+const displayedIngredients = computed(() => sortedIngredients.value.slice(0, visibleCount.value))
+const hasMoreIngredients = computed(() => sortedIngredients.value.length > visibleCount.value)
 
 watch([searchQuery, selectedCategoryIds, selectedVisibility, seasonOnly, unitsOnly], () => {
-  visibleCount.value = PAGE_SIZE
+  visibleCount.value = pageSize.value
 })
 
 const showMoreIngredients = () => {
-  visibleCount.value += PAGE_SIZE
+  visibleCount.value += pageSize.value
 }
 
 const slideoverOpen = ref(false)
@@ -254,7 +276,7 @@ const confirmDeleteIngredient = () => {
 </script>
 
 <template>
-  <UDashboardPanel id="ingredients">
+  <UDashboardPanel id="ingredients" :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0 lg:overflow-hidden' }">
     <template #header>
       <UDashboardNavbar title="Ingrédients">
         <template #leading>
@@ -271,23 +293,10 @@ const confirmDeleteIngredient = () => {
     </template>
 
     <template #body>
-      <div class="flex flex-col gap-4 p-4 sm:p-6">
-        <div class="flex flex-col gap-3">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-medium text-highlighted">
-              {{ ingredientListHeaderLabel }}
-            </p>
-            <UButton
-              v-if="hasActiveFilters"
-              label="Réinitialiser les filtres"
-              icon="i-lucide-x"
-              color="neutral"
-              variant="link"
-              size="xs"
-              class="p-0"
-              @click="resetFilters"
-            />
-          </div>
+      <!-- À partir de lg, la barre de filtres reste fixe et seule la zone de liste défile ; les deux réservent la même gouttière
+           de barre de défilement pour garder le même alignement gauche/droite en vue cartes et en vue liste. -->
+      <div class="flex flex-col lg:flex-1 lg:min-h-0">
+        <div class="flex flex-col gap-3 shrink-0 px-4 sm:px-6 pt-4 pb-4 lg:overflow-y-hidden lg:[scrollbar-gutter:stable]">
           <div class="flex flex-col sm:flex-row gap-3">
             <UInput
               v-model="searchQuery"
@@ -297,107 +306,166 @@ const confirmDeleteIngredient = () => {
               placeholder="Rechercher un ingrédient..."
               class="w-full"
             />
-            <USelectMenu
-              v-model="selectedCategoryIds"
-              :items="categoryOptions"
-              value-key="id"
-              multiple
-              placeholder="Toutes les catégories"
-              :search-input="{ placeholder: 'Rechercher une catégorie...' }"
-              icon="i-lucide-shapes"
-              class="w-full sm:w-56 shrink-0"
-            />
-            <USelectMenu
-              v-model="selectedVisibility"
-              :items="visibilityOptions"
-              value-key="value"
-              :search-input="false"
-              icon="i-lucide-eye"
-              class="w-full sm:w-40 shrink-0"
-            />
-            <div class="flex items-center gap-1.5 border-t border-default pt-3 sm:border-t-0 sm:border-l sm:pl-3 sm:pt-0 sm:shrink-0">
-              <UTooltip text="Filtrer les ingrédients de saison" class="flex-1 sm:flex-none">
-                <UButton
-                  :color="seasonOnly ? 'primary' : 'neutral'"
-                  :variant="seasonOnly ? 'solid' : 'outline'"
-                  icon="i-lucide-leaf"
-                  aria-label="Filtrer les ingrédients de saison"
-                  :aria-pressed="seasonOnly"
-                  class="w-full sm:w-auto justify-center"
-                  @click="seasonOnly = !seasonOnly"
-                />
-              </UTooltip>
-              <UTooltip text="Filtrer les ingrédients avec unités" class="flex-1 sm:flex-none">
-                <UButton
-                  :color="unitsOnly ? 'primary' : 'neutral'"
-                  :variant="unitsOnly ? 'solid' : 'outline'"
-                  icon="i-lucide-git-branch"
-                  aria-label="Filtrer les ingrédients avec unités"
-                  :aria-pressed="unitsOnly"
-                  class="w-full sm:w-auto justify-center"
-                  @click="unitsOnly = !unitsOnly"
-                />
-              </UTooltip>
+            <!--
+              En mobile : une ligne visibilité / saison / unités, puis les catégories en dessous (order-last).
+              À partir de sm, `contents` rend tous ces champs à la ligne de filtres, dans l'ordre du code.
+            -->
+            <div class="flex flex-col gap-3 sm:contents">
+              <USelectMenu
+                v-model="selectedCategoryIds"
+                :items="categoryOptions"
+                value-key="id"
+                multiple
+                placeholder="Toutes les catégories"
+                :search-input="{ placeholder: 'Rechercher une catégorie...' }"
+                icon="i-lucide-shapes"
+                class="order-last w-full sm:order-none sm:w-56 sm:shrink-0"
+              />
+              <div class="flex items-center gap-3 sm:contents">
+                <!-- Icône seule : elle change avec le choix et passe en indigo quand un filtre est actif ; le libellé est dans l'infobulle. -->
+                <UTooltip :text="`Visibilité : ${selectedVisibilityOption.label}`">
+                  <USelectMenu
+                    v-model="selectedVisibility"
+                    :items="visibilityOptions"
+                    value-key="value"
+                    :search-input="false"
+                    :icon="selectedVisibilityOption.icon"
+                    class="w-auto shrink-0"
+                    :ui="{
+                      leadingIcon: selectedVisibility === 'all' ? undefined : 'text-primary',
+                      content: 'min-w-36',
+                    }"
+                  >
+                    <!-- Sans libellé visible, ce bloc vide (h-5) garde la hauteur de ligne des autres champs. -->
+                    <span class="block h-5 w-0" aria-hidden="true" />
+                    <span class="sr-only">Visibilité : {{ selectedVisibilityOption.label }}</span>
+                  </USelectMenu>
+                </UTooltip>
+                <div class="flex flex-1 items-center gap-1.5 border-l border-default pl-3 sm:flex-none sm:shrink-0">
+                  <UTooltip text="Filtrer les ingrédients de saison" class="flex-1 sm:flex-none">
+                    <UButton
+                      :color="seasonOnly ? 'primary' : 'neutral'"
+                      :variant="seasonOnly ? 'solid' : 'outline'"
+                      icon="i-lucide-leaf"
+                      aria-label="Filtrer les ingrédients de saison"
+                      :aria-pressed="seasonOnly"
+                      class="w-full justify-center sm:w-auto"
+                      @click="seasonOnly = !seasonOnly"
+                    />
+                  </UTooltip>
+                  <UTooltip text="Filtrer les ingrédients avec unités" class="flex-1 sm:flex-none">
+                    <UButton
+                      :color="unitsOnly ? 'primary' : 'neutral'"
+                      :variant="unitsOnly ? 'solid' : 'outline'"
+                      icon="i-lucide-git-branch"
+                      aria-label="Filtrer les ingrédients avec unités"
+                      :aria-pressed="unitsOnly"
+                      class="w-full justify-center sm:w-auto"
+                      @click="unitsOnly = !unitsOnly"
+                    />
+                  </UTooltip>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Sous les filtres : résultat, tri et choix de la vue, toujours sur une seule ligne (contrôles condensés en mobile). -->
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+              <p class="text-sm font-medium text-highlighted whitespace-nowrap">
+                {{ ingredientListHeaderLabel }}
+              </p>
+              <UButton
+                v-if="hasActiveFilters"
+                aria-label="Réinitialiser les filtres"
+                icon="i-lucide-funnel-x"
+                color="neutral"
+                variant="link"
+                size="xs"
+                class="p-0"
+                @click="resetFilters"
+              >
+                <span class="hidden sm:inline">Réinitialiser les filtres</span>
+              </UButton>
+            </div>
+            <div class="flex items-center gap-2 ml-auto">
+              <!-- En vue liste desktop, ce sont les en-têtes de colonnes qui trient. -->
+              <SortControl v-model="sort" :options="sortOptions" :class="viewMode === 'list' && 'lg:hidden'" />
+              <ViewModeToggle v-model="viewMode" />
             </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <template v-if="ingredientsLoading">
-          <div
-            v-for="i in 12"
-            :key="`skeleton-${i}`"
-            class="rounded-xl border border-default bg-default p-4 flex flex-col gap-2"
+        <!-- Zone qui défile (à partir de lg) : la liste est rognée sous la barre, rien ne passe derrière.
+             En vue liste, c'est le cadre du tableau qui défile : la zone ne défile pas mais garde sa gouttière (même alignement). -->
+        <div
+          class="flex flex-col gap-4 px-4 sm:px-6 pb-6 lg:flex-1 lg:min-h-0 lg:[scrollbar-gutter:stable]"
+          :class="viewMode === 'list' ? 'lg:overflow-y-hidden' : 'lg:overflow-y-auto'"
+        >
+          <UEmpty
+            v-if="!ingredientsLoading && ingredients.length === 0"
+            class="py-12"
+            icon="i-lucide-carrot"
+            title="Aucun ingrédient"
+            description="Ajoutez votre premier ingrédient pour le retrouver ici."
+            :actions="[{ label: 'Ajouter un ingrédient', icon: 'i-lucide-plus', onClick: openCreateForm }]"
+          />
+          <UEmpty
+            v-else-if="!ingredientsLoading && filteredIngredients.length === 0"
+            class="py-12"
+            icon="i-lucide-search-x"
+            title="Aucun ingrédient trouvé"
+            description="Essayez un autre terme de recherche ou ajoutez un nouvel ingrédient."
+          />
+          <IngredientList
+            v-else-if="viewMode === 'list'"
+            v-model:sort="sort"
+            :ingredients="displayedIngredients"
+            :is-owned="isOwnedByUser"
+            :loading="ingredientsLoading"
+            @select="selectIngredient"
+            @edit="openEditForm"
+            @delete="askDeleteIngredient"
           >
-            <div class="flex items-start justify-between gap-2">
-              <USkeleton class="h-5 w-2/3" />
-              <USkeleton class="size-5 rounded-full shrink-0" />
-            </div>
-            <div class="flex items-center justify-between gap-2">
-              <USkeleton class="h-4 w-20" />
-              <USkeleton class="h-4 w-10" />
-            </div>
-            <div class="flex flex-col gap-1 mt-1">
-              <USkeleton class="h-1.5 w-full rounded-full" />
-              <USkeleton class="h-1.5 w-full rounded-full" />
-              <USkeleton class="h-1.5 w-full rounded-full" />
-            </div>
+            <template v-if="hasMoreIngredients" #footer>
+              <LoadMoreSentinel :key="visibleCount" @load="showMoreIngredients" />
+            </template>
+          </IngredientList>
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <template v-if="ingredientsLoading">
+              <div
+                v-for="i in 12"
+                :key="`skeleton-${i}`"
+                class="rounded-xl border border-default bg-default p-4 flex flex-col gap-2"
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <USkeleton class="h-5 w-2/3" />
+                  <USkeleton class="size-5 rounded-full shrink-0" />
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                  <USkeleton class="h-4 w-20" />
+                  <USkeleton class="h-4 w-10" />
+                </div>
+                <div class="flex flex-col gap-1 mt-1">
+                  <USkeleton class="h-1.5 w-full rounded-full" />
+                  <USkeleton class="h-1.5 w-full rounded-full" />
+                  <USkeleton class="h-1.5 w-full rounded-full" />
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <IngredientCard
+                v-for="ingredient in displayedIngredients"
+                :key="ingredient.id"
+                :ingredient="ingredient"
+                :owned-by-user="isOwnedByUser(ingredient)"
+                @select="selectIngredient(ingredient)"
+                @edit="openEditForm(ingredient)"
+                @delete="askDeleteIngredient(ingredient)"
+              />
+            </template>
           </div>
-        </template>
-        <UEmpty
-          v-else-if="ingredients.length === 0"
-          class="col-span-full py-12"
-          icon="i-lucide-carrot"
-          title="Aucun ingrédient"
-          description="Ajoutez votre premier ingrédient pour le retrouver ici."
-          :actions="[{ label: 'Ajouter un ingrédient', icon: 'i-lucide-plus', onClick: openCreateForm }]"
-        />
-        <UEmpty
-          v-else-if="filteredIngredients.length === 0"
-          class="col-span-full py-12"
-          icon="i-lucide-search-x"
-          title="Aucun ingrédient trouvé"
-          description="Essayez un autre terme de recherche ou ajoutez un nouvel ingrédient."
-        />
-        <template v-else>
-          <IngredientCard
-            v-for="ingredient in displayedIngredients"
-            :key="ingredient.id"
-            :ingredient="ingredient"
-            :owned-by-user="isOwnedByUser(ingredient)"
-            @select="selectIngredient(ingredient)"
-            @edit="openEditForm(ingredient)"
-            @delete="askDeleteIngredient(ingredient)"
-          />
-        </template>
-        </div>
-        <div v-if="hasMoreIngredients" class="flex justify-center pt-2">
-          <UButton
-            label="Afficher plus"
-            color="neutral"
-            variant="outline"
-            @click="showMoreIngredients"
-          />
+          <!-- Chargement de la suite à l'approche du bas ; en vue liste, le repère est dans la liste (slot footer). -->
+          <LoadMoreSentinel v-if="hasMoreIngredients && viewMode === 'cards'" :key="visibleCount" @load="showMoreIngredients" />
         </div>
       </div>
     </template>

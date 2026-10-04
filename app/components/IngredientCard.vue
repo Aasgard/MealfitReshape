@@ -15,7 +15,6 @@ const emit = defineEmits<{
 }>()
 
 const inSeason = computed(() => isIngredientInSeason(props.ingredient))
-const allYear = computed(() => (props.ingredient.activeMonths?.length ?? 0) === 12)
 const unitCount = computed(() => Object.keys(props.ingredient.units ?? {}).length)
 const unitLabel = computed(() => unitCount.value
   ? `${unitCount.value} unité${unitCount.value > 1 ? 's' : ''}`
@@ -65,20 +64,17 @@ const actionItems = computed(() => [
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <p v-if="ingredient.category?.label" class="text-sm text-muted flex items-center gap-1.5 min-w-0 truncate">
+      <!-- Ligne toujours présente (h-5), même sans catégorie : les cartes d'une grille gardent la même géométrie. -->
+      <p class="h-5 text-sm text-muted flex items-center gap-1.5 min-w-0">
+        <template v-if="ingredient.category?.label">
           <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-3.5 shrink-0" />
           <span class="truncate">{{ ingredient.category.label }}</span>
-        </p>
-      </div>
-
-      <IngredientMacroSummary v-if="macros" :macros="macros" class="mt-1" />
-      <p v-else class="flex items-center gap-1.5 text-xs text-dimmed mt-1">
-        <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
-        Valeurs non renseignées
+        </template>
       </p>
 
-      <div class="flex items-center gap-2 mt-1 pt-2 border-t border-default">
+      <IngredientMacroSummary :macros="macros" class="mt-1" />
+
+      <div class="flex items-center gap-2 mt-auto pt-2 border-t border-default">
         <UBadge
           icon="i-lucide-git-branch"
           :label="unitLabel"
@@ -86,15 +82,7 @@ const actionItems = computed(() => [
           variant="subtle"
           size="sm"
         />
-        <span v-if="allYear" class="text-xs text-dimmed ml-auto">Toute l'année</span>
-        <span
-          v-else-if="inSeason"
-          class="flex items-center justify-center size-5 rounded-full bg-primary/10 ml-auto"
-          title="De saison"
-        >
-          <UIcon name="i-lucide-leaf" class="size-3 text-primary" />
-        </span>
-        <span v-else class="text-xs text-dimmed ml-auto">Hors saison</span>
+        <IngredientSeasonMark :ingredient="ingredient" class="ml-auto" />
       </div>
     </div>
   </div>

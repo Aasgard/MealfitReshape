@@ -3,8 +3,12 @@ import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, or, query, where, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
-import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { RECIPE_TYPES, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { matchesSearch } from '~/utils/search'
+import { macrosForRecipe } from '~/utils/recipeNutrition'
+import type { IngredientMacros } from '~/utils/ingredientNutrition'
+import { sortList, type SortState } from '~/utils/listSort'
+import { DEFAULT_RECIPE_SORT, RECIPE_CARD_SORT_OPTIONS, RECIPE_SORT_OPTIONS, recipeSortValue, type RecipeSortKey } from '~/utils/recipeSort'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -50,7 +54,7 @@ const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id,
 
 const searchQuery = ref('')
 
-const typeOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
+const typeOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t), icon: recipeTypeIcon(t) ?? undefined }))
 /** Une recette doit être de l'un des types sélectionnés ; aucun = tous les types. */
 const selectedTypes = ref<RecipeType[]>([])
 
@@ -91,8 +95,29 @@ const filteredRecipes = computed(() => {
     return matchesQuery && matchesType && matchesIngredients
   })
 
-  return [...list].sort((a, b) => a.title.localeCompare(b.title, 'fr'))
+  return sortList(list, r => recipeSortValue(r, sort.value.key, recipeMacrosById.value.get(r.id) ?? null), sort.value.direction, r => r.title)
 })
+
+const viewMode = useViewMode('recipes')
+
+
+/** Tri commun aux deux vues (non mémorisé) : en-têtes de colonnes en vue liste desktop, champ « Trier par » ailleurs. */
+const sort = ref<SortState<RecipeSortKey>>({ ...DEFAULT_RECIPE_SORT })
+
+/** Critères du champ « Trier par » : réduits en vue cartes ; un critère retiré repasse au tri par nom. */
+const sortOptions = computed(() => viewMode.value === 'cards' ? RECIPE_CARD_SORT_OPTIONS : RECIPE_SORT_OPTIONS)
+watch(sortOptions, (options) => {
+  if (!options.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_RECIPE_SORT }
+})
+
+/** Macros par part de chaque recette, pour le tri et la vue liste ; `null` quand rien n'est calculable. */
+const recipeMacrosById = computed(() => new Map<string, IngredientMacros | null>(
+  (recipes.value ?? []).map((r) => {
+    const macros = macrosForRecipe(r.ingredients, ingredientsById.value, r.persons ?? 1)
+    const hasMacros = macros.calories > 0 || macros.protein > 0 || macros.carbohydrates > 0 || macros.fat > 0
+    return [r.id, hasMacros ? macros : null]
+  })
+))
 
 const recipeListHeaderLabel = computed(() => {
   const n = filteredRecipes.value.length
@@ -263,7 +288,7 @@ const confirmDeleteRecipe = () => {
 </script>
 
 <template>
-  <UDashboardPanel id="recipes">
+  <UDashboardPanel id="recipes" :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0 lg:overflow-hidden' }">
     <template #header>
       <UDashboardNavbar title="Recettes">
         <template #leading>
@@ -280,108 +305,143 @@ const confirmDeleteRecipe = () => {
     </template>
 
     <template #body>
-      <div class="flex flex-col gap-4 p-4 sm:p-6">
-        <div class="flex flex-col gap-3">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-medium text-highlighted">
-              {{ recipeListHeaderLabel }}
-            </p>
-            <UButton
-              v-if="hasActiveFilters"
-              label="Réinitialiser les filtres"
-              icon="i-lucide-x"
-              color="neutral"
-              variant="link"
-              size="xs"
-              class="p-0"
-              @click="resetFilters"
+      <!-- À partir de lg, la barre de filtres reste fixe et seule la zone de liste défile ; les deux réservent la même gouttière
+           de barre de défilement pour garder le même alignement gauche/droite en vue cartes et en vue liste. -->
+      <div class="flex flex-col lg:flex-1 lg:min-h-0">
+        <div class="flex flex-col gap-3 shrink-0 px-4 sm:px-6 pt-4 pb-4 lg:overflow-y-hidden lg:[scrollbar-gutter:stable]">
+          <!-- Recherche, types et ingrédients sur une ligne à partir de xl ; en dessous, la recherche garde sa propre ligne. -->
+          <div class="flex flex-col xl:flex-row xl:items-center gap-3">
+            <UInput
+              v-model="searchQuery"
+              icon="i-lucide-search"
+              size="md"
+              variant="outline"
+              placeholder="Rechercher une recette..."
+              class="w-full xl:flex-1 xl:min-w-0"
             />
-          </div>
-          <UInput
-            v-model="searchQuery"
-            icon="i-lucide-search"
-            size="md"
-            variant="outline"
-            placeholder="Rechercher une recette..."
-            class="w-full"
-          />
-          <!-- Sous la recherche : types puis ingrédients, côte à côte à partir de md, empilés en dessous. -->
-          <div class="flex flex-col md:flex-row md:items-center gap-3">
-            <!-- Boutons bascule, comme dans la fenêtre d'ajout d'un repas ; plusieurs types peuvent être actifs à la fois. -->
-            <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-1 md:shrink-0 md:flex-nowrap">
-              <UButton
-                v-for="option in typeOptions"
-                :key="option.value"
-                :label="option.label"
-                :color="selectedTypes.includes(option.value) ? 'primary' : 'neutral'"
-                :variant="selectedTypes.includes(option.value) ? 'solid' : 'outline'"
-                size="sm"
-                :aria-pressed="selectedTypes.includes(option.value)"
-                class="flex-1 justify-center md:flex-none"
-                @click="toggleType(option.value)"
+            <!-- Types puis ingrédients, côte à côte à partir de md, empilés en dessous. -->
+            <div class="flex flex-col md:flex-row md:items-center gap-3 xl:shrink-0">
+              <!-- Boutons bascule, comme dans la fenêtre d'ajout d'un repas ; plusieurs types peuvent être actifs à la fois. -->
+              <!-- p-0.5 : boutons sm (28 px) + 4 px = 32 px, la hauteur des champs ; les lignes de filtres et de tri tombent ainsi au même endroit que sur la page Ingrédients. -->
+              <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-0.5 md:shrink-0 md:flex-nowrap">
+                <UButton
+                  v-for="option in typeOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :icon="option.icon"
+                  :color="selectedTypes.includes(option.value) ? 'primary' : 'neutral'"
+                  :variant="selectedTypes.includes(option.value) ? 'solid' : 'outline'"
+                  size="sm"
+                  :aria-pressed="selectedTypes.includes(option.value)"
+                  class="flex-1 justify-center md:flex-none"
+                  @click="toggleType(option.value)"
+                />
+              </div>
+              <USelectMenu
+                v-model="selectedIngredientIds"
+                :items="ingredientOptions"
+                value-key="id"
+                multiple
+                placeholder="Tous les ingrédients"
+                :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
+                icon="i-lucide-carrot"
+                class="w-full md:min-w-0 md:flex-1 xl:w-80 xl:flex-none 2xl:w-96"
               />
             </div>
-            <USelectMenu
-              v-model="selectedIngredientIds"
-              :items="ingredientOptions"
-              value-key="id"
-              multiple
-              placeholder="Tous les ingrédients"
-              :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
-              icon="i-lucide-carrot"
-              class="w-full md:min-w-0 md:flex-1"
-            />
+          </div>
+          <!-- Sous les filtres : résultat, tri et choix de la vue, toujours sur une seule ligne (contrôles condensés en mobile). -->
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+              <p class="text-sm font-medium text-highlighted whitespace-nowrap">
+                {{ recipeListHeaderLabel }}
+              </p>
+              <UButton
+                v-if="hasActiveFilters"
+                aria-label="Réinitialiser les filtres"
+                icon="i-lucide-funnel-x"
+                color="neutral"
+                variant="link"
+                size="xs"
+                class="p-0"
+                @click="resetFilters"
+              >
+                <span class="hidden sm:inline">Réinitialiser les filtres</span>
+              </UButton>
+            </div>
+            <div class="flex items-center gap-2 ml-auto">
+              <!-- En vue liste desktop, ce sont les en-têtes de colonnes qui trient. -->
+              <SortControl v-model="sort" :options="sortOptions" :class="viewMode === 'list' && 'lg:hidden'" />
+              <ViewModeToggle v-model="viewMode" />
+            </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <template v-if="recipesLoading">
-            <div
-              v-for="i in 8"
-              :key="`skeleton-${i}`"
-              class="rounded-xl border border-default bg-default overflow-hidden flex flex-col"
-            >
-              <USkeleton class="w-full h-36 rounded-none" />
-              <div class="p-4 flex flex-col gap-2 flex-1">
-                <div class="flex items-start justify-between gap-2">
-                  <USkeleton class="h-5 w-2/3" />
-                  <USkeleton class="size-5 rounded-full shrink-0" />
-                </div>
-                <USkeleton class="h-4 w-32 mt-1" />
-                <div class="flex items-center gap-2 mt-auto pt-2 border-t border-default">
-                  <USkeleton class="h-5 w-24 rounded-full" />
-                  <USkeleton class="h-5 w-20 rounded-full" />
-                </div>
-              </div>
-            </div>
-          </template>
+        <!-- Zone qui défile (à partir de lg) : la liste est rognée sous la barre, rien ne passe derrière.
+             En vue liste, c'est le cadre du tableau qui défile : la zone ne défile pas mais garde sa gouttière (même alignement). -->
+        <div
+          class="flex flex-col gap-4 px-4 sm:px-6 pb-6 lg:flex-1 lg:min-h-0 lg:[scrollbar-gutter:stable]"
+          :class="viewMode === 'list' ? 'lg:overflow-y-hidden' : 'lg:overflow-y-auto'"
+        >
           <UEmpty
-            v-else-if="recipes.length === 0"
-            class="col-span-full py-12"
+            v-if="!recipesLoading && recipes.length === 0"
+            class="py-12"
             icon="i-lucide-chef-hat"
             title="Aucune recette"
             description="Ajoutez votre première recette pour la retrouver ici."
             :actions="[{ label: 'Ajouter une recette', icon: 'i-lucide-plus', onClick: addRecipe }]"
           />
           <UEmpty
-            v-else-if="filteredRecipes.length === 0"
-            class="col-span-full py-12"
+            v-else-if="!recipesLoading && filteredRecipes.length === 0"
+            class="py-12"
             icon="i-lucide-search-x"
             title="Aucune recette trouvée"
             description="Essayez un autre terme de recherche ou ajoutez une nouvelle recette."
           />
-          <template v-else>
-            <RecipeCard
-              v-for="recipe in filteredRecipes"
-              :key="recipe.id"
-              :recipe="recipe"
-              :ingredients-by-id="ingredientsById"
-              @select="selectRecipe(recipe)"
-              @edit="editRecipe(recipe)"
-              @duplicate="duplicateRecipe(recipe)"
-              @delete="askDeleteRecipe(recipe)"
-            />
-          </template>
+          <RecipeList
+            v-else-if="viewMode === 'list'"
+            v-model:sort="sort"
+            :recipes="filteredRecipes"
+            :macros-by-id="recipeMacrosById"
+            :loading="recipesLoading"
+            @select="selectRecipe"
+            @edit="editRecipe"
+            @duplicate="duplicateRecipe"
+            @delete="askDeleteRecipe"
+          />
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <template v-if="recipesLoading">
+              <div
+                v-for="i in 8"
+                :key="`skeleton-${i}`"
+                class="rounded-xl border border-default bg-default overflow-hidden flex flex-col"
+              >
+                <USkeleton class="w-full h-36 rounded-none" />
+                <div class="p-4 flex flex-col gap-2 flex-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <USkeleton class="h-5 w-2/3" />
+                    <USkeleton class="size-5 rounded-full shrink-0" />
+                  </div>
+                  <USkeleton class="h-4 w-32 mt-1" />
+                  <div class="flex items-center gap-2 mt-auto pt-2 border-t border-default">
+                    <USkeleton class="h-5 w-24 rounded-full" />
+                    <USkeleton class="h-5 w-20 rounded-full" />
+                  </div>
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <RecipeCard
+                v-for="recipe in filteredRecipes"
+                :key="recipe.id"
+                :recipe="recipe"
+                :ingredients-by-id="ingredientsById"
+                @select="selectRecipe(recipe)"
+                @edit="editRecipe(recipe)"
+                @duplicate="duplicateRecipe(recipe)"
+                @delete="askDeleteRecipe(recipe)"
+              />
+            </template>
+          </div>
         </div>
       </div>
     </template>

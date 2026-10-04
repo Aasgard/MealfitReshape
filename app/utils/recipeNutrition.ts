@@ -41,13 +41,15 @@ const formatLineQuantity = (quantity: number, inGrams: boolean) =>
  * Intitulé lisible (nom de l'ingrédient parent, quelle que soit l'unité) et
  * quantité affichée d'une ligne de recette, résolus via `ingredientsById`.
  * `factor` multiplie la quantité (ex. 5 parts d'une recette prévue pour 4 : 5 / 4).
+ * `equivalentLabel` : pour une unité autre que « g » / « ml » (pièce, cuillère…), le poids ou volume total
+ * de la ligne, ex. « (= 160g) » pour 2 × Pièce de 80 g.
  * `null` si l'ingrédient ou l'unité référencée est introuvable.
  */
 export function describeRecipeLine(
   line: Pick<RecipeIngredientLine, 'ingredientRef' | 'unit' | 'quantity'>,
   ingredientsById: Map<string, Ingredient>,
   factor = 1
-): { label: string; quantityLabel: string } | null {
+): { label: string; quantityLabel: string; equivalentLabel?: string } | null {
   if (!line.ingredientRef) return null
 
   const ingredient = ingredientsById.get(line.ingredientRef.id)
@@ -61,7 +63,15 @@ export function describeRecipeLine(
   const unit = ingredient.units?.[line.unit]
   if (!unit) return null
 
-  return { label: ingredient.label, quantityLabel: `${formatLineQuantity(quantity, false)} × ${unit.label}` }
+  const quantityLabel = `${formatLineQuantity(quantity, false)} × ${unit.label}`
+  const isPlainMeasure = ['g', 'ml'].includes(unit.label.trim().toLowerCase())
+  if (isPlainMeasure || !(unit.value > 0)) return { label: ingredient.label, quantityLabel }
+
+  return {
+    label: ingredient.label,
+    quantityLabel,
+    equivalentLabel: `(= ${formatLineQuantity(quantity * unit.value, true)}${unit.unit})`,
+  }
 }
 
 /**

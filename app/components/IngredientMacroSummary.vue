@@ -2,45 +2,53 @@
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
 
 const props = withDefaults(defineProps<{
-  macros: IngredientMacros
+  /** `null` : valeurs non renseignées, affichées en tirets avec la même géométrie (les cartes d'une grille restent alignées). */
+  macros: IngredientMacros | null
   showBar?: boolean
 }>(), {
   showBar: true,
 })
 
 // Les kcal et grammes G/P/L sont arrondis à l'entier à l'affichage ; la barre garde les valeurs exactes.
-const macroTotal = computed(() => props.macros.carbohydrates + props.macros.protein + props.macros.fat)
+const macroTotal = computed(() => props.macros
+  ? props.macros.carbohydrates + props.macros.protein + props.macros.fat
+  : 0)
+
+const MACROS = [
+  { key: 'carbohydrates', short: 'G', label: 'Glucides', colorClass: 'bg-green-500' },
+  { key: 'protein', short: 'P', label: 'Protéines', colorClass: 'bg-red-700' },
+  { key: 'fat', short: 'L', label: 'Lipides', colorClass: 'bg-amber-500' },
+] as const
 
 /** Segments de la barre de composition, dans l’ordre G/P/L utilisé partout ailleurs ; les macros à 0 sont omises pour éviter un segment invisible collé à un gap. */
 const macroSegments = computed(() => {
-  if (macroTotal.value <= 0) return []
-  return ([
-    { key: 'carbohydrates', value: props.macros.carbohydrates, colorClass: 'bg-green-500' },
-    { key: 'protein', value: props.macros.protein, colorClass: 'bg-red-700' },
-    { key: 'fat', value: props.macros.fat, colorClass: 'bg-amber-500' },
-  ] as const)
-    .filter(segment => segment.value > 0)
-    .map(segment => ({ ...segment, width: `${(segment.value / macroTotal.value) * 100}%` }))
+  const macros = props.macros
+  if (!macros || macroTotal.value <= 0) return []
+  return MACROS
+    .filter(m => macros[m.key] > 0)
+    .map(m => ({ key: m.key, colorClass: m.colorClass, width: `${(macros[m.key] / macroTotal.value) * 100}%` }))
 })
+
+const format = (n: number | undefined) => n == null ? '—' : String(Math.round(n))
 </script>
 
 <template>
-  <div class="flex flex-col gap-1.5">
-    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dimmed">
-      <span class="flex items-center gap-1 shrink-0">
-        <span class="size-2 rounded-full bg-green-500 shrink-0" />
-        G <span class="font-medium text-highlighted tabular-nums">{{ Math.round(macros.carbohydrates) }}g</span>
-      </span>
-      <span class="flex items-center gap-1 shrink-0">
-        <span class="size-2 rounded-full bg-red-700 shrink-0" />
-        P <span class="font-medium text-highlighted tabular-nums">{{ Math.round(macros.protein) }}g</span>
-      </span>
-      <span class="flex items-center gap-1 shrink-0">
-        <span class="size-2 rounded-full bg-amber-500 shrink-0" />
-        L <span class="font-medium text-highlighted tabular-nums">{{ Math.round(macros.fat) }}g</span>
-      </span>
-      <p class="flex items-baseline gap-1 shrink-0 ml-auto">
-        <span class="font-semibold text-highlighted tabular-nums">{{ Math.round(macros.calories) }}</span>
+  <!--
+    La mise en page dépend de la largeur du composant (container query), jamais du nombre de chiffres :
+    étroit = G/P/L puis kcal sur deux lignes fixes ; à partir de 16rem = une seule ligne. Rien ne passe à la ligne.
+  -->
+  <div class="@container flex flex-col gap-1.5" :aria-label="macros ? undefined : 'Valeurs non renseignées'">
+    <div class="flex flex-col gap-1 text-xs text-dimmed whitespace-nowrap @[16rem]:flex-row @[16rem]:items-center @[16rem]:gap-2">
+      <div class="flex items-center gap-2">
+        <span v-for="m in MACROS" :key="m.key" class="flex items-center gap-1 shrink-0">
+          <span class="size-2 rounded-full shrink-0" :class="macros ? m.colorClass : 'bg-accented'" />
+          <span aria-hidden="true">{{ m.short }}</span>
+          <span class="sr-only">{{ m.label }}</span>
+          <span class="font-medium tabular-nums" :class="macros ? 'text-highlighted' : 'text-dimmed'">{{ format(macros?.[m.key]) }}<template v-if="macros">g</template></span>
+        </span>
+      </div>
+      <p class="flex items-baseline gap-1 self-end @[16rem]:self-auto @[16rem]:ml-auto">
+        <span class="font-semibold tabular-nums" :class="macros ? 'text-highlighted' : 'text-dimmed'">{{ format(macros?.calories) }}</span>
         <span>kcal</span>
       </p>
     </div>

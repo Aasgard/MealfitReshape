@@ -1,4 +1,5 @@
 import type { Ingredient } from '~/types/ingredient'
+import { normalizeForSearch } from '~/utils/search'
 
 /** Macros pour une portion d’ingrédient (unité ou masse totale). */
 export interface IngredientMacros {
@@ -74,4 +75,20 @@ export function ingredientUnitEntries(ing: Ingredient | null) {
   if (!ing?.units) return []
   return Object.entries(ing.units).map(([id, v]) => ({ id, ...v }))
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+}
+
+/** Part des protéines dans la masse G + P + L (0 à 1), critère de tri des colonnes « Ratio » ; `null` sans macros. */
+export function proteinShare(macros: IngredientMacros | null | undefined): number | null {
+  if (!macros) return null
+  const total = macros.carbohydrates + macros.protein + macros.fat
+  return total > 0 ? macros.protein / total : null
+}
+
+/**
+ * Poids (ou volume) d'une pièce : l'unité de l'ingrédient dont le libellé contient « pièce » (accents et casse ignorés).
+ * Les unités n'ont pas de type « pièce » dédié (libellé libre, clé aléatoire) : le libellé est le seul repère.
+ */
+export function ingredientPieceUnit(ing: Ingredient | null): { value: number; unit: 'g' | 'ml' } | null {
+  const piece = ingredientUnitEntries(ing).find(u => normalizeForSearch(u.label).includes('piece'))
+  return piece ? { value: piece.value, unit: piece.unit } : null
 }

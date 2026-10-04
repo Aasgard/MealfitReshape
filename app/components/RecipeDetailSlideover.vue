@@ -41,6 +41,7 @@ const lines = computed(() => {
       key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`,
       label: described?.label ?? 'Ingrédient introuvable',
       quantityLabel: described?.quantityLabel ?? `${line.quantity}`,
+      equivalentLabel: described?.equivalentLabel,
     }
   })
 })
@@ -155,7 +156,7 @@ const printRecipe = async () => {
           />
           <UBadge
             v-if="recipe?.cookTime != null"
-            icon="i-lucide-flame"
+            icon="i-lucide-cooking-pot"
             :label="`${recipe.cookTime} min cuisson`"
             color="neutral"
             variant="subtle"
@@ -187,7 +188,10 @@ const printRecipe = async () => {
               class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default last:border-b-0"
             >
               <span class="text-sm font-medium text-highlighted truncate">{{ line.label }}</span>
-              <span class="text-sm tabular-nums text-muted shrink-0">{{ line.quantityLabel }}</span>
+              <span class="text-sm tabular-nums text-muted shrink-0">
+                {{ line.quantityLabel }}
+                <span v-if="line.equivalentLabel" class="text-dimmed">{{ line.equivalentLabel }}</span>
+              </span>
             </li>
           </ul>
           <p v-else class="flex items-center gap-1.5 text-xs text-dimmed">

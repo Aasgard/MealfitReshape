@@ -7,6 +7,9 @@ import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, type MenuEntr
 import { gramsForUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import type { DailyTargets } from '~/utils/dailyTargets'
+import { matchesSearch } from '~/utils/search'
+import { isIngredientInSeason } from '~/utils/ingredientSeason'
 
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
@@ -22,6 +25,11 @@ const props = defineProps<{
   contextLabel: string
   /** Repas à modifier ; absent = ajout d'un nouveau repas. */
   initialSource?: MealSource | null
+  /**
+   * Ce que la journée contient déjà (hors repas modifié, hors « Non compté ») et ses objectifs, pour le filtre
+   * « Dans mes objectifs ». Absent = filtre non proposé (ex. ajout dans « Non compté », qui ne compte pas).
+   */
+  dayBudget?: { consumed: DailyTargets, targets: DailyTargets } | null
 }>()
 
 const isEditMode = computed(() => !!props.initialSource)
@@ -54,7 +62,24 @@ const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipe
 /** Filtres cumulatifs de la liste des recettes : l'un des types choisis, et tous les ingrédients choisis. Vides = pas de filtre. */
 const recipeTypeFilter = ref<RecipeType[]>([])
 const recipeIngredientFilter = ref<string[]>([])
+/** Objectifs du jour vérifiés par le filtre « Dans mes objectifs » (un bouton chacun, tous actifs par défaut). */
+type TargetKey = 'calories' | 'carbohydrates' | 'protein' | 'fat'
+const TARGET_FILTERS: { key: TargetKey, short: string, unit: string, label: string }[] = [
+  { key: 'calories', short: 'Cal', unit: 'kcal', label: 'Calories' },
+  { key: 'carbohydrates', short: 'G', unit: 'g', label: 'Glucides' },
+  { key: 'protein', short: 'P', unit: 'g', label: 'Protéines' },
+  { key: 'fat', short: 'L', unit: 'g', label: 'Lipides' },
+]
+const ALL_TARGET_KEYS = TARGET_FILTERS.map(t => t.key)
+/** Masque les recettes qui, au nombre de parts choisi, feraient dépasser l'un des objectifs actifs. */
+const activeTargets = ref<TargetKey[]>([...ALL_TARGET_KEYS])
 const recipeId = ref<string | undefined>(undefined)
+/** Bloc des filtres de recettes, repliable ; ouvert à chaque ouverture de la modale. */
+const filtersOpen = ref(true)
+/** Filtre de saison (actif par défaut) : masque les recettes contenant au moins un aliment hors saison. */
+const seasonOnly = ref(true)
+/** Recherche textuelle dans les titres de recettes : filtre la liste affichée, sans désélectionner la recette choisie. */
+const recipeSearch = ref('')
 /** Parts mangées, par demi-part (minimum une demi-part). */
 const PARTS_STEP = 0.5
 const parts = ref(1)
@@ -85,7 +110,11 @@ watch(open, (isOpen) => {
   submitted.value = false
   recipeTypeFilter.value = []
   recipeIngredientFilter.value = []
+  activeTargets.value = [...ALL_TARGET_KEYS]
   recipeId.value = undefined
+  recipeSearch.value = ''
+  seasonOnly.value = true
+  filtersOpen.value = true
   parts.value = 1
   ingredientCategoryFilter.value = INGREDIENT_CATEGORY_FILTER_ALL
   ingredientId.value = undefined
@@ -128,25 +157,97 @@ const recipeIngredientFilterOptions = computed(() => {
     .sort(byLabel)
 })
 
+/** Reste disponible avant chaque objectif du jour (négatif = déjà dépassé) ; `null` sans budget. */
+const remaining = computed(() => {
+  const budget = props.dayBudget
+  if (!budget) return null
+  return {
+    calories: budget.targets.calories - budget.consumed.calories,
+    carbohydrates: budget.targets.carbohydrates - budget.consumed.carbohydrates,
+    protein: budget.targets.protein - budget.consumed.protein,
+    fat: budget.targets.fat - budget.consumed.fat,
+  }
+})
+
+/** Vrai si la recette, au nombre de parts choisi, tient dans ce qui reste de chaque objectif actif. */
+const fitsRemaining = (recipe: Recipe) => {
+  const left = remaining.value
+  if (!left || !activeTargets.value.length) return true
+  const draft = buildRecipeDraft(recipe, parts.value, props.ingredientsById)
+  const added: Record<TargetKey, number> = { calories: draft.kcal, carbohydrates: draft.carbohydrates, protein: draft.protein, fat: draft.fat }
+  return activeTargets.value.every(key => added[key] <= left[key])
+}
+
+/**
+ * Vrai si aucun aliment de la recette n'est hors saison ce mois-ci. Un aliment sans mois renseignés, ou introuvable,
+ * ne compte pas comme hors saison : faute d'information, il n'écarte pas la recette.
+ */
+const isRecipeInSeason = (recipe: Recipe) =>
+  (recipe.ingredients ?? []).every((line) => {
+    const ingredient = line.ingredientRef ? props.ingredientsById.get(line.ingredientRef.id) : undefined
+    if (!ingredient?.activeMonths?.length) return true
+    return isIngredientInSeason(ingredient)
+  })
+
 const matchesRecipeFilters = (recipe: Recipe) => {
   if (recipeTypeFilter.value.length && !(recipe.type && recipeTypeFilter.value.includes(recipe.type))) return false
+  if (seasonOnly.value && !isRecipeInSeason(recipe)) return false
+  if (!fitsRemaining(recipe)) return false
   if (!recipeIngredientFilter.value.length) return true
   const recipeIngredientIds = new Set((recipe.ingredients ?? []).map(line => line.ingredientRef?.id))
   return recipeIngredientFilter.value.every(id => recipeIngredientIds.has(id))
 }
 
-const hasRecipeFilters = computed(() => recipeTypeFilter.value.length > 0 || recipeIngredientFilter.value.length > 0)
+/** Écart à l'état par défaut (aucun type ni ingrédient, saison et objectifs actifs) : « Réinitialiser » y revient. */
+const hasRecipeFilters = computed(() =>
+  recipeTypeFilter.value.length > 0
+  || recipeIngredientFilter.value.length > 0
+  || !seasonOnly.value
+  || (!!props.dayBudget && activeTargets.value.length !== ALL_TARGET_KEYS.length)
+)
+
+const toggleTarget = (key: TargetKey) => {
+  activeTargets.value = activeTargets.value.includes(key)
+    ? activeTargets.value.filter(k => k !== key)
+    : [...activeTargets.value, key]
+  onRecipeFilterChange()
+}
+
+/** Reste affiché dans chaque bouton (0 si déjà dépassé, signalé par une icône d'alerte). */
+const remainingOf = (key: TargetKey) => Math.max(0, Math.round(remaining.value?.[key] ?? 0))
+const isExceeded = (key: TargetKey) => (remaining.value?.[key] ?? 0) < 0
 
 /** Chaque recette avec ses kcal et sa répartition des macros pour une part, affichées en fin de ligne. */
 const recipeOptions = computed(() =>
   props.recipes
     .filter(matchesRecipeFilters)
+    .filter(r => matchesSearch(r.title, recipeSearch.value))
     .map((r) => {
       const { kcal, carbohydrates, protein, fat } = buildRecipeDraft(r, 1, props.ingredientsById)
-      return { id: r.id, label: r.title, kcalLabel: `${kcal} kcal`, macros: { carbohydrates, protein, fat } }
+      const hasMacros = kcal > 0 || carbohydrates > 0 || protein > 0 || fat > 0
+      return {
+        id: r.id,
+        label: r.title,
+        typeLabel: r.type ? recipeTypeLabel(r.type) : null,
+        prepTime: r.prepTime ?? null,
+        cookTime: r.cookTime ?? null,
+        kcal,
+        macros: hasMacros ? { carbohydrates, protein, fat } : null,
+      }
     })
     .sort(byLabel)
 )
+
+/** Temps affichés sur chaque ligne, avec les icônes de la vue liste des recettes. */
+const RECIPE_TIMES = [
+  { key: 'prepTime', icon: 'i-lucide-clock', label: 'Préparation' },
+  { key: 'cookTime', icon: 'i-lucide-cooking-pot', label: 'Cuisson' },
+] as const
+const RECIPE_MACROS = [
+  { key: 'carbohydrates', short: 'G', label: 'Glucides', dot: 'bg-green-500' },
+  { key: 'protein', short: 'P', label: 'Protéines', dot: 'bg-red-700' },
+  { key: 'fat', short: 'L', label: 'Lipides', dot: 'bg-amber-500' },
+] as const
 
 /** Les filtres réduisent la liste ; une recette déjà choisie qui n'y correspond plus est désélectionnée. */
 const onRecipeFilterChange = () => {
@@ -164,6 +265,13 @@ const toggleRecipeTypeFilter = (type: RecipeType) => {
 const resetRecipeFilters = () => {
   recipeTypeFilter.value = []
   recipeIngredientFilter.value = []
+  activeTargets.value = [...ALL_TARGET_KEYS]
+  seasonOnly.value = true
+}
+
+const toggleSeasonOnly = () => {
+  seasonOnly.value = !seasonOnly.value
+  onRecipeFilterChange()
 }
 
 /**
@@ -289,10 +397,14 @@ const onSubmit = () => {
     v-model:open="open"
     :title="isEditMode ? 'Modifier le repas' : 'Ajouter un repas'"
     :description="contextLabel"
-    :ui="{ content: 'sm:max-w-md' }"
+    :ui="{
+      content: 'sm:max-w-md',
+      body: mode === 'recipe' ? 'flex flex-col overflow-hidden' : undefined,
+    }"
   >
     <template #body>
-      <div class="flex flex-col gap-5">
+      <!-- En mode Recette, le corps ne défile pas : la liste des recettes prend la hauteur restante et défile seule. -->
+      <div class="flex flex-col gap-5" :class="mode === 'recipe' && 'flex-1 min-h-0'">
         <UTabs
           v-model="mode"
           :items="tabs"
@@ -305,7 +417,17 @@ const onSubmit = () => {
         <template v-if="mode === 'recipe'">
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between gap-3">
-              <span class="text-sm font-medium text-default">Filtres</span>
+              <!-- En-tête cliquable : replie ou déplie le bloc des filtres (ouvert par défaut). -->
+              <button
+                type="button"
+                class="flex items-center gap-1 text-sm font-medium text-default rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                :aria-expanded="filtersOpen"
+                aria-controls="recipe-filters"
+                @click="filtersOpen = !filtersOpen"
+              >
+                <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 transition-transform" :class="!filtersOpen && '-rotate-90'" aria-hidden="true" />
+                Filtres
+              </button>
               <UButton
                 v-if="hasRecipeFilters"
                 label="Réinitialiser"
@@ -316,7 +438,7 @@ const onSubmit = () => {
                 @click="resetRecipeFilters"
               />
             </div>
-            <div class="flex flex-col gap-3">
+            <div v-show="filtersOpen" id="recipe-filters" class="flex flex-col gap-3">
               <!-- Boutons bascule dans le style des onglets du dessus ; plusieurs types peuvent être actifs à la fois. -->
               <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-1">
                 <UButton
@@ -331,66 +453,127 @@ const onSubmit = () => {
                   @click="toggleRecipeTypeFilter(option.value)"
                 />
               </div>
-              <USelectMenu
-                v-model="recipeIngredientFilter"
-                :items="recipeIngredientFilterOptions"
-                value-key="id"
-                multiple
-                placeholder="Tous les ingrédients"
-                :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
-                icon="i-lucide-carrot"
-                aria-label="Filtrer par ingrédient"
-                class="w-full"
-                @update:model-value="onRecipeFilterChange"
-              />
+              <!-- Un bouton par objectif, tous actifs par défaut ; chacun affiche ce qui reste dans la journée. -->
+              <div v-if="dayBudget" class="flex flex-col gap-1">
+                <div role="group" aria-label="Rester dans les objectifs du jour" class="flex gap-1 rounded-lg bg-elevated p-1">
+                  <UButton
+                    v-for="target in TARGET_FILTERS"
+                    :key="target.key"
+                    :color="activeTargets.includes(target.key) ? 'primary' : 'neutral'"
+                    :variant="activeTargets.includes(target.key) ? 'solid' : 'outline'"
+                    size="xs"
+                    :aria-pressed="activeTargets.includes(target.key)"
+                    :aria-label="`${target.label} : reste ${remainingOf(target.key)} ${target.unit}${isExceeded(target.key) ? ', objectif déjà dépassé' : ''}`"
+                    class="flex-auto justify-center gap-1 px-1.5 text-[11px] sm:text-xs tabular-nums whitespace-nowrap"
+                    @click="toggleTarget(target.key)"
+                  >
+                    <!-- « cible + macro : reste unité » ; la cible devient une alerte quand l'objectif est déjà dépassé. -->
+                    <UIcon :name="isExceeded(target.key) ? 'i-lucide-triangle-alert' : 'i-lucide-target'" class="size-3 shrink-0" :class="isExceeded(target.key) && 'text-warning'" aria-hidden="true" />
+                    <span>{{ target.short }} : {{ remainingOf(target.key) }} {{ target.unit }}</span>
+                  </UButton>
+                </div>
+                <p class="text-xs text-muted">
+                  Reste du jour ; les recettes sont comptées pour {{ parts.toLocaleString('fr-FR') }} part{{ parts > 1 ? 's' : '' }}.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <USelectMenu
+                  v-model="recipeIngredientFilter"
+                  :items="recipeIngredientFilterOptions"
+                  value-key="id"
+                  multiple
+                  placeholder="Tous les ingrédients"
+                  :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
+                  icon="i-lucide-carrot"
+                  aria-label="Filtrer par ingrédient"
+                  class="flex-1 min-w-0"
+                  @update:model-value="onRecipeFilterChange"
+                />
+                <!-- Saison, actif par défaut : même bouton que sur la page Ingrédients. -->
+                <UTooltip text="Uniquement les recettes de saison">
+                  <UButton
+                    :color="seasonOnly ? 'primary' : 'neutral'"
+                    :variant="seasonOnly ? 'solid' : 'outline'"
+                    icon="i-lucide-leaf"
+                    aria-label="Uniquement les recettes sans aliment hors saison"
+                    :aria-pressed="seasonOnly"
+                    @click="toggleSeasonOnly"
+                  />
+                </UTooltip>
+              </div>
             </div>
           </div>
           <UFormField
             label="Recette"
             :error="recipeError"
-            :hint="hasRecipeFilters ? `${recipeOptions.length} recette${recipeOptions.length > 1 ? 's' : ''}` : undefined"
+            :hint="`${recipeOptions.length} recette${recipeOptions.length > 1 ? 's' : ''}`"
+            :ui="{ root: 'flex-1 min-h-0 flex flex-col', container: 'flex-1 min-h-0 flex flex-col' }"
           >
-            <USelectMenu
-              v-model="recipeId"
-              :items="recipeOptions"
-              value-key="id"
-              placeholder="Choisir une recette..."
-              :search-input="{ placeholder: 'Rechercher...' }"
-              icon="i-lucide-chef-hat"
-              class="w-full"
-            >
-              <template #item-trailing="{ item }">
-                <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
-                <MacroPie v-bind="item.macros" />
-              </template>
-            </USelectMenu>
-          </UFormField>
-          <UFormField
-            label="Nombre de parts"
-            :hint="selectedRecipe ? `La recette fait ${selectedRecipe.persons ?? 1} part(s)` : undefined"
-          >
-            <!-- Valeur affichée entre deux boutons, sans champ de saisie : aucun clavier ne s'ouvre sur mobile. -->
-            <div role="group" aria-label="Nombre de parts" class="flex items-center justify-between rounded-md ring ring-inset ring-accented">
-              <UButton
-                icon="i-lucide-minus"
-                color="neutral"
-                variant="link"
+            <!-- Recherche textuelle seule (pas de liste déroulante), puis les résultats en liste, comme la vue liste des recettes. -->
+            <div class="flex-1 min-h-0 flex flex-col gap-2">
+              <UInput
+                v-model="recipeSearch"
+                icon="i-lucide-search"
+                placeholder="Rechercher une recette..."
+                aria-label="Rechercher une recette"
                 size="md"
-                aria-label="Retirer une demi-part"
-                :disabled="parts <= PARTS_STEP"
-                @click="stepParts(-1)"
+                variant="outline"
+                class="w-full"
               />
-              <span class="text-sm font-medium text-highlighted tabular-nums" aria-live="polite">
-                {{ parts.toLocaleString('fr-FR') }}
-              </span>
-              <UButton
-                icon="i-lucide-plus"
-                color="neutral"
-                variant="link"
-                size="md"
-                aria-label="Ajouter une demi-part"
-                @click="stepParts(1)"
-              />
+              <div
+                role="radiogroup"
+                aria-label="Recettes"
+                class="flex-1 min-h-32 overflow-y-auto overscroll-contain rounded-lg border border-default divide-y divide-default"
+              >
+                <button
+                  v-for="option in recipeOptions"
+                  :key="option.id"
+                  type="button"
+                  role="radio"
+                  :aria-checked="recipeId === option.id"
+                  class="w-full flex flex-col gap-1 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                  :class="recipeId === option.id ? 'bg-primary/10' : 'hover:bg-elevated/60'"
+                  @click="recipeId = option.id"
+                >
+                  <span class="flex items-center gap-2 min-w-0">
+                    <span class="truncate text-sm font-medium" :class="recipeId === option.id ? 'text-primary' : 'text-highlighted'">{{ option.label }}</span>
+                    <span v-if="option.macros" class="ml-auto flex items-center gap-1.5 shrink-0">
+                      <span class="text-sm font-semibold text-highlighted tabular-nums">{{ option.kcal }}</span>
+                      <span class="text-xs text-dimmed">kcal</span>
+                      <MacroPie v-bind="option.macros" size-class="size-4" />
+                    </span>
+                  </span>
+                  <span class="flex items-center gap-3 min-w-0 text-xs">
+                    <span class="flex items-center gap-1.5 min-w-0 text-muted">
+                      <span v-if="option.typeLabel" class="truncate">{{ option.typeLabel }}</span>
+                      <template v-if="option.prepTime != null || option.cookTime != null">
+                        <span v-if="option.typeLabel" aria-hidden="true" class="text-dimmed">·</span>
+                        <template v-for="time in RECIPE_TIMES" :key="time.key">
+                          <span v-if="option[time.key] != null" class="flex items-center gap-0.5 shrink-0 tabular-nums">
+                            <UIcon :name="time.icon" class="size-3 shrink-0" aria-hidden="true" />
+                            <span class="sr-only">{{ time.label }}</span>
+                            {{ option[time.key] }} min
+                          </span>
+                        </template>
+                      </template>
+                    </span>
+                    <span class="ml-auto flex items-center gap-2 shrink-0 text-muted">
+                      <template v-if="option.macros">
+                        <span v-for="macro in RECIPE_MACROS" :key="macro.key" class="flex items-center gap-1 tabular-nums">
+                          <span class="size-1.5 rounded-full shrink-0" :class="macro.dot" />
+                          <span class="sr-only">{{ macro.label }}</span>
+                          <span aria-hidden="true">{{ macro.short }}</span>
+                          {{ Math.round(option.macros[macro.key]) }}
+                        </span>
+                      </template>
+                      <span v-else class="text-dimmed">Valeurs non renseignées</span>
+                    </span>
+                  </span>
+                </button>
+                <p v-if="!recipeOptions.length" class="px-3 py-6 text-center text-sm text-muted">
+                  Aucune recette ne correspond.
+                </p>
+              </div>
             </div>
           </UFormField>
         </template>
@@ -478,6 +661,35 @@ const onSubmit = () => {
         :icon="isEditMode ? 'i-lucide-check' : 'i-lucide-plus'"
         @click="onSubmit"
       />
+      <!-- Nombre de parts (mode Recette), aligné à droite de la barre d'ajout ; sans champ de saisie, aucun clavier ne s'ouvre sur mobile. -->
+      <div
+        v-if="mode === 'recipe'"
+        role="group"
+        aria-label="Nombre de parts"
+        class="ml-auto flex items-center gap-1 rounded-md ring ring-inset ring-accented"
+        :title="selectedRecipe ? `La recette fait ${selectedRecipe.persons ?? 1} part(s)` : undefined"
+      >
+        <UButton
+          icon="i-lucide-minus"
+          color="neutral"
+          variant="link"
+          size="md"
+          aria-label="Retirer une demi-part"
+          :disabled="parts <= PARTS_STEP"
+          @click="stepParts(-1)"
+        />
+        <span class="min-w-14 text-center text-sm font-medium text-highlighted tabular-nums whitespace-nowrap" aria-live="polite">
+          {{ parts.toLocaleString('fr-FR') }} part{{ parts > 1 ? 's' : '' }}
+        </span>
+        <UButton
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="link"
+          size="md"
+          aria-label="Ajouter une demi-part"
+          @click="stepParts(1)"
+        />
+      </div>
     </template>
   </USlideover>
 </template>

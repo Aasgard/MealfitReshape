@@ -7,7 +7,7 @@ import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import type { MealSlot, TodayCookingRecipe, TodayMealRow } from '~/types/today'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
-import { buildDayEntries, summarizeDay } from '~/utils/menuEntries'
+import { buildDayEntries, consumedOfDay, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { recipesToCook } from '~/utils/recipesToCook'
 import { WEEK_STARTS_ON } from '~/utils/menuWeek'
 
@@ -176,6 +176,12 @@ const openAddModal = (mealType: MealType) => {
 }
 
 const addContextLabel = computed(() => addTarget.value ? `${selectedDayTitle.value} · ${addTarget.value.label}` : '')
+
+/** Contenu du jour affiché et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
+const addDayBudget = computed(() => {
+  if (!addTarget.value || addTarget.value.mealType === UNCOUNTED_MEAL_KEY) return null
+  return { consumed: consumedOfDay(dayEntries.value), targets: DAILY_TARGETS }
+})
 
 const submitAddedMeal = async (source: MealSource) => {
   if (!addTarget.value) return
@@ -386,6 +392,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :ingredients="ingredients"
     :ingredients-by-id="ingredientsById"
     :context-label="addContextLabel"
+    :day-budget="addDayBudget"
     @submit="submitAddedMeal"
   />
 

@@ -50,6 +50,12 @@ const isSorted = (key: RecipeSortKey) => sort.value.key === key
 const valueClass = (key: RecipeSortKey) => isSorted(key) ? 'text-highlighted font-semibold' : 'text-default'
 
 const round = (n: number) => Math.round(n)
+
+/** Temps affichés dans la liste compacte : préparation puis cuisson, avec les icônes des en-têtes du tableau. */
+const COMPACT_TIMES = [
+  { key: 'prepTime', icon: 'i-lucide-clock', label: 'Préparation' },
+  { key: 'cookTime', icon: 'i-lucide-cooking-pot', label: 'Cuisson' },
+] as const
 const macrosOf = (recipe: Recipe) => props.macrosById.get(recipe.id) ?? null
 
 /** Jauge compacte de difficulté : 1 à 3 barres remplies aux couleurs de la difficulté (libellé en infobulle). */
@@ -316,7 +322,18 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 10 : 0 
               <span v-if="recipe.type" class="truncate">{{ recipeTypeLabel(recipe.type) }}</span>
               <template v-if="recipeTotalTime(recipe) != null">
                 <span v-if="recipe.type" aria-hidden="true" class="text-dimmed">·</span>
-                <span class="shrink-0 tabular-nums" :class="isSorted('time') && 'text-highlighted font-semibold'">{{ recipeTotalTime(recipe) }} min</span>
+                <!-- Préparation puis cuisson, chacune avec son icône (horloge, marmite) comme dans le tableau. -->
+                <span
+                  v-for="time in COMPACT_TIMES"
+                  v-show="recipe[time.key] != null"
+                  :key="time.key"
+                  class="flex items-center gap-0.5 shrink-0 tabular-nums"
+                  :class="isSorted(time.key) && 'text-highlighted font-semibold'"
+                >
+                  <UIcon :name="time.icon" class="size-3 shrink-0" aria-hidden="true" />
+                  <span class="sr-only">{{ time.label }}</span>
+                  {{ recipe[time.key] }} min
+                </span>
               </template>
             </span>
 

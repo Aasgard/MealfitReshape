@@ -244,3 +244,18 @@ export function buildWeekEntries(
   }
   return entries
 }
+
+/**
+ * Ce que la journée contient déjà, pour le filtre « Dans mes objectifs » de la modale d'ajout :
+ * mêmes règles que `summarizeDay` (« Non compté » exclu), sans le repas en cours de modification.
+ */
+export function consumedOfDay(
+  entries: Record<string, MenuEntry[]>,
+  excludeEntryId?: string | null
+): { calories: number, carbohydrates: number, protein: number, fat: number } {
+  const kept = Object.fromEntries(
+    Object.entries(entries).map(([mealKey, list]) => [mealKey, list.filter(e => e.id !== excludeEntryId)])
+  )
+  const { kcal, macros } = summarizeDay(kept)
+  return { calories: kcal, ...macros }
+}

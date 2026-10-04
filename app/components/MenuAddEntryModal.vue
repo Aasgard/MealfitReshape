@@ -7,7 +7,7 @@ import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, type MenuEntr
 import { gramsForUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
-import type { DailyTargets } from '~/utils/dailyTargets'
+import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
 import { matchesSearch } from '~/utils/search'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
 
@@ -55,6 +55,31 @@ const tabs = [
 const GRAMS_UNIT = '__grams__'
 
 const mode = ref<Mode>('recipe')
+
+/**
+ * Balayage horizontal (mobile) : vers la gauche passe à l'onglet suivant (Recette → Aliment → Macros),
+ * vers la droite au précédent. Mêmes seuils que le changement de jour de l'accueil.
+ */
+const MODE_ORDER: Mode[] = ['recipe', 'ingredient', 'macros']
+const SWIPE_MIN_DISTANCE = 60
+let swipeStart: { x: number, y: number } | null = null
+
+const onTouchStart = (event: TouchEvent) => {
+  const touch = event.touches[0]
+  swipeStart = event.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY } : null
+}
+
+const onTouchEnd = (event: TouchEvent) => {
+  const touch = event.changedTouches[0]
+  if (!swipeStart || !touch) return
+  const dx = touch.clientX - swipeStart.x
+  const dy = touch.clientY - swipeStart.y
+  swipeStart = null
+  // Un geste surtout vertical est un défilement (liste des recettes), pas un changement d'onglet.
+  if (Math.abs(dx) < SWIPE_MIN_DISTANCE || Math.abs(dx) < Math.abs(dy) * 2) return
+  const next = MODE_ORDER[MODE_ORDER.indexOf(mode.value) + (dx < 0 ? 1 : -1)]
+  if (next) mode.value = next
+}
 const submitted = ref(false)
 
 const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
@@ -224,14 +249,29 @@ const remaining = computed(() => {
   }
 })
 
-/** Vrai si la recette, au nombre de parts choisi, tient dans ce qui reste de chaque objectif actif. */
-const fitsRemaining = (recipe: Recipe) => {
+/**
+ * Place d'une recette (au nombre de parts choisi) par rapport aux objectifs actifs :
+ * - `fits` : elle tient dans ce qui reste de chaque objectif ;
+ * - `slightlyOver` : elle en dépasse au moins un, mais de 5 % de l'objectif du jour au plus (DAILY_TARGET_TOLERANCE,
+ *   la marge où la journée compte encore comme « atteinte ») : affichée, sur fond orange clair ;
+ * - `over` : elle dépasse un objectif de plus de 5 % : masquée.
+ */
+type TargetFit = 'fits' | 'slightlyOver' | 'over'
+const targetFit = (recipe: Recipe): TargetFit => {
   const left = remaining.value
-  if (!left || !activeTargets.value.length) return true
+  const budget = props.dayBudget
+  if (!left || !budget || !activeTargets.value.length) return 'fits'
   const draft = buildRecipeDraft(recipe, parts.value, props.ingredientsById)
   const added: Record<TargetKey, number> = { calories: draft.kcal, carbohydrates: draft.carbohydrates, protein: draft.protein, fat: draft.fat }
-  return activeTargets.value.every(key => added[key] <= left[key])
+  let fit: TargetFit = 'fits'
+  for (const key of activeTargets.value) {
+    if (added[key] <= left[key]) continue
+    if (added[key] > left[key] + budget.targets[key] * DAILY_TARGET_TOLERANCE) return 'over'
+    fit = 'slightlyOver'
+  }
+  return fit
 }
+const fitsRemaining = (recipe: Recipe) => targetFit(recipe) !== 'over'
 
 /**
  * Vrai si aucun aliment de la recette n'est hors saison ce mois-ci. Un aliment sans mois renseignés, ou introuvable,
@@ -288,6 +328,7 @@ const recipeOptions = computed(() =>
         cookTime: r.cookTime ?? null,
         kcal,
         macros: hasMacros ? { carbohydrates, protein, fat } : null,
+        slightlyOver: targetFit(r) === 'slightlyOver',
       }
     })
     .sort(byLabel)
@@ -454,12 +495,18 @@ const onSubmit = () => {
     :description="contextLabel"
     :ui="{
       content: 'sm:max-w-md',
-      body: mode === 'recipe' ? 'flex flex-col overflow-hidden' : undefined,
+      body: mode === 'recipe' ? 'flex flex-col overflow-hidden' : 'flex flex-col',
     }"
   >
     <template #body>
       <!-- En mode Recette, le corps ne défile pas : la liste des recettes prend la hauteur restante et défile seule. -->
-      <div class="flex flex-col gap-5" :class="mode === 'recipe' && 'flex-1 min-h-0'">
+      <!-- Toujours sur toute la hauteur du corps : le balayage entre onglets marche aussi dans la zone vide sous les champs. -->
+      <div
+        class="flex-1 flex flex-col gap-5"
+        :class="mode === 'recipe' && 'min-h-0'"
+        @touchstart.passive="onTouchStart"
+        @touchend.passive="onTouchEnd"
+      >
         <UTabs
           v-model="mode"
           :items="tabs"
@@ -595,7 +642,7 @@ const onSubmit = () => {
                   role="radio"
                   :aria-checked="recipeId === option.id"
                   class="w-full flex flex-col gap-1 px-3 py-2 text-left select-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-                  :class="recipeId === option.id ? 'bg-primary/10' : 'hover:bg-elevated/60'"
+                  :class="recipeId === option.id ? 'bg-primary/10' : option.slightlyOver ? 'bg-warning/10 hover:bg-warning/15' : 'hover:bg-elevated/60'"
                   :aria-describedby="'recipe-row-hint'"
                   style="-webkit-touch-callout: none"
                   @click="onRowClick(option.id)"
@@ -609,6 +656,7 @@ const onSubmit = () => {
                 >
                   <span class="flex items-center gap-2 min-w-0">
                     <span class="truncate text-sm font-medium" :class="recipeId === option.id ? 'text-primary' : 'text-highlighted'">{{ option.label }}</span>
+                    <span v-if="option.slightlyOver" class="sr-only">, dépasse légèrement un objectif du jour</span>
                     <span v-if="option.macros" class="ml-auto flex items-center gap-1.5 shrink-0">
                       <span class="text-sm font-semibold text-highlighted tabular-nums">{{ option.kcal }}</span>
                       <span class="text-xs text-dimmed">kcal</span>

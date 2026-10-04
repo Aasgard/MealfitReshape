@@ -30,5 +30,8 @@ export function ingredientSortValue(ingredient: Ingredient, key: IngredientSortK
   }
 }
 
-/** Critères proposés en vue cartes : le ratio (part de protéines) et le poids d'une pièce ne servent qu'en vue liste. */
-export const INGREDIENT_CARD_SORT_OPTIONS = INGREDIENT_SORT_OPTIONS.filter(o => o.key !== 'ratio' && o.key !== 'piece')
+/**
+ * Critères du champ « Trier par », identiques en vue cartes et en vue liste : sans le poids d'une pièce.
+ * INGREDIENT_SORT_OPTIONS reste la liste complète, utilisée par les en-têtes de colonnes du tableau.
+ */
+export const INGREDIENT_MENU_SORT_OPTIONS = INGREDIENT_SORT_OPTIONS.filter(o => o.key !== 'piece')

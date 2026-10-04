@@ -11,7 +11,7 @@ import { categoryIconName } from '~/utils/categoryIcon'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
 import { matchesSearch } from '~/utils/search'
 import { sortList, type SortState } from '~/utils/listSort'
-import { DEFAULT_INGREDIENT_SORT, INGREDIENT_CARD_SORT_OPTIONS, INGREDIENT_SORT_OPTIONS, ingredientSortValue, type IngredientSortKey } from '~/utils/ingredientSort'
+import { DEFAULT_INGREDIENT_SORT, INGREDIENT_MENU_SORT_OPTIONS, ingredientSortValue, type IngredientSortKey } from '~/utils/ingredientSort'
 
 useSeoMeta({
   title: 'Dashboard - Ingrédients - Mealfit',
@@ -125,10 +125,13 @@ const viewMode = useViewMode('ingredients')
 /** Tri commun aux deux vues (non mémorisé) : en-têtes de colonnes en vue liste desktop, champ « Trier par » ailleurs. */
 const sort = ref<SortState<IngredientSortKey>>({ ...DEFAULT_INGREDIENT_SORT })
 
-/** Critères du champ « Trier par » : réduits en vue cartes ; un critère retiré repasse au tri par nom. */
-const sortOptions = computed(() => viewMode.value === 'cards' ? INGREDIENT_CARD_SORT_OPTIONS : INGREDIENT_SORT_OPTIONS)
-watch(sortOptions, (options) => {
-  if (!options.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_INGREDIENT_SORT }
+/**
+ * Critères du champ « Trier par » (les mêmes dans les deux vues). Un tri posé depuis un en-tête absent du menu
+ * (poids d'une pièce, en vue liste desktop) repasse au tri par nom en revenant aux cartes, pour que le menu affiche un critère connu.
+ */
+const sortOptions = INGREDIENT_MENU_SORT_OPTIONS
+watch(viewMode, () => {
+  if (!sortOptions.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_INGREDIENT_SORT }
 })
 const sortedIngredients = computed(() =>
   sortList(filteredIngredients.value, i => ingredientSortValue(i, sort.value.key), sort.value.direction, i => i.label)

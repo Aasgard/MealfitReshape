@@ -8,7 +8,7 @@ import { matchesSearch } from '~/utils/search'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
 import { sortList, type SortState } from '~/utils/listSort'
-import { DEFAULT_RECIPE_SORT, RECIPE_CARD_SORT_OPTIONS, RECIPE_SORT_OPTIONS, recipeSortValue, type RecipeSortKey } from '~/utils/recipeSort'
+import { DEFAULT_RECIPE_SORT, RECIPE_MENU_SORT_OPTIONS, recipeSortValue, type RecipeSortKey } from '~/utils/recipeSort'
 
 useSeoMeta({
   title: 'Dashboard - Recettes - Mealfit',
@@ -104,10 +104,13 @@ const viewMode = useViewMode('recipes')
 /** Tri commun aux deux vues (non mémorisé) : en-têtes de colonnes en vue liste desktop, champ « Trier par » ailleurs. */
 const sort = ref<SortState<RecipeSortKey>>({ ...DEFAULT_RECIPE_SORT })
 
-/** Critères du champ « Trier par » : réduits en vue cartes ; un critère retiré repasse au tri par nom. */
-const sortOptions = computed(() => viewMode.value === 'cards' ? RECIPE_CARD_SORT_OPTIONS : RECIPE_SORT_OPTIONS)
-watch(sortOptions, (options) => {
-  if (!options.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_RECIPE_SORT }
+/**
+ * Critères du champ « Trier par » (les mêmes dans les deux vues). Un tri posé depuis un en-tête absent du menu
+ * (type, en vue liste desktop) repasse au tri par nom en revenant aux cartes, pour que le menu affiche un critère connu.
+ */
+const sortOptions = RECIPE_MENU_SORT_OPTIONS
+watch(viewMode, () => {
+  if (!sortOptions.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_RECIPE_SORT }
 })
 
 /** Macros par part de chaque recette, pour le tri et la vue liste ; `null` quand rien n'est calculable. */

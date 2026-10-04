@@ -63,5 +63,8 @@ export function recipeSortValue(recipe: Recipe, key: RecipeSortKey, macros: Ingr
   }
 }
 
-/** Critères proposés en vue cartes : type, temps de préparation / cuisson séparés et ratio ne servent qu'en vue liste. */
-export const RECIPE_CARD_SORT_OPTIONS = RECIPE_SORT_OPTIONS.filter(o => !(['type', 'prepTime', 'cookTime', 'ratio'] as RecipeSortKey[]).includes(o.key))
+/**
+ * Critères du champ « Trier par », identiques en vue cartes et en vue liste : ni type, ni temps total.
+ * RECIPE_SORT_OPTIONS reste la liste complète, utilisée par les en-têtes de colonnes du tableau.
+ */
+export const RECIPE_MENU_SORT_OPTIONS = RECIPE_SORT_OPTIONS.filter(o => !(['type', 'time'] as RecipeSortKey[]).includes(o.key))

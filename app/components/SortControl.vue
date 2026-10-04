@@ -28,7 +28,10 @@ const flipDirection = () => {
 
 <template>
   <div class="flex items-center gap-1">
-    <!-- Chaque critère a son icône (ou la pastille G/P/L), dans la liste comme dans le champ fermé. -->
+    <!--
+      Chaque critère a son icône (ou la pastille G/P/L), dans la liste comme dans le champ fermé.
+      La liste prend la hauteur disponible à l'écran (au lieu de max-h-60) : pas de défilement tant qu'elle tient.
+    -->
     <USelectMenu
       v-model="key"
       :items="options"
@@ -37,7 +40,7 @@ const flipDirection = () => {
       size="sm"
       aria-label="Trier par"
       class="w-auto sm:w-40"
-      :ui="{ content: 'min-w-44' }"
+      :ui="{ content: 'min-w-44 max-h-(--reka-combobox-content-available-height)' }"
     >
       <!-- En mobile, seule l'icône du critère reste visible (la ligne résultat / tri / vue tient sur une seule ligne). -->
       <template #default>

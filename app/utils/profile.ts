@@ -2,7 +2,8 @@ import { differenceInYears, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { ActivityKey, SexKey, UserBody, UserGoal, UserTargets } from '~/types/user'
 import type { DailyTargets } from './dailyTargets'
-import { dayReaching, rateForCalories, simulateWeight, totalEnergyExpenditure, type BodyModel } from './weightProjection'
+import { dayReaching, rateForCalories, resolveBodyModel, simulateWeight, totalEnergyExpenditure, type BodyModel } from './weightProjection'
+import type { WeightGoal } from './weightTrend'
 import { MANUAL_AISLES } from './groceryList'
 import { MEASUREMENT_ZONES, type MeasurementZoneKey } from './measurements'
 
@@ -286,6 +287,29 @@ export function projectGoal(model: BodyModel, goal: ProfileGoal): GoalProjection
     reachDay: dayReaching(weights, goal.targetWeightKg),
     plateauKg: weights.at(-1)!,
   }
+}
+
+/**
+ * Objectif du suivi de poids, tiré de l'objectif du profil ; `null` en maintien, sans poids visé ou sans point de départ.
+ * La projection reprend le modèle du profil depuis le jour et le poids de départ, aux kcal que donnait le pourcentage
+ * à ce poids ; sans date de naissance ni taille, pas de projection.
+ */
+export function trackingGoal(goal: ProfileGoal, body: BodyProfile, ageYears: number | null): WeightGoal | null {
+  const { startDate, startWeightKg, targetWeightKg } = goal
+  if (goal.direction === 'maintain' || !startDate || startWeightKg === null || targetWeightKg === null) return null
+  if (ageYears === null || !body.heightCm) return { startDate, startWeightKg, targetWeightKg, projection: null }
+
+  const model = resolveBodyModel({
+    sex: body.sex,
+    ageYears,
+    heightCm: body.heightCm,
+    weightKg: startWeightKg,
+    measuredBodyFatPercent: body.bodyFatPercent,
+    pal: activityPal(body.activity),
+  })
+  const weights = simulateWeight(model, goalCalories(totalEnergyExpenditure(model), goal))
+  const capped = (kg: number) => (targetWeightKg < startWeightKg ? Math.max(kg, targetWeightKg) : Math.min(kg, targetWeightKg))
+  return { startDate, startWeightKg, targetWeightKg, projection: weights.map(capped) }
 }
 
 /** Le poids visé va-t-il dans le sens de l'objectif ? */

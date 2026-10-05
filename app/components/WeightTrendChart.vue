@@ -38,17 +38,18 @@ const totalDays = computed(() => Math.max(differenceInCalendarDays(parseISO(prop
 const innerWidth = computed(() => Math.max(width.value - PAD.left - PAD.right, 1))
 const innerHeight = HEIGHT - PAD.top - PAD.bottom
 
-/** Sommets de la projection sur la période : départ, éventuel palier à l'objectif, fin. */
+/** Projection échantillonnée sur la période (elle ralentit au fil des jours) : environ 120 sommets au plus, plus le dernier jour. */
 const projection = computed(() => {
   const goal = props.goal
-  if (!goal) return []
+  if (!goal?.projection) return []
   const start = goal.startDate > props.from ? goal.startDate : props.from
   if (start > props.to) return []
-  const dates = [start]
-  const reach = projectionReachDate(goal)
-  if (reach && reach > start && reach < props.to) dates.push(reach)
+  const span = differenceInCalendarDays(parseISO(props.to), parseISO(start))
+  const step = Math.max(1, Math.round(span / 120))
+  const dates: string[] = []
+  for (let day = 0; day < span; day += step) dates.push(format(addDays(parseISO(start), day), 'yyyy-MM-dd'))
   dates.push(props.to)
-  return dates.map(date => ({ date, weightKg: projectionAt(goal, date) }))
+  return dates.map(date => ({ date, weightKg: projectionAt(goal, date)! }))
 })
 
 const yDomain = computed(() => {
@@ -115,6 +116,7 @@ const lastPoint = computed(() => visible.value[visible.value.length - 1] ?? null
 
 const activeIndex = ref<number | null>(null)
 const active = computed(() => (activeIndex.value === null ? null : visible.value[activeIndex.value] ?? null))
+const activeProjectionKg = computed(() => (props.goal && active.value ? projectionAt(props.goal, active.value.date) : null))
 
 function onPointerMove(event: PointerEvent) {
   if (!container.value || visible.value.length === 0) return
@@ -335,12 +337,12 @@ const ariaLabel = computed(() => {
         <dd class="text-end font-semibold text-primary">
           {{ formatWeight(active.trendKg) }} kg
         </dd>
-        <template v-if="goal && active.date >= goal.startDate">
+        <template v-if="activeProjectionKg !== null">
           <dt class="text-muted">
             Projection
           </dt>
           <dd class="text-end text-highlighted">
-            {{ formatWeight(projectionAt(goal, active.date)) }} kg
+            {{ formatWeight(activeProjectionKg) }} kg
           </dd>
         </template>
       </dl>

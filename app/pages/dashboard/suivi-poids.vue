@@ -2,7 +2,7 @@
 import type { DropdownMenuItem, TabsItem } from '@nuxt/ui'
 import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { TrendPoint, WeighIn, WeightGoal } from '~/utils/weightTrend'
+import type { TrendPoint, WeighIn } from '~/utils/weightTrend'
 
 useSeoMeta({
   title: 'Dashboard - Suivi de poids - Mealfit',
@@ -11,39 +11,25 @@ useSeoMeta({
 
 const toast = useToast()
 
-// --- Données d'exemple : maquette sans Firestore, avec plusieurs scénarios pour voir chaque état ---
+// --- Données : pesées (`users/{uid}/weighIns`) et objectif du profil ---
 
-type Scenario = 'full' | 'first' | 'no-goal' | 'empty'
+const { weighIns, error: loadError, promise: loaded, saveWeighIn, deleteWeighIn } = useWeighIns()
+const profile = useProfile()
+const { settings } = useAppSettings()
 
-const SCENARIO_LABELS: Record<Scenario, string> = {
-  'full': '3 mois de pesées',
-  'first': 'Premières pesées',
-  'no-goal': 'Sans objectif',
-  'empty': 'Aucune pesée',
-}
+watch(loadError, (error) => {
+  if (!error) return
+  toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
+})
 
-const scenario = ref<Scenario>('full')
-const weighIns = ref<WeighIn[]>([])
-const goal = ref<WeightGoal | null>(null)
+// Une erreur de chargement est signalée par le toast ci-dessus, sans bloquer la page.
+await Promise.all([loaded.value.catch(() => undefined), profile.ready])
 
-function loadScenario(value: Scenario) {
-  scenario.value = value
-  const sample = buildSampleWeighIns()
-  const data = value === 'empty' ? [] : value === 'first' ? sample.slice(-5) : sample
-  weighIns.value = data
-  goal.value = value === 'full' || value === 'first' ? buildSampleGoal(data) : null
-  visibleCount.value = JOURNAL_PAGE_SIZE
-}
-
-const scenarioItems = computed<DropdownMenuItem[]>(() => [
-  [{ type: 'label', label: 'Aperçu avec des données fictives' }],
-  (Object.keys(SCENARIO_LABELS) as Scenario[]).map(value => ({
-    label: SCENARIO_LABELS[value],
-    type: 'checkbox' as const,
-    checked: scenario.value === value,
-    onSelect: () => loadScenario(value),
-  })),
-])
+/** Objectif du profil ; la courbe de projection suit le réglage « Projection sur le graphique de poids ». */
+const goal = computed(() => {
+  const value = trackingGoal(profile.goal, profile.body, profile.age)
+  return value && !settings.value.showGoalProjection ? { ...value, projection: null } : value
+})
 
 // --- Tendance et indicateurs ---
 
@@ -71,6 +57,8 @@ const monthChange = computed(() => {
 })
 
 const rate = computed(() => trendRateKgPerWeek(points.value))
+/** Rythme de la projection sur les mêmes 4 semaines ; `null` sans projection. */
+const plannedRate = computed(() => (goal.value && latest.value ? projectionRateKgPerWeek(goal.value, latest.value.date) : null))
 
 const goalProgress = computed(() => {
   const g = goal.value
@@ -84,9 +72,8 @@ const goalProgress = computed(() => {
   return {
     remainingKg,
     ratio,
-    projectedKg,
-    /** Positif : au-dessus de la projection (en retard sur une perte). */
-    gapKg: current.trendKg - projectedKg,
+    /** Positif : au-dessus de la projection (en retard sur une perte) ; `null` sans projection à cette date. */
+    gapKg: projectedKg === null ? null : current.trendKg - projectedKg,
     eta: estimateGoalDate(current.trendKg, g.targetWeightKg, rate.value, current.date),
   }
 })
@@ -149,14 +136,20 @@ function openEdit(weighIn: WeighIn) {
   formOpen.value = true
 }
 
-function onSave(value: Omit<WeighIn, 'id'>) {
-  const editedId = editing.value?.id
-  weighIns.value = [
-    ...weighIns.value.filter(w => w.id !== editedId && w.date !== value.date),
-    { ...value, id: `local-${Date.now()}` },
-  ]
+const toastSaveError = (message: string) => (error: any) => {
   toast.add({
-    title: editedId ? 'Pesée modifiée' : 'Pesée enregistrée',
+    title: 'Erreur',
+    description: `${message} : ${error.message || 'une erreur est survenue'}.`,
+    color: 'error',
+  })
+}
+
+/** Le listener affiche la pesée aussitôt ; hors ligne, l'écriture n'aboutit qu'à la synchronisation, d'où le toast immédiat. */
+function onSave(value: Omit<WeighIn, 'id'>) {
+  const previous = editing.value
+  saveWeighIn(value, previous).catch(toastSaveError('La pesée n\'a pas pu être enregistrée'))
+  toast.add({
+    title: previous ? 'Pesée modifiée' : 'Pesée enregistrée',
     description: `${formatWeight(value.weightKg)} kg le ${longDate(value.date)}`,
     color: 'success',
     icon: 'i-lucide-check',
@@ -174,7 +167,7 @@ function askDelete(weighIn: WeighIn) {
 function confirmDelete() {
   const target = deleting.value
   if (!target) return
-  weighIns.value = weighIns.value.filter(w => w.id !== target.id)
+  deleteWeighIn(target).catch(toastSaveError('La pesée n\'a pas pu être supprimée'))
   deleteOpen.value = false
   toast.add({ title: 'Pesée supprimée', color: 'neutral', icon: 'i-lucide-trash-2' })
 }
@@ -185,8 +178,6 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
     [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDelete(weighIn) }],
   ]
 }
-
-loadScenario('full')
 </script>
 
 <template>
@@ -197,17 +188,6 @@ loadScenario('full')
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UDropdownMenu :items="scenarioItems" :content="{ align: 'end' }">
-            <UButton
-              color="neutral"
-              variant="outline"
-              icon="i-lucide-flask-conical"
-              trailing-icon="i-lucide-chevron-down"
-              aria-label="Choisir un jeu de données d'exemple"
-            >
-              <span class="hidden sm:inline">Données d'exemple</span>
-            </UButton>
-          </UDropdownMenu>
           <UButton icon="i-lucide-plus" aria-label="Ajouter une pesée" @click="openCreate">
             <span class="hidden sm:inline">Ajouter une pesée</span>
           </UButton>
@@ -285,8 +265,8 @@ loadScenario('full')
                 <span class="text-2xl font-bold tabular-nums text-highlighted">{{ formatSignedWeight(rate, 2) }}</span>
                 <span class="text-sm text-muted">kg/sem</span>
               </p>
-              <p v-if="goal" class="text-xs text-dimmed">
-                Prévu <span class="tabular-nums">{{ formatSignedWeight(goal.plannedRateKgPerWeek, 2) }}</span> kg/sem
+              <p v-if="plannedRate !== null" class="text-xs text-dimmed">
+                Prévu <span class="tabular-nums">{{ formatSignedWeight(plannedRate, 2) }}</span> kg/sem
               </p>
             </template>
             <p v-else class="text-sm text-dimmed">
@@ -332,11 +312,11 @@ loadScenario('full')
                 Aucun objectif défini
               </p>
               <p class="text-xs text-dimmed">
-                Le calculateur de besoins journaliers fixe un poids visé et le rythme prévu pour l'atteindre.
+                Un objectif de perte ou de prise avec un poids visé, dans votre profil, donne la progression et le rythme prévu.
               </p>
               <UButton
-                to="/dashboard/besoins-journaliers"
-                label="Calculer mes besoins"
+                to="/dashboard/profil"
+                label="Définir mon objectif"
                 trailing-icon="i-lucide-arrow-right"
                 color="neutral"
                 variant="link"
@@ -354,15 +334,17 @@ loadScenario('full')
               <h2 id="evolution-title" class="text-lg font-bold tracking-tight text-highlighted">
                 Évolution
               </h2>
-              <p v-if="goalProgress && Math.abs(goalProgress.gapKg) < 0.1" class="text-sm text-muted">
-                Tendance alignée sur la projection du calculateur
-              </p>
-              <p v-else-if="goalProgress" class="text-sm text-muted">
-                Tendance
-                <span class="font-semibold tabular-nums text-highlighted">{{ formatWeight(Math.abs(goalProgress.gapKg)) }} kg</span>
-                {{ goalProgress.gapKg > 0 === goal!.plannedRateKgPerWeek < 0 ? 'derrière' : 'devant' }}
-                la projection du calculateur
-              </p>
+              <template v-if="goal && goalProgress?.gapKg != null">
+                <p v-if="Math.abs(goalProgress.gapKg) < 0.1" class="text-sm text-muted">
+                  Tendance alignée sur la projection du calculateur
+                </p>
+                <p v-else class="text-sm text-muted">
+                  Tendance
+                  <span class="font-semibold tabular-nums text-highlighted">{{ formatWeight(Math.abs(goalProgress.gapKg)) }} kg</span>
+                  {{ goalProgress.gapKg > 0 === isLossGoal(goal) ? 'derrière' : 'devant' }}
+                  la projection du calculateur
+                </p>
+              </template>
             </div>
             <UTabs
               v-model="range"
@@ -386,7 +368,7 @@ loadScenario('full')
               Tendance 7 jours
             </li>
             <template v-if="goal">
-              <li class="flex items-center gap-2">
+              <li v-if="goal.projection" class="flex items-center gap-2">
                 <svg width="18" height="10" aria-hidden="true"><line x1="0" x2="18" y1="5" y2="5" stroke="var(--ui-text-dimmed)" stroke-width="1.5" stroke-dasharray="4 4" /></svg>
                 Projection du calculateur
               </li>

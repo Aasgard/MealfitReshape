@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { parsePositiveNumber, formatGrams } from '~/utils/numberInput'
 import type { DailyTargets } from '~/utils/dailyTargets'
+import type { GoalDirection, ProteinBasis } from '~/utils/profile'
+import type { BodySex } from '~/utils/weightProjection'
 
 useSeoMeta({
   title: 'Dashboard - Calculateur de besoins journaliers - Mealfit',
@@ -15,9 +17,13 @@ const heightCm = ref('175')
 const weightKg = ref('70')
 const bodyFatPercent = ref('')
 const activityLevel = ref('Modérément actif (exercice 3-5 j/semaine)')
-const goal = ref('Maintien')
-const proteinLevel = ref('Sport régulier ou musculation — 1,6 g/kg')
-const proteinBasis = ref('Poids actuel')
+const goalDirection = ref<GoalDirection>('maintain')
+/** Déficit (perte) ou surplus (prise) en % de la dépense, même liste que l'objectif du profil. */
+const goalPercent = ref(GOAL_DEFAULT_CALORIE_PERCENT.loss)
+const goalPercentError = ref<string>()
+/** Protéines en g par kg de poids de corps, mêmes niveaux que l'objectif du profil. */
+const proteinPerKg = ref(DEFAULT_PROTEIN_PER_KG)
+const proteinBasis = ref<ProteinBasis>('current')
 const targetWeightKg = ref('')
 
 // --- Lien avec le profil : préremplissage à l'ouverture, « Définir comme objectif » après le calcul ---
@@ -25,6 +31,8 @@ const profile = useProfile()
 const toast = useToast()
 const prefilledFromProfile = ref(false)
 
+// Préremplit avec la fiche enregistrée dans Firestore quand elle existe.
+await profile.ready
 if (profile.isBodyComplete) {
   sexe.value = profile.body.sex
   age.value = String(profile.age)
@@ -33,9 +41,18 @@ if (profile.isBodyComplete) {
   bodyFatPercent.value = profile.body.bodyFatPercent ? formatNumber(profile.body.bodyFatPercent, 1) : ''
   activityLevel.value = profile.body.activity
   targetWeightKg.value = profile.goal.targetWeightKg ? formatNumber(profile.goal.targetWeightKg, 1) : ''
-  goal.value = Object.keys(CALCULATOR_GOAL_DIRECTION).find(label => CALCULATOR_GOAL_DIRECTION[label] === profile.goal.direction) ?? 'Maintien'
+  goalDirection.value = profile.goal.direction
+  goalPercent.value = profile.goal.calorieDeltaPercent
+  proteinPerKg.value = profile.goal.proteinPerKg
+  proteinBasis.value = profile.goal.proteinBasis === 'target' && profile.goal.targetWeightKg !== null ? 'target' : 'current'
   prefilledFromProfile.value = true
 }
+
+// Un pourcentage qui n'est pas proposé dans le nouveau sens reprend celui par défaut (comme dans le profil).
+watch(goalDirection, (direction) => {
+  goalPercentError.value = undefined
+  if (direction !== 'maintain') goalPercent.value = percentForDirection(direction, goalPercent.value)
+})
 
 /** Résultat chiffré du dernier calcul, repris tel quel par « Définir comme objectif ». */
 const lastResult = ref<DailyTargets | null>(null)
@@ -54,11 +71,25 @@ const targetDiffRows = computed(() => {
 })
 
 function applyAsTarget() {
-  if (!lastResult.value) return
-  profile.setTargets(lastResult.value, 'calculator')
-  const direction = CALCULATOR_GOAL_DIRECTION[lastCalculatedGoal.value ?? goal.value]
-  if (direction) profile.setGoalDirection(direction)
+  const calculated = lastCalculatedGoal.value
+  if (!lastResult.value || !calculated) return
+  const before = { direction: profile.goal.direction, targetWeightKg: profile.goal.targetWeightKg }
+  profile.setGoalDirection(calculated.direction)
+  // Même pourcentage de la dépense : le profil projette alors la même courbe que ce calculateur.
+  if (calculated.direction !== 'maintain') profile.goal.calorieDeltaPercent = calculated.percent
+  profile.goal.proteinPerKg = calculated.proteinPerKg
+  profile.goal.proteinBasis = calculated.proteinBasis
   if (usesTargetWeight.value && targetWeightValue.value !== null) profile.goal.targetWeightKg = targetWeightValue.value
+  // Nouveau sens ou nouveau poids visé : l'objectif repart d'aujourd'hui (voir `saveGoal`).
+  const restart = profile.goal.direction !== before.direction || profile.goal.targetWeightKg !== before.targetWeightKg
+  // Besoins et objectif en une seule écriture : ils gardent la même date (voir `setTargets`).
+  profile.setTargets(lastResult.value, 'calculator', { goal: { restart } }).catch((error: any) => {
+    toast.add({
+      title: 'Erreur',
+      description: `L'objectif n'a pas pu être enregistré : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error',
+    })
+  })
   confirmTargetOpen.value = false
   toast.add({
     title: 'Objectif mis à jour',
@@ -71,51 +102,11 @@ function applyAsTarget() {
 
 const sexeOptions = ['Homme', 'Femme']
 
-const goalOptions = ['Perte de poids (-20 %)', 'Maintien', 'Prise de poids (+15 %)']
+// Mêmes sens que l'objectif du profil.
+const goalDirectionOptions = GOAL_DIRECTIONS.map(direction => ({ label: direction.label, value: direction.value, icon: direction.icon }))
 
-const activityOptions = [
-  'Sédentaire (peu ou pas d\'exercice)',
-  'Légèrement actif (exercice léger 1-3 j/semaine)',
-  'Modérément actif (exercice 3-5 j/semaine)',
-  'Très actif (exercice intense 6-7 j/semaine)',
-  'Extrêmement actif (travail physique + sport)',
-]
-
-// Coefficients d'activité habituellement associés à Mifflin-St Jeor (et Katch-McArdle), repris par la plupart des calculateurs.
-// Les PAL de la WHO/FAO/UNU (1,4 à 2,4) supposent un autre calcul du métabolisme de base : les combiner gonflait le maintien.
-const activityPalMap: Record<string, number> = {
-  'Sédentaire (peu ou pas d\'exercice)': 1.2,
-  'Légèrement actif (exercice léger 1-3 j/semaine)': 1.375,
-  'Modérément actif (exercice 3-5 j/semaine)': 1.55,
-  'Très actif (exercice intense 6-7 j/semaine)': 1.725,
-  'Extrêmement actif (travail physique + sport)': 1.9,
-}
-
-// Apport en protéines, en g par kg de poids corporel, selon la pratique sportive.
-const proteinOptions = [
-  'Peu ou pas de sport — 0,8 g/kg',
-  'Perte de poids sans musculation — 1,2 g/kg',
-  'Sport régulier ou musculation — 1,6 g/kg',
-  'Musculation en déficit calorique — 2,0 g/kg',
-]
-// 0,8 : référence nutritionnelle adulte (EFSA, ANSES). 1,2 : apport souvent retenu en restriction calorique pour limiter la perte
-// de masse maigre. 1,6 : plateau de la méta-analyse de Morton et al. (2018) sur le gain de masse maigre en musculation.
-// 2,0 : haut de la fourchette ISSN (Jäger et al., 2017 : 1,4-2,0 g/kg chez les sportifs), utile en déficit.
-const proteinGramsPerKgMap: Record<string, number> = {
-  'Peu ou pas de sport — 0,8 g/kg': 0.8,
-  'Perte de poids sans musculation — 1,2 g/kg': 1.2,
-  'Sport régulier ou musculation — 1,6 g/kg': 1.6,
-  'Musculation en déficit calorique — 2,0 g/kg': 2.0,
-}
-
-// Poids sur lequel appliquer les g/kg : en surpoids, le poids visé évite de surestimer le besoin.
-const proteinBasisOptions = ['Poids actuel', 'Poids visé']
-
-const goalFactorMap: Record<string, number> = {
-  'Perte de poids (-20 %)': 0.8,
-  'Maintien': 1,
-  'Prise de poids (+15 %)': 1.15,
-}
+// Mêmes niveaux (et coefficients) que la fiche corporelle du profil.
+const activityOptions = ACTIVITY_LEVELS.map(level => level.label)
 
 const bmrLabel = ref(EMPTY_RESULT)
 const formulaLabel = ref(EMPTY_RESULT)
@@ -126,7 +117,8 @@ const proteinDetailLabel = ref(EMPTY_RESULT)
 const fatLabel = ref(EMPTY_RESULT)
 const carbsLabel = ref(EMPTY_RESULT)
 const bodyFatUsedLabel = ref(EMPTY_RESULT)
-const lastCalculatedGoal = ref<string | null>(null)
+/** Objectif et protéines du dernier calcul, repris par « Définir comme objectif ». */
+const lastCalculatedGoal = ref<{ direction: GoalDirection, percent: number, proteinPerKg: number, proteinBasis: ProteinBasis } | null>(null)
 
 function formatKcal(value: number): string {
   if (!Number.isFinite(value)) return EMPTY_RESULT
@@ -141,7 +133,7 @@ function formatKg(value: number): string {
 const ageValue = computed(() => parsePositiveNumber(age.value))
 const heightValue = computed(() => parsePositiveNumber(heightCm.value))
 const weightValue = computed(() => parsePositiveNumber(weightKg.value))
-const usesTargetWeight = computed(() => proteinBasis.value === 'Poids visé')
+const usesTargetWeight = computed(() => proteinBasis.value === 'target')
 const targetWeightValue = computed(() => parsePositiveNumber(targetWeightKg.value))
 const bodyFatValue = computed(() => (bodyFatPercent.value.trim() ? parsePositiveNumber(bodyFatPercent.value) : null))
 
@@ -165,7 +157,8 @@ const bodyFatError = computed(() => {
 
 const canCalculate = computed(() =>
   ageValue.value !== null && heightValue.value !== null && weightValue.value !== null
-  && (!usesTargetWeight.value || targetWeightValue.value !== null),
+  && (!usesTargetWeight.value || targetWeightValue.value !== null)
+  && !goalPercentError.value,
 )
 
 const hasCalculated = computed(() => lastCalculatedGoal.value !== null)
@@ -187,15 +180,11 @@ function resetResults() {
   steadyStateWeightKg.value = null
 }
 
-// --- Projection dynamique (modèle simplifié inspiré de Hall & Thomas et al., 2011) ---
+// --- Projection dynamique (modèle partagé avec l'objectif du profil, voir utils/weightProjection) ---
 // Contrairement à la règle statique (±% du TDEE constant), la dépense énergétique est
 // recalculée à chaque pas à partir du poids courant : la perte/prise ralentit naturellement
 // à mesure que l'organisme s'adapte, jusqu'à un nouvel équilibre.
-const FORBES_CONSTANT_KG = 10.4 // Forbes (1987) — partition de l'énergie entre masse grasse et masse maigre
-const FAT_ENERGY_DENSITY_KCAL_PER_KG = 9400
-const LEAN_ENERGY_DENSITY_KCAL_PER_KG = 1100
 const CHECKPOINT_DAYS = [14, 30, 90, 180, 365]
-const STEADY_STATE_DAYS = 1095 // ~3 ans, horizon retenu par Hall pour approcher le plateau
 
 const projectionDurationLabel = ref('6 mois')
 const projectionDurationOptions = ['3 mois', '6 mois', '12 mois']
@@ -228,57 +217,6 @@ const checkpointRows = computed(() => {
     .map(d => ({ label: dayLabels[d], weightLabel: formatKg(checkpointWeights.value[d]!) }))
 })
 
-function estimateBodyFatPercent(sexeVal: string, ageYears: number, heightValue: number, weightValue: number): number {
-  // Formule de Deurenberg et al. (1991) — estimation à partir de l'IMC, utilisée à défaut de mesure réelle.
-  const heightM = heightValue / 100
-  const bmi = weightValue / (heightM * heightM)
-  const sexFactor = sexeVal === 'Homme' ? 1 : 0
-  const bf = 1.2 * bmi + 0.23 * ageYears - 10.8 * sexFactor - 5.4
-  return Math.min(60, Math.max(5, bf))
-}
-
-function bmrFromComposition(formula: string, sexeVal: string, ageYears: number, heightValue: number, weightValue: number, ffmKg: number): number {
-  if (formula === 'Katch-McArdle') {
-    return 370 + 21.6 * ffmKg
-  }
-  return sexeVal === 'Homme'
-    ? 10 * weightValue + 6.25 * heightValue - 5 * ageYears + 5
-    : 10 * weightValue + 6.25 * heightValue - 5 * ageYears - 161
-}
-
-function simulateTrajectory(params: {
-  formula: string
-  sexeVal: string
-  ageYears: number
-  heightValue: number
-  initialFmKg: number
-  initialFfmKg: number
-  pal: number
-  targetCalories: number
-  days: number
-}) {
-  const weekly: { day: number, weightKg: number }[] = [{ day: 0, weightKg: params.initialFmKg + params.initialFfmKg }]
-  const checkpoints: Record<number, number> = {}
-  let fm = params.initialFmKg
-  let ffm = params.initialFfmKg
-
-  for (let day = 1; day <= params.days; day++) {
-    const weight = fm + ffm
-    const bmr = bmrFromComposition(params.formula, params.sexeVal, params.ageYears, params.heightValue, weight, ffm)
-    const tdee = bmr * params.pal
-    const imbalance = params.targetCalories - tdee
-    const partitionToLean = FORBES_CONSTANT_KG / (FORBES_CONSTANT_KG + Math.max(fm, 0.1))
-
-    fm = Math.max(0, fm + (imbalance * (1 - partitionToLean)) / FAT_ENERGY_DENSITY_KCAL_PER_KG)
-    ffm = Math.max(0, ffm + (imbalance * partitionToLean) / LEAN_ENERGY_DENSITY_KCAL_PER_KG)
-
-    if (day % 7 === 0) weekly.push({ day, weightKg: fm + ffm })
-    if (CHECKPOINT_DAYS.includes(day)) checkpoints[day] = fm + ffm
-  }
-
-  return { weekly, checkpoints, finalWeightKg: fm + ffm }
-}
-
 function calculate() {
   const ageYears = ageValue.value
   const height = heightValue.value
@@ -290,66 +228,41 @@ function calculate() {
     return
   }
 
-  const bodyFatIsMeasured = bodyFatValue.value !== null && bodyFatValue.value < 70
-  const bodyFatPct = bodyFatIsMeasured ? bodyFatValue.value! : estimateBodyFatPercent(sexe.value, ageYears, height, weight)
-  bodyFatUsedLabel.value = `${bodyFatPct.toFixed(1).replace('.', ',')} % ${bodyFatIsMeasured ? '(mesurée)' : '(estimée — formule de Deurenberg)'}`
+  const model = resolveBodyModel({
+    sex: sexe.value as BodySex,
+    ageYears,
+    heightCm: height,
+    weightKg: weight,
+    measuredBodyFatPercent: bodyFatValue.value,
+    pal: activityPal(activityLevel.value),
+  })
+  bodyFatUsedLabel.value = `${model.bodyFatPercent.toFixed(1).replace('.', ',')} % ${model.bodyFatMeasured ? '(mesurée)' : '(estimée — formule de Deurenberg)'}`
+  formulaLabel.value = model.formula
 
-  let bmr: number
-  if (bodyFatIsMeasured) {
-    const leanMassKg = weight * (1 - bodyFatPct / 100)
-    bmr = 370 + 21.6 * leanMassKg
-    formulaLabel.value = 'Katch-McArdle'
-  } else {
-    bmr = sexe.value === 'Homme'
-      ? 10 * weight + 6.25 * height - 5 * ageYears + 5
-      : 10 * weight + 6.25 * height - 5 * ageYears - 161
-    formulaLabel.value = 'Mifflin-St Jeor'
-  }
+  const bmr = basalMetabolicRateAtStart(model)
+  const tdee = totalEnergyExpenditure(model)
 
-  const pal = activityPalMap[activityLevel.value] ?? 1.2
-  const tdee = bmr * pal
+  const calculatedGoal = { direction: goalDirection.value, percent: goalPercent.value, proteinPerKg: proteinPerKg.value, proteinBasis: proteinBasis.value }
+  const targetCalories = goalCalories(tdee, { direction: calculatedGoal.direction, calorieDeltaPercent: calculatedGoal.percent })
 
-  const goalFactor = goalFactorMap[goal.value] ?? 1
-  const targetCalories = tdee * goalFactor
-
-  // Répartition simple : protéines selon la pratique sportive (voir proteinGramsPerKgMap), lipides 25 % des kcal, glucides le reste.
-  const proteinPerKg = proteinGramsPerKgMap[proteinLevel.value] ?? 1.6
-  const proteinGrams = proteinPerKg * proteinWeight
-  const proteinKcal = proteinGrams * 4
-  const fatKcal = targetCalories * 0.25
-  const fatGrams = fatKcal / 9
-  const carbsKcal = Math.max(0, targetCalories - proteinKcal - fatKcal)
-  const carbsGrams = carbsKcal / 4
+  // Même répartition que l'objectif du profil (voir splitMacros).
+  const result = splitMacros(targetCalories, calculatedGoal.proteinPerKg * proteinWeight)
 
   bmrLabel.value = formatKcal(bmr)
   tdeeLabel.value = formatKcal(tdee)
   targetCaloriesLabel.value = formatKcal(targetCalories)
-  proteinLabel.value = formatGrams(proteinGrams)
-  proteinDetailLabel.value = `${proteinPerKg.toLocaleString('fr-FR', { minimumFractionDigits: 1 })} g/kg × ${proteinWeight.toLocaleString('fr-FR')} kg (${proteinBasis.value.toLowerCase()})`
-  fatLabel.value = formatGrams(fatGrams)
-  carbsLabel.value = formatGrams(carbsGrams)
+  proteinLabel.value = formatGrams(result.protein)
+  proteinDetailLabel.value = `${formatProteinPerKg(calculatedGoal.proteinPerKg)} × ${proteinWeight.toLocaleString('fr-FR')} kg (${PROTEIN_BASES.find(basis => basis.value === proteinBasis.value)!.label.toLowerCase()})`
+  fatLabel.value = formatGrams(result.fat)
+  carbsLabel.value = formatGrams(result.carbohydrates)
 
-  lastCalculatedGoal.value = goal.value
-  lastResult.value = { calories: targetCalories, carbohydrates: carbsGrams, protein: proteinGrams, fat: fatGrams }
+  lastCalculatedGoal.value = calculatedGoal
+  lastResult.value = result
 
-  const initialFmKg = weight * (bodyFatPct / 100)
-  const initialFfmKg = weight - initialFmKg
-
-  const projection = simulateTrajectory({
-    formula: formulaLabel.value,
-    sexeVal: sexe.value,
-    ageYears,
-    heightValue: height,
-    initialFmKg,
-    initialFfmKg,
-    pal,
-    targetCalories,
-    days: STEADY_STATE_DAYS,
-  })
-
-  fullWeeklySeries.value = projection.weekly
-  checkpointWeights.value = projection.checkpoints
-  steadyStateWeightKg.value = projection.finalWeightKg
+  const weights = simulateWeight(model, targetCalories)
+  fullWeeklySeries.value = weights.flatMap((weightKg, day) => (day % 7 === 0 ? [{ day, weightKg }] : []))
+  checkpointWeights.value = Object.fromEntries(CHECKPOINT_DAYS.map(day => [day, weights[day]!]))
+  steadyStateWeightKg.value = weights.at(-1)!
 }
 
 // --- Rendu du graphique (SVG inline, sans dépendance externe) ---
@@ -568,17 +481,32 @@ function handleChartPointerLeave() {
 
               <UFormField label="Objectif">
                 <USelectMenu
-                  v-model="goal"
-                  :items="goalOptions"
+                  v-model="goalDirection"
+                  :items="goalDirectionOptions"
+                  value-key="value"
                   :search-input="false"
                   class="w-full"
                 />
               </UFormField>
 
+              <UFormField
+                v-if="goalDirection !== 'maintain'"
+                :label="goalDirection === 'loss' ? 'Déficit calorique (% de la dépense)' : 'Surplus calorique (% de la dépense)'"
+                :error="goalPercentError"
+              >
+                <CaloriePercentPicker
+                  v-model="goalPercent"
+                  v-model:error="goalPercentError"
+                  :direction="goalDirection"
+                  size="md"
+                />
+              </UFormField>
+
               <UFormField label="Apport en protéines">
                 <USelectMenu
-                  v-model="proteinLevel"
-                  :items="proteinOptions"
+                  v-model="proteinPerKg"
+                  :items="PROTEIN_LEVEL_ITEMS"
+                  value-key="value"
                   :search-input="false"
                   class="w-full"
                 />
@@ -588,7 +516,8 @@ function handleChartPointerLeave() {
                 <UFormField label="Protéines calculées sur">
                   <USelectMenu
                     v-model="proteinBasis"
-                    :items="proteinBasisOptions"
+                    :items="PROTEIN_BASES"
+                    value-key="value"
                     :search-input="false"
                     class="w-full"
                   />
@@ -698,7 +627,7 @@ function handleChartPointerLeave() {
             </Transition>
           </div>
 
-          <div v-if="chartPoints.length > 1 && lastCalculatedGoal !== 'Maintien'" class="flex flex-col gap-4 border-t border-default pt-6">
+          <div v-if="chartPoints.length > 1 && lastCalculatedGoal?.direction !== 'maintain'" class="flex flex-col gap-4 border-t border-default pt-6">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="flex flex-col gap-1">
                 <p class="text-sm font-semibold text-highlighted">

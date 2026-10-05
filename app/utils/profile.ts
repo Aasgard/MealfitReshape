@@ -1,13 +1,16 @@
-import { addDays, differenceInYears, format, parseISO } from 'date-fns'
+import { differenceInYears, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import type { ActivityKey, SexKey, UserBody, UserGoal, UserTargets } from '~/types/user'
 import type { DailyTargets } from './dailyTargets'
+import { dayReaching, rateForCalories, simulateWeight, totalEnergyExpenditure, type BodyModel } from './weightProjection'
 import { MANUAL_AISLES } from './groceryList'
 import { MEASUREMENT_ZONES, type MeasurementZoneKey } from './measurements'
 
 /**
- * Profil et réglages : maquette en mémoire (pas encore de Firestore).
- * Les libellés d'activité et d'objectif reprennent ceux du calculateur de besoins journaliers,
- * pour que « Définir comme objectif » et le préremplissage passent d'une page à l'autre sans traduction.
+ * Profil et réglages. La fiche corporelle, l'objectif et la fiche de besoins sont enregistrés dans Firestore
+ * (`users/{uid}.body`, `.goal` et `.targets`, voir `useProfile`) ; les réglages restent une maquette en mémoire.
+ * Les niveaux d'activité, les pourcentages de déficit / surplus et les niveaux de protéines sont partagés avec le
+ * calculateur de besoins journaliers, pour que « Définir comme objectif » et le préremplissage passent d'une page à l'autre.
  */
 
 // --- Profil ---
@@ -15,20 +18,33 @@ import { MEASUREMENT_ZONES, type MeasurementZoneKey } from './measurements'
 export type Sex = 'Homme' | 'Femme'
 export const SEXES: Sex[] = ['Homme', 'Femme']
 
+/** Valeur stockée côté Firestore pour chaque sexe. */
+export const SEX_KEYS: Record<Sex, SexKey> = { Homme: 'male', Femme: 'female' }
+
 export interface ActivityLevel {
+  /** Valeur stockée côté Firestore : le libellé peut changer sans casser les fiches enregistrées. */
+  key: ActivityKey
   /** Libellé complet, identique à l'option du calculateur. */
   label: string
   short: string
   detail: string
+  /**
+   * Coefficient d'activité habituellement associé à Mifflin-St Jeor (et Katch-McArdle), repris par la plupart des calculateurs.
+   * Les PAL de la WHO/FAO/UNU (1,4 à 2,4) supposent un autre calcul du métabolisme de base : les combiner gonflait le maintien.
+   */
+  pal: number
 }
 
 export const ACTIVITY_LEVELS: ActivityLevel[] = [
-  { label: 'Sédentaire (peu ou pas d\'exercice)', short: 'Sédentaire', detail: 'Peu ou pas d\'exercice' },
-  { label: 'Légèrement actif (exercice léger 1-3 j/semaine)', short: 'Légèrement actif', detail: 'Exercice léger 1 à 3 j/semaine' },
-  { label: 'Modérément actif (exercice 3-5 j/semaine)', short: 'Modérément actif', detail: 'Exercice 3 à 5 j/semaine' },
-  { label: 'Très actif (exercice intense 6-7 j/semaine)', short: 'Très actif', detail: 'Exercice intense 6 à 7 j/semaine' },
-  { label: 'Extrêmement actif (travail physique + sport)', short: 'Extrêmement actif', detail: 'Travail physique + sport' },
+  { key: 'sedentary', label: 'Sédentaire (peu ou pas d\'exercice)', short: 'Sédentaire', detail: 'Peu ou pas d\'exercice', pal: 1.2 },
+  { key: 'light', label: 'Légèrement actif (exercice léger 1-3 j/semaine)', short: 'Légèrement actif', detail: 'Exercice léger 1 à 3 j/semaine', pal: 1.375 },
+  { key: 'moderate', label: 'Modérément actif (exercice 3-5 j/semaine)', short: 'Modérément actif', detail: 'Exercice 3 à 5 j/semaine', pal: 1.55 },
+  { key: 'very', label: 'Très actif (exercice intense 6-7 j/semaine)', short: 'Très actif', detail: 'Exercice intense 6 à 7 j/semaine', pal: 1.725 },
+  { key: 'extreme', label: 'Extrêmement actif (travail physique + sport)', short: 'Extrêmement actif', detail: 'Travail physique + sport', pal: 1.9 },
 ]
+
+/** Coefficient d'activité d'un libellé (celui du calculateur et du profil) ; sédentaire à défaut. */
+export const activityPal = (label: string) => ACTIVITY_LEVELS.find(level => level.label === label)?.pal ?? 1.2
 
 export type GoalDirection = 'loss' | 'maintain' | 'gain'
 
@@ -38,17 +54,76 @@ export const GOAL_DIRECTIONS: { value: GoalDirection, label: string, icon: strin
   { value: 'gain', label: 'Prise', icon: 'i-lucide-trending-up' },
 ]
 
-/** Rythmes proposés, en kg/semaine (valeur absolue ; le sens vient de l'objectif). */
-export const GOAL_RATES: Record<Exclude<GoalDirection, 'maintain'>, number[]> = {
-  loss: [0.25, 0.5, 0.75, 1],
-  gain: [0.25, 0.5],
+/** Déficits (perte) et surplus (prise) proposés, en % de la dépense journalière (valeur absolue ; le sens vient de l'objectif). */
+export const GOAL_CALORIE_PERCENTS: Record<Exclude<GoalDirection, 'maintain'>, number[]> = {
+  loss: [10, 15, 20, 25],
+  gain: [10, 15],
 }
 
-/** Libellé d'objectif du calculateur → sens de l'objectif du profil. */
-export const CALCULATOR_GOAL_DIRECTION: Record<string, GoalDirection> = {
-  'Perte de poids (-20 %)': 'loss',
-  'Maintien': 'maintain',
-  'Prise de poids (+15 %)': 'gain',
+/** Valeur de départ pour chaque sens, la même que le calculateur de besoins journaliers (−20 % / +15 %). */
+export const GOAL_DEFAULT_CALORIE_PERCENT: Record<Exclude<GoalDirection, 'maintain'>, number> = {
+  loss: 20,
+  gain: 15,
+}
+
+/** Bornes d'un déficit ou surplus saisi à la main, en % de la dépense (valeur absolue). */
+export const GOAL_CALORIE_PERCENT_LIMITS: Record<Exclude<GoalDirection, 'maintain'>, { min: number, max: number }> = {
+  loss: { min: 1, max: 35 },
+  gain: { min: 1, max: 25 },
+}
+
+export interface ProteinLevel {
+  /** Valeur stockée côté Firestore (`users.goal.proteinPerKg`). */
+  gramsPerKg: number
+  label: string
+}
+
+// 0,8 : référence nutritionnelle adulte (EFSA, ANSES). 1,2 : apport souvent retenu en restriction calorique pour limiter la perte
+// de masse maigre. 1,6 : plateau de la méta-analyse de Morton et al. (2018) sur le gain de masse maigre en musculation.
+// 2,0 : haut de la fourchette ISSN (Jäger et al., 2017 : 1,4-2,0 g/kg chez les sportifs), utile en déficit.
+/** Apport en protéines, en g par kg de poids de corps, selon la pratique sportive (profil et calculateur). */
+export const PROTEIN_LEVELS: ProteinLevel[] = [
+  { gramsPerKg: 0.8, label: 'Peu ou pas de sport' },
+  { gramsPerKg: 1.2, label: 'Perte de poids sans musculation' },
+  { gramsPerKg: 1.6, label: 'Sport régulier ou musculation' },
+  { gramsPerKg: 2, label: 'Musculation en déficit calorique' },
+]
+
+export const DEFAULT_PROTEIN_PER_KG = 1.6
+
+/** « 1,6 g/kg » (toujours une décimale, comme « 2,0 g/kg »). */
+export const formatProteinPerKg = (gramsPerKg: number) =>
+  `${gramsPerKg.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} g/kg`
+
+/** Options de liste déroulante, identiques dans le profil et le calculateur (« 1,6 g/kg · Sport régulier ou musculation »). */
+export const PROTEIN_LEVEL_ITEMS = PROTEIN_LEVELS.map(level => ({
+  label: `${formatProteinPerKg(level.gramsPerKg)} · ${level.label}`,
+  value: level.gramsPerKg,
+}))
+
+export type ProteinBasis = UserGoal['proteinBasis']
+
+/** Poids auquel appliquer les g/kg (profil et calculateur) : en surpoids, le poids visé évite de surestimer le besoin. */
+export const PROTEIN_BASES: { value: ProteinBasis, label: string }[] = [
+  { value: 'current', label: 'Poids actuel' },
+  { value: 'target', label: 'Poids visé' },
+]
+
+/** Poids de référence des protéines ; le poids visé n'a de sens qu'avec un objectif de perte ou de prise. */
+export function proteinBasisWeightKg(goal: Pick<ProfileGoal, 'direction' | 'targetWeightKg' | 'proteinBasis'>, currentKg: number | null): number | null {
+  return goal.proteinBasis === 'target' && goal.direction !== 'maintain' && goal.targetWeightKg !== null ? goal.targetWeightKg : currentKg
+}
+
+/** Pourcentage à garder en passant au sens `direction` : l'actuel s'il y est proposé, sinon celui par défaut. */
+export function percentForDirection(direction: Exclude<GoalDirection, 'maintain'>, current: number): number {
+  return GOAL_CALORIE_PERCENTS[direction].includes(current) ? current : GOAL_DEFAULT_CALORIE_PERCENT[direction]
+}
+
+/** Calories par jour pour un objectif : dépense ∓ le pourcentage choisi. */
+export function goalCalories(expenditureKcal: number, goal: Pick<ProfileGoal, 'direction' | 'calorieDeltaPercent'>): number {
+  if (goal.direction === 'maintain') return expenditureKcal
+  const sign = goal.direction === 'loss' ? -1 : 1
+  return expenditureKcal * (1 + (sign * goal.calorieDeltaPercent) / 100)
 }
 
 export interface BodyProfile {
@@ -65,14 +140,106 @@ export interface BodyProfile {
 export interface ProfileGoal {
   direction: GoalDirection
   targetWeightKg: number | null
-  /** kg/semaine, valeur absolue. */
-  rateKgPerWeek: number
+  /** Déficit ou surplus en % de la dépense, valeur absolue (voir `UserGoal`). */
+  calorieDeltaPercent: number
+  /** Protéines visées, en g par kg de poids de corps (une valeur de `PROTEIN_LEVELS`). */
+  proteinPerKg: number
+  /** Poids auquel appliquer `proteinPerKg` (voir `PROTEIN_BASES`). */
+  proteinBasis: ProteinBasis
+  /** Point de départ de l'objectif (voir `UserGoal`), format `yyyy-MM-dd`. */
+  startDate: string | null
+  startWeightKg: number | null
 }
 
 export interface ProfileTargets extends DailyTargets {
-  source: 'calculator' | 'manual'
+  source: UserTargets['source']
   /** Format `yyyy-MM-dd`. */
   updatedAt: string
+}
+
+/** Fiche de besoins stockée → fiche de l'app, datée de `updatedAt` (son enregistrement). */
+export function targetsFromStored(stored: Partial<UserTargets>, updatedAt: Date): ProfileTargets {
+  return {
+    calories: finiteOrNull(stored.calories) ?? 0,
+    carbohydrates: finiteOrNull(stored.carbohydrates) ?? 0,
+    protein: finiteOrNull(stored.protein) ?? 0,
+    fat: finiteOrNull(stored.fat) ?? 0,
+    source: stored.source === 'profile' || stored.source === 'calculator' ? stored.source : 'manual',
+    updatedAt: format(updatedAt, 'yyyy-MM-dd'),
+  }
+}
+
+/** Fiche de besoins de l'app → fiche stockée, valeurs arrondies (sans `updatedAt`, posé à l'écriture). */
+export function targetsToStored(values: DailyTargets, source: UserTargets['source']): Omit<UserTargets, 'updatedAt'> {
+  return {
+    calories: Math.round(values.calories),
+    carbohydrates: Math.round(values.carbohydrates),
+    protein: Math.round(values.protein),
+    fat: Math.round(values.fat),
+    source,
+  }
+}
+
+const DEFAULT_ACTIVITY = ACTIVITY_LEVELS[2]!
+
+const finiteOrNull = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+
+/** Fiche stockée → fiche de l'app ; une valeur inconnue ou manquante retombe sur la valeur par défaut. */
+export function bodyFromStored(stored: Partial<UserBody>): BodyProfile {
+  return {
+    sex: SEXES.find(sex => SEX_KEYS[sex] === stored.sex) ?? 'Homme',
+    birthDate: typeof stored.birthDate === 'string' ? stored.birthDate : null,
+    heightCm: finiteOrNull(stored.heightCm),
+    manualWeightKg: finiteOrNull(stored.manualWeightKg),
+    bodyFatPercent: finiteOrNull(stored.bodyFatPercent),
+    activity: (ACTIVITY_LEVELS.find(level => level.key === stored.activity) ?? DEFAULT_ACTIVITY).label,
+  }
+}
+
+/** Fiche vierge, tant que rien n'est enregistré dans Firestore. */
+export const emptyBody = () => bodyFromStored({})
+
+/** Objectif stocké → objectif de l'app ; une valeur inconnue ou manquante retombe sur le maintien. */
+export function goalFromStored(stored: Partial<UserGoal>): ProfileGoal {
+  const direction = GOAL_DIRECTIONS.find(d => d.value === stored.direction)?.value ?? 'maintain'
+  const percent = finiteOrNull(stored.calorieDeltaPercent)
+  return {
+    direction,
+    targetWeightKg: finiteOrNull(stored.targetWeightKg),
+    calorieDeltaPercent: percent && percent > 0 ? percent : GOAL_DEFAULT_CALORIE_PERCENT[direction === 'gain' ? 'gain' : 'loss'],
+    proteinPerKg: PROTEIN_LEVELS.find(level => level.gramsPerKg === stored.proteinPerKg)?.gramsPerKg ?? DEFAULT_PROTEIN_PER_KG,
+    proteinBasis: stored.proteinBasis === 'target' ? 'target' : 'current',
+    startDate: typeof stored.startDate === 'string' ? stored.startDate : null,
+    startWeightKg: finiteOrNull(stored.startWeightKg),
+  }
+}
+
+/** Objectif vierge, tant que rien n'est enregistré dans Firestore. */
+export const emptyGoal = () => goalFromStored({})
+
+/** Objectif de l'app → objectif stocké (sans `updatedAt`, posé à l'écriture). */
+export function goalToStored(goal: ProfileGoal): Omit<UserGoal, 'updatedAt'> {
+  return {
+    direction: goal.direction,
+    targetWeightKg: goal.targetWeightKg,
+    calorieDeltaPercent: goal.calorieDeltaPercent,
+    proteinPerKg: goal.proteinPerKg,
+    proteinBasis: goal.proteinBasis,
+    startDate: goal.startDate,
+    startWeightKg: goal.startWeightKg,
+  }
+}
+
+/** Fiche de l'app → fiche stockée (sans `updatedAt`, posé à l'écriture). */
+export function bodyToStored(body: BodyProfile): Omit<UserBody, 'updatedAt'> {
+  return {
+    sex: SEX_KEYS[body.sex],
+    birthDate: body.birthDate,
+    heightCm: body.heightCm,
+    manualWeightKg: body.manualWeightKg,
+    bodyFatPercent: body.bodyFatPercent,
+    activity: (ACTIVITY_LEVELS.find(level => level.label === body.activity) ?? DEFAULT_ACTIVITY).key,
+  }
 }
 
 export function ageFromBirthDate(birthDate: string | null, today = new Date()): number | null {
@@ -94,11 +261,31 @@ export const macroKcal = (t: Pick<DailyTargets, 'carbohydrates' | 'protein' | 'f
 /** Au-delà de cet écart entre kcal saisies et kcal des macros, la fiche signale l'incohérence. */
 export const MACRO_KCAL_TOLERANCE = 0.05
 
-/** Date estimée d'arrivée au poids visé, au rythme prévu. */
-export function goalArrivalDate(currentKg: number, goal: ProfileGoal, from = new Date()): Date | null {
-  if (goal.direction === 'maintain' || goal.targetWeightKg === null || goal.rateKgPerWeek <= 0) return null
-  const remaining = Math.abs(currentKg - goal.targetWeightKg)
-  return addDays(from, Math.round((remaining / goal.rateKgPerWeek) * 7))
+export interface GoalProjection {
+  /** kcal par jour : dépense de départ ∓ le pourcentage choisi, gardées fixes ensuite. */
+  calories: number
+  /** Rythme au départ, en kg/semaine (négatif = perte) ; il ralentit ensuite. */
+  startRateKgPerWeek: number
+  /** Jours avant d'atteindre le poids visé ; `null` si le poids se stabilise avant (dans l'horizon simulé). */
+  reachDay: number | null
+  /** Poids vers lequel tend la projection à ces kcal. */
+  plateauKg: number
+}
+
+/**
+ * Projection de l'objectif avec le modèle du calculateur de besoins journaliers (voir utils/weightProjection) :
+ * mêmes kcal que le calculateur pour le même pourcentage, puis la perte (ou la prise) ralentit à kcal constantes.
+ */
+export function projectGoal(model: BodyModel, goal: ProfileGoal): GoalProjection | null {
+  if (goal.direction === 'maintain' || goal.targetWeightKg === null || goal.calorieDeltaPercent <= 0) return null
+  const calories = goalCalories(totalEnergyExpenditure(model), goal)
+  const weights = simulateWeight(model, calories)
+  return {
+    calories,
+    startRateKgPerWeek: rateForCalories(model, calories),
+    reachDay: dayReaching(weights, goal.targetWeightKg),
+    plateauKg: weights.at(-1)!,
+  }
 }
 
 /** Le poids visé va-t-il dans le sens de l'objectif ? */
@@ -113,32 +300,6 @@ export const formatNumber = (n: number, maximumFractionDigits = 0) =>
   n.toLocaleString('fr-FR', { maximumFractionDigits })
 
 export const formatDay = (iso: string, pattern = 'd MMM') => format(parseISO(iso), pattern, { locale: fr }).replace(/\.$/, '')
-
-// --- Données d'exemple ---
-
-export type ProfileScenario = 'complete' | 'new'
-
-export const PROFILE_SCENARIO_LABELS: Record<ProfileScenario, string> = {
-  complete: 'Profil complet',
-  new: 'Nouveau profil',
-}
-
-export function sampleBody(scenario: ProfileScenario): BodyProfile {
-  return scenario === 'complete'
-    ? { sex: 'Homme', birthDate: '1991-04-17', heightCm: 178, manualWeightKg: null, bodyFatPercent: null, activity: ACTIVITY_LEVELS[2]!.label }
-    : { sex: 'Homme', birthDate: null, heightCm: null, manualWeightKg: null, bodyFatPercent: null, activity: ACTIVITY_LEVELS[1]!.label }
-}
-
-export function sampleGoal(scenario: ProfileScenario): ProfileGoal {
-  return scenario === 'complete'
-    ? { direction: 'loss', targetWeightKg: 72, rateKgPerWeek: 0.5 }
-    : { direction: 'maintain', targetWeightKg: null, rateKgPerWeek: 0.5 }
-}
-
-export function sampleTargets(scenario: ProfileScenario, today = new Date()): ProfileTargets | null {
-  if (scenario === 'new') return null
-  return { calories: 2140, carbohydrates: 275, protein: 127, fat: 59, source: 'calculator', updatedAt: format(addDays(today, -5), 'yyyy-MM-dd') }
-}
 
 // --- Réglages ---
 

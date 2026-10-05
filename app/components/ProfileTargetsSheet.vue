@@ -9,7 +9,7 @@ import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput
  * puisqu'elles pilotent Aujourd'hui et les Menus.
  */
 const profile = useProfile()
-const { settings } = useAppSettings()
+const toast = useToast()
 
 type MacroKey = 'carbohydrates' | 'protein' | 'fat'
 
@@ -29,8 +29,11 @@ const seenRevision = useState('profile-targets-seen-revision', () => 0)
 const showDeltas = ref(false)
 let frame = 0
 
+/** Valeurs vers lesquelles l'affichage tend (fin de l'animation en cours). */
+const shownTarget: DailyTargets = { calories: 0, carbohydrates: 0, protein: 0, fat: 0 }
+
 function snap(to: DailyTargets) {
-  for (const key of KEYS) displayed[key] = to[key]
+  for (const key of KEYS) displayed[key] = shownTarget[key] = to[key]
 }
 
 if (targets.value) snap(targets.value)
@@ -39,6 +42,7 @@ function tween(from: DailyTargets, to: DailyTargets) {
   cancelAnimationFrame(frame)
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return snap(to)
   snap(from)
+  for (const key of KEYS) shownTarget[key] = to[key]
   const start = performance.now() + 120
   const tick = (now: number) => {
     const t = Math.min(Math.max((now - start) / 650, 0), 1)
@@ -65,9 +69,13 @@ function present() {
 
 onMounted(present)
 watch(() => profile.targetsRevision, present)
-watch(() => profile.scenario, () => {
+// Fiche arrivée de Firestore (chargement, autre appareil) : affichée telle quelle. La confirmation d'une fiche définie
+// ici a les mêmes valeurs que l'animation en cours, qu'elle n'interrompt donc pas.
+watch(targets, (current) => {
+  if (!current || KEYS.every(key => current[key] === shownTarget[key])) return
   showDeltas.value = false
-  if (targets.value) snap(targets.value)
+  cancelAnimationFrame(frame)
+  snap(current)
 })
 onBeforeUnmount(() => cancelAnimationFrame(frame))
 
@@ -87,16 +95,34 @@ const sourceLabel = computed(() => {
   if (!t) return ''
   const today = format(new Date(), 'yyyy-MM-dd')
   const when = t.updatedAt === today ? 'aujourd\'hui' : `le ${formatDay(t.updatedAt, 'd MMMM')}`
-  return t.source === 'calculator' ? `Définis depuis le calculateur ${when}` : `Saisis à la main ${when}`
+  return { profile: `Calculés depuis votre objectif ${when}`, calculator: `Définis depuis le calculateur ${when}`, manual: `Saisis à la main ${when}` }[t.source]
 })
+
+const SOURCE_ICONS: Record<ProfileTargets['source'], string> = {
+  profile: 'i-lucide-target',
+  calculator: 'i-lucide-calculator',
+  manual: 'i-lucide-pencil',
+}
+
+/** Besoins tirés de l'objectif : on les recalcule ici, à partir de l'objectif enregistré et de la fiche actuelle. */
+function recalculate() {
+  profile.saveGoal().saved.catch((error: any) => {
+    toast.add({
+      title: 'Erreur',
+      description: `Les besoins du jour n'ont pas pu être enregistrés : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error',
+    })
+  })
+}
 
 function kcalShare(key: MacroKey, values: DailyTargets) {
   const macro = MACROS.find(m => m.key === key)!
   return values.calories > 0 ? (values[key] * macro.kcalPerGram) / values.calories : 0
 }
 
+/** Rapporté au même poids que l'objectif (actuel ou visé), pour retrouver les g/kg choisis. */
 const proteinPerKg = computed(() => {
-  const weight = profile.currentWeightKg
+  const weight = proteinBasisWeightKg(profile.goal, profile.currentWeightKg)
   return targets.value && weight ? targets.value.protein / weight : null
 })
 
@@ -109,14 +135,15 @@ function coherence(values: DailyTargets) {
 
 const readCoherence = computed(() => (targets.value ? coherence(targets.value) : null))
 
+/** Répartition fixe (celle de l'accueil, voir `MEAL_KCAL_SHARES`) en attendant qu'elle vienne des réglages. */
 const mealSplit = computed(() => {
   const t = targets.value
   if (!t) return []
-  return activeMealShares(settings.value).map(key => ({
-    key,
-    label: MEAL_SHARE_LABELS[key],
-    share: settings.value.mealShares[key],
-    kcal: Math.round((t.calories * settings.value.mealShares[key]) / 100),
+  return MEAL_KCAL_SHARES.map(({ mealType, label, share }) => ({
+    key: mealType,
+    label,
+    share: Math.round(share * 100),
+    kcal: Math.round(t.calories * share),
   }))
 })
 
@@ -175,7 +202,13 @@ function stopEdit() {
 function save() {
   submitted.value = true
   if (!draftValues.value) return
-  profile.setTargets(draftValues.value, 'manual')
+  profile.setTargets(draftValues.value, 'manual').catch((error: any) => {
+    toast.add({
+      title: 'Erreur',
+      description: `Les besoins du jour n'ont pas pu être enregistrés : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error',
+    })
+  })
   stopEdit()
 }
 
@@ -190,7 +223,7 @@ const KCAL_FIELD = { key: 'calories' as const, label: 'Énergie', unit: 'kcal' }
           Besoins du jour
         </h2>
         <p v-if="targets && !editing" class="flex items-center gap-1.5 text-xs text-muted">
-          <UIcon :name="targets.source === 'calculator' ? 'i-lucide-calculator' : 'i-lucide-pencil'" class="size-3.5 shrink-0" />
+          <UIcon :name="SOURCE_ICONS[targets.source]" class="size-3.5 shrink-0" />
           {{ sourceLabel }}
         </p>
         <p v-else-if="editing" class="text-xs text-muted">
@@ -266,20 +299,9 @@ const KCAL_FIELD = { key: 'calories' as const, label: 'Énergie', unit: 'kcal' }
       </p>
 
       <div class="flex flex-col gap-3 border-t border-default px-4 py-4 sm:px-5">
-        <div class="flex items-center justify-between gap-3">
-          <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-            Par repas
-          </p>
-          <UButton
-            to="/dashboard/reglages#repas"
-            label="Régler la répartition"
-            color="neutral"
-            variant="link"
-            size="xs"
-            trailing-icon="i-lucide-arrow-right"
-            class="-me-2"
-          />
-        </div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+          Par repas
+        </p>
         <ul class="grid gap-px overflow-hidden rounded-lg border border-default bg-border" :class="mealSplit.length > 3 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'">
           <li v-for="meal in mealSplit" :key="meal.key" class="flex flex-col gap-0.5 bg-default px-3 py-2.5">
             <span class="truncate text-xs text-muted">{{ meal.label }}</span>
@@ -301,6 +323,17 @@ const KCAL_FIELD = { key: 'calories' as const, label: 'Énergie', unit: 'kcal' }
           Votre fiche a changé depuis ce calcul.
         </p>
         <UButton
+          v-if="targets.source === 'profile'"
+          label="Recalculer"
+          color="primary"
+          variant="link"
+          size="xs"
+          icon="i-lucide-refresh-cw"
+          class="-me-2"
+          @click="recalculate"
+        />
+        <UButton
+          v-else
           to="/dashboard/besoins-journaliers"
           label="Recalculer"
           color="primary"
@@ -393,23 +426,12 @@ const KCAL_FIELD = { key: 'calories' as const, label: 'Énergie', unit: 'kcal' }
     </form>
 
     <!-- Aucun besoin défini -->
-    <div v-else class="flex flex-col items-start gap-4 px-4 pt-3 pb-5 sm:px-5">
+    <div v-else class="flex flex-col gap-2 px-4 pt-3 pb-5 sm:px-5">
       <p class="max-w-prose text-sm text-muted text-pretty">
-        Aucun besoin défini. Calculez-les à partir de votre fiche, puis choisissez « Définir comme objectif »,
-        ou saisissez-les si vous les connaissez déjà.
+        Aucun besoin défini. Ils sont calculés à l'enregistrement de votre objectif, à partir de votre fiche corporelle.
       </p>
-      <div class="flex flex-wrap gap-2">
-        <UButton
-          to="/dashboard/besoins-journaliers"
-          label="Ouvrir le calculateur"
-          icon="i-lucide-calculator"
-        />
-        <UButton label="Saisir à la main" icon="i-lucide-pencil" color="neutral" variant="outline" @click="startEdit" />
-      </div>
-      <p class="text-xs text-dimmed">
-        {{ profile.isBodyComplete
-          ? 'Le calculateur reprendra votre sexe, votre âge, votre taille et votre poids.'
-          : 'Complétez votre fiche pour que le calculateur la reprenne d\'office.' }}
+      <p v-if="!profile.isBodyComplete" class="text-xs text-dimmed">
+        Complétez d'abord la fiche : date de naissance, taille et poids.
       </p>
     </div>
   </section>

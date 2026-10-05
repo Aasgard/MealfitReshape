@@ -7,6 +7,23 @@ export type DailyTargets = {
   fat: number
 }
 
+/** Part des kcal apportée par les lipides dans la répartition par défaut. */
+const FAT_KCAL_SHARE = 0.25
+
+/**
+ * Répartition simple des macros (calculateur et objectif du profil) : protéines fixées par le g/kg choisi,
+ * lipides 25 % des kcal, glucides le reste.
+ */
+export function splitMacros(calories: number, proteinGrams: number): DailyTargets {
+  const fatKcal = calories * FAT_KCAL_SHARE
+  return {
+    calories,
+    carbohydrates: Math.max(0, calories - proteinGrams * 4 - fatKcal) / 4,
+    protein: proteinGrams,
+    fat: fatKcal / 9,
+  }
+}
+
 /** Objectifs journaliers fixes (kcal et grammes), en attendant qu'ils viennent du profil de l'utilisateur. */
 export const DAILY_TARGETS: DailyTargets = {
   calories: 1531,
@@ -15,16 +32,19 @@ export const DAILY_TARGETS: DailyTargets = {
   fat: 43,
 }
 
-const shareOfDailyKcal = (share: number) => Math.round(DAILY_TARGETS.calories * share)
-
 /**
- * Les 4 repas du plan, avec leur part fixe de l'objectif journalier (30 / 40 / 30 %).
- * La collation n'a pas d'objectif (0 %) : elle compte dans le total du jour, sans anneau.
+ * Part fixe de l'objectif journalier par repas (30 / 40 / 30 %), en attendant qu'elle vienne des réglages.
+ * La collation n'a pas d'objectif : elle compte dans le total du jour, sans anneau.
  */
+export const MEAL_KCAL_SHARES: { mealType: 'BREAKFAST' | 'LUNCH' | 'DINER', label: string, share: number }[] = [
+  { mealType: 'BREAKFAST', label: 'Petit déjeuner', share: 0.3 },
+  { mealType: 'LUNCH', label: 'Déjeuner', share: 0.4 },
+  { mealType: 'DINER', label: 'Dîner', share: 0.3 },
+]
+
+/** Les 4 repas du plan, avec leur part de l'objectif journalier (voir `MEAL_KCAL_SHARES`). */
 export const PLANNED_MEALS: MealSlot[] = [
-  { mealType: 'BREAKFAST', label: 'Petit déjeuner', targetKcal: shareOfDailyKcal(0.3) },
-  { mealType: 'LUNCH', label: 'Déjeuner', targetKcal: shareOfDailyKcal(0.4) },
-  { mealType: 'DINER', label: 'Dîner', targetKcal: shareOfDailyKcal(0.3) },
+  ...MEAL_KCAL_SHARES.map(({ mealType, label, share }) => ({ mealType, label, targetKcal: Math.round(DAILY_TARGETS.calories * share) })),
   { mealType: 'SNACK', label: 'Collation' },
 ]
 

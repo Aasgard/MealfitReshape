@@ -12,6 +12,8 @@ const props = defineProps<{
   copiedEntryId?: string
   /** Colonne du jour courant. */
   isHighlighted?: boolean
+  /** Ligne « Non compté » : hors totaux, la carte n'affiche que le nom et la quantité (sans kcal ni macros). */
+  hideNutrition?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,7 +51,9 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
     :delay="200"
     :delay-on-touch-only="true"
     :fallback-on-body="true"
-    class="border-b border-r border-default last:border-r-0 p-1.5 flex flex-col gap-1 min-h-20"
+    :scroll-sensitivity="64"
+    :scroll-speed="14"
+    class="border-b border-r border-default last:border-r-0 p-1 flex flex-col gap-1"
     :class="isHighlighted ? 'bg-primary/5' : ''"
     @add="onAdd"
     @start="emit('drag-start')"
@@ -77,13 +81,18 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
         <!--
           Mobile : « 100 g · 45 kcal » puis les macros.
           À partir de la tablette : la quantité, puis « 45 kcal - G5 P3 L0 ».
+          « Non compté » : la quantité seule.
         -->
-        <p class="text-xs text-dimmed tabular-nums truncate">
+        <p v-if="hideNutrition" class="text-xs text-dimmed tabular-nums truncate">
+          {{ entry.quantityLabel }}
+        </p>
+        <p v-else class="text-xs text-dimmed tabular-nums truncate">
           <template v-if="entry.quantityLabel">
             {{ entry.quantityLabel }}<span class="sm:hidden"> · </span><br class="max-sm:hidden">
           </template>
           {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
-          <MenuMacroLabels :carbohydrates="entry.carbohydrates" :protein="entry.protein" :fat="entry.fat" />
+          <!-- Gris uni : un repas seul n'a pas d'objectif, la couleur n'y dirait rien (voir l'en-tête de colonne). -->
+          G{{ entry.carbohydrates }} P{{ entry.protein }} L{{ entry.fat }}
         </p>
       </div>
       <!-- Sur mobile, ces actions passent dans le panneau ouvert par un appui sur la carte (voir la page Menus). -->
@@ -117,12 +126,19 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
         </button>
       </div>
     </div>
+    <!--
+      Case vide : le "+" en occupe la hauteur. Sous des repas : une bande de 30 px, qui ne grandit que pour remplir la place
+      laissée par une case plus haute de la même ligne, pour ne pas allonger la ligne pour rien.
+    -->
     <button
       type="button"
       data-copy-control
       aria-label="Ajouter"
-      class="flex-1 flex items-center justify-center rounded-md border border-dashed px-2 py-1.5 transition-colors"
-      :class="copiedEntryId ? 'border-primary/50 text-primary bg-primary/5' : 'border-default text-dimmed hover:text-primary hover:border-primary/50'"
+      class="flex flex-1 items-center justify-center rounded-md border border-dashed px-2 transition-colors"
+      :class="[
+        list.length ? 'min-h-7.5' : 'py-1',
+        copiedEntryId ? 'border-primary/50 text-primary bg-primary/5' : 'border-default text-dimmed hover:text-primary hover:border-primary/50',
+      ]"
       @click="emit('add')"
     >
       <UIcon name="i-lucide-plus" class="size-3.5 shrink-0" />

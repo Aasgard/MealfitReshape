@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { addDays, addWeeks, isBefore, isSameWeek, startOfWeek, subWeeks } from 'date-fns'
+import { addDays, addWeeks, differenceInCalendarWeeks, isSameWeek, parseISO, startOfWeek, subWeeks } from 'date-fns'
 import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
-import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { buildWeekEntries, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { buildDays, DAYS_PER_WEEK, formatWeekLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
+import { buildEntriesByDay, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -22,22 +22,56 @@ const isReferenceWeekSelected = computed(() =>
 
 const weekLabel = computed(() => formatWeekLabel(selectedWeekStart.value, addDays(selectedWeekStart.value, 6)))
 const weekLabelShort = computed(() => formatWeekLabel(selectedWeekStart.value, addDays(selectedWeekStart.value, 6), { short: true }))
-const weekStatusLabel = computed(() => {
-  if (isReferenceWeekSelected.value) return 'Semaine en cours'
-  return isBefore(selectedWeekStart.value, referenceWeekStart) ? 'Semaine passée' : 'Semaine à venir'
-})
 
-const goToPreviousWeek = () => { selectedWeekStart.value = subWeeks(selectedWeekStart.value, 1) }
-const goToNextWeek = () => { selectedWeekStart.value = addWeeks(selectedWeekStart.value, 1) }
-const goToCurrentWeek = () => { selectedWeekStart.value = referenceWeekStart }
+/**
+ * Mobile, tablette (sous `lg:`) : le calendrier défile d'une semaine à l'autre (voir MenuWeekCalendar). Au-delà, les
+ * 7 jours tiennent à l'écran et on change de semaine par les flèches, avec un glissement.
+ */
+const CONTINUOUS_QUERY = '(max-width: 63.999rem)'
+const isContinuous = ref(window.matchMedia(CONTINUOUS_QUERY).matches)
+const onContinuousChange = (event: MediaQueryListEvent) => { isContinuous.value = event.matches }
+onMounted(() => window.matchMedia(CONTINUOUS_QUERY).addEventListener('change', onContinuousChange))
+onBeforeUnmount(() => window.matchMedia(CONTINUOUS_QUERY).removeEventListener('change', onContinuousChange))
 
-const days = computed(() => buildWeekDays(selectedWeekStart.value))
+/** Résumé de la semaine replié par défaut sur mobile (même seuil que `sm:`), pour laisser la place au calendrier. */
+const summaryOpenByDefault = window.matchMedia('(min-width: 40rem)').matches
+
+const calendar = useTemplateRef<{ scrollByWeeks: (delta: number) => void }>('calendar')
+
+/** Sens du dernier changement de semaine (PC), pour faire glisser le calendrier du bon côté. */
+const slideDirection = ref<'previous' | 'next'>('next')
+
+const goToWeek = (date: Date) => {
+  const weekStart = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON })
+  const offset = differenceInCalendarWeeks(weekStart, selectedWeekStart.value, { weekStartsOn: WEEK_STARTS_ON })
+  if (!offset) return
+  slideDirection.value = offset > 0 ? 'next' : 'previous'
+  selectedWeekStart.value = weekStart
+}
+
+/** En mode continu, les flèches font défiler le calendrier : la semaine change quand il s'arrête (`visible-week`). */
+const goToAdjacentWeek = (delta: 1 | -1) => {
+  if (isContinuous.value && calendar.value) calendar.value.scrollByWeeks(delta)
+  else goToWeek(addWeeks(selectedWeekStart.value, delta))
+}
+const goToPreviousWeek = () => goToAdjacentWeek(-1)
+const goToNextWeek = () => goToAdjacentWeek(1)
+const goToCurrentWeek = () => goToWeek(referenceWeekStart)
+
+/** Jours du calendrier : la semaine affichée, encadrée de la précédente et de la suivante en mode continu. */
+const days = computed(() => isContinuous.value
+  ? buildDays(subWeeks(selectedWeekStart.value, 1), 3)
+  : buildDays(selectedWeekStart.value))
 
 const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
 const toast = useToast()
+const { settings } = useAppSettings()
 
-/** Repas enregistrés (collection `meals`) de la semaine affichée et de la précédente. */
-const { meals, addMeal, moveMeal, updateMealSource, replaceMeals } = useMeals(selectedWeekStart)
+/**
+ * Repas enregistrés (collection `meals`) de la semaine affichée, de la précédente et de la suivante : celles que le
+ * calendrier continu montre de part et d'autre, chargées avant qu'on y arrive.
+ */
+const { meals, addMeal, moveMeal, updateMealSource, replaceMeals } = useMeals(selectedWeekStart, { weeksAhead: 1 })
 watch(meals.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
@@ -48,20 +82,18 @@ await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promi
 
 const mealTypes = MENU_MEAL_TYPES
 
-/** Bande des semaines sélectionnables, centrée sur la semaine actuellement affichée. */
-const WEEK_PICKER_RADIUS = 3
-const weekOptions = computed(() => buildWeekOptions(selectedWeekStart.value, WEEK_PICKER_RADIUS, referenceWeekStart))
-const selectedWeekId = computed(() => weekId(selectedWeekStart.value))
-const selectWeek = (id: string) => { selectedWeekStart.value = parseWeekId(id) }
-
 const weekMeals = computed(() => mealsOfWeek(meals.value, selectedWeekStart.value))
-const previousWeekMeals = computed(() => mealsOfWeek(meals.value, subWeeks(selectedWeekStart.value, 1)))
 const isWeekEmpty = computed(() => !weekMeals.value.length)
-const isPreviousWeekEmpty = computed(() => !previousWeekMeals.value.length)
 
-const entries = computed(() => buildWeekEntries(weekMeals.value, selectedWeekStart.value, recipesById.value, ingredientsById.value))
-const summary = computed(() => summarizeMenuWeek(entries.value))
-const dayTotals = computed(() => summary.value.dayTotals)
+/** Repas de toutes les semaines chargées, par jour (date ISO) : le calendrier continu en montre trois. */
+const entries = computed(() => buildEntriesByDay(meals.value, recipesById.value, ingredientsById.value))
+/** Moyennes par jour complet de la semaine affichée (voir `summarizeMenuWeek`). */
+const summary = computed(() =>
+  summarizeMenuWeek(entries.value, buildDays(selectedWeekStart.value).map(day => day.key))
+)
+
+/** Repas chargé, quelle que soit sa semaine (le calendrier continu permet d'agir sur les semaines voisines). */
+const findMeal = (entryId: string) => meals.value.find(m => m.id === entryId)
 
 /** Repas copié via l'icône des tuiles : le prochain clic sur un "+" en ajoute un exemplaire dans cette case. */
 const copiedMeal = ref<{ id: string, source: MealSource } | null>(null)
@@ -71,7 +103,7 @@ const toggleCopyEntry = (entryId: string) => {
     copiedMeal.value = null
     return
   }
-  const meal = weekMeals.value.find(m => m.id === entryId)
+  const meal = findMeal(entryId)
   copiedMeal.value = meal ? { id: meal.id, source: mealSourceOf(meal) } : null
 }
 
@@ -95,7 +127,8 @@ const runWrite = async (write: () => Promise<void>, failureMessage: string) => {
   }
 }
 
-const dateOfDay = (dayKey: string) => addDays(selectedWeekStart.value, days.value.findIndex(d => d.key === dayKey))
+/** Jour d'une case : sa clé est sa date ISO (voir `dayKeyOf`). */
+const dateOfDay = (dayKey: string) => parseISO(dayKey)
 
 const saveMeal = (dayKey: string, mealType: MealType, source: MealSource) =>
   runWrite(() => addMeal({ date: dateOfDay(dayKey), mealType, source }), 'Le repas n\'a pas pu être enregistré')
@@ -138,7 +171,7 @@ const addEntry = (dayKey: string, mealTypeKey: MealType) => {
 
 /** Ouvre la modale pré-remplie avec le contenu du repas ; son jour et sa ligne ne changent pas (le glisser-déposer s'en charge). */
 const editEntry = (entryId: string) => {
-  const meal = weekMeals.value.find(m => m.id === entryId)
+  const meal = findMeal(entryId)
   const dayKey = Object.entries(entries.value)
     .find(([, byMealType]) => byMealType[meal?.mealType ?? '']?.some(e => e.id === entryId))?.[0]
   if (!meal || !dayKey) return
@@ -159,7 +192,7 @@ const submitAddedEntry = (source: MealSource) => {
 }
 
 const deleteEntry = (entryId: string) => {
-  const meal = weekMeals.value.find(m => m.id === entryId)
+  const meal = findMeal(entryId)
   if (!meal) return
   runWrite(() => replaceMeals([meal], []), 'Le repas n\'a pas pu être supprimé')
 }
@@ -172,7 +205,7 @@ const calendarKey = ref(0)
  * déplacée à l'écran ; les totaux et les statistiques suivent dès que Firestore renvoie le repas à sa nouvelle place.
  */
 const moveEntry = async (entryId: string, dayKey: string, mealType: MealType) => {
-  const meal = weekMeals.value.find(m => m.id === entryId)
+  const meal = findMeal(entryId)
   const isMoved = !!meal && await runWrite(
     () => moveMeal(meal.id, { date: dateOfDay(dayKey), mealType }),
     'Le repas n\'a pas pu être déplacé'
@@ -188,31 +221,36 @@ const confirmClearWeek = () => {
   runWrite(() => replaceMeals(weekMeals.value, []), 'La semaine n\'a pas pu être vidée')
 }
 
-const copyPreviousDialogOpen = ref(false)
+const copyWeekOpen = ref(false)
 
-/** Recopie les repas de la semaine précédente (+ 7 jours) dans la semaine affichée, dont les repas actuels sont remplacés. */
-const copyPreviousWeek = async () => {
-  copyPreviousDialogOpen.value = false
+/**
+ * Recopie les repas d'une autre semaine (lundi `sourceWeekStart`) jour pour jour dans la semaine affichée, dont les
+ * repas actuels sont remplacés.
+ */
+const copyWeek = async (sourceWeekStart: Date, sourceMeals: Meal[]) => {
   copiedMeal.value = null
-
-  const copies = previousWeekMeals.value.map(meal => ({
-    date: addWeeks(meal.date.toDate(), 1),
+  const shift = differenceInCalendarWeeks(selectedWeekStart.value, sourceWeekStart, { weekStartsOn: WEEK_STARTS_ON })
+  const copies = sourceMeals.map(meal => ({
+    date: addWeeks(meal.date.toDate(), shift),
     mealType: meal.mealType,
     source: mealSourceOf(meal),
   }))
   const isCopied = await runWrite(() => replaceMeals(weekMeals.value, copies), 'La semaine n\'a pas pu être copiée')
-  if (isCopied) toast.add({ title: 'Semaine copiée', description: 'Les repas de la semaine précédente ont été recopiés.', color: 'success' })
-}
-
-/** Copie directement si la semaine affichée est vide ; sinon demande confirmation avant de remplacer ses repas. */
-const requestCopyPreviousWeek = () => {
-  if (isWeekEmpty.value) copyPreviousWeek()
-  else copyPreviousDialogOpen.value = true
+  if (isCopied) {
+    const label = formatWeekLabel(sourceWeekStart, addDays(sourceWeekStart, DAYS_PER_WEEK - 1))
+    toast.add({ title: 'Semaine copiée', description: `Les repas de la semaine du ${label} ont été recopiés.`, color: 'success' })
+  }
 }
 
 const shoppingListOpen = ref(false)
-/** Plage proposée à l'ouverture de la liste de courses : la semaine affichée. */
-const shoppingListRange = computed(() => ({ start: selectedWeekStart.value, end: addDays(selectedWeekStart.value, 6) }))
+/**
+ * Plage proposée à l'ouverture de la liste de courses : 7 jours à partir du jour de courses (Réglages) de la semaine
+ * affichée, ex. du vendredi au jeudi suivant.
+ */
+const shoppingListRange = computed(() => {
+  const start = addDays(selectedWeekStart.value, settings.value.shoppingDay)
+  return { start, end: addDays(start, DAYS_PER_WEEK - 1) }
+})
 
 const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
@@ -259,6 +297,24 @@ const runEntryAction = (action: (entryId: string) => void) => {
   actionsOpen.value = false
   if (entry) action(entry.id)
 }
+
+/** Flèches ← / → du clavier : semaine précédente / suivante, sauf pendant une saisie ou quand une fenêtre est ouverte. */
+const isOverlayOpen = computed(() =>
+  addModalOpen.value || clearDialogOpen.value || copyWeekOpen.value || shoppingListOpen.value
+  || slideoverOpen.value || actionsOpen.value
+)
+
+const onKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || isOverlayOpen.value) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]')) return
+  if (event.key === 'ArrowLeft') goToPreviousWeek()
+  else goToNextWeek()
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -272,47 +328,71 @@ const runEntryAction = (action: (entryId: string) => void) => {
     </template>
 
     <template #body>
-      <div class="flex flex-col gap-6 p-4 sm:p-6">
+      <!--
+        Mobile, tablette : le calendrier garde sa hauteur naturelle tant qu'elle tient, sinon il se limite à la place
+        restante (24rem au moins) et défile à l'intérieur, ligne des jours figée. PC : hauteur naturelle, la page défile.
+        L'en-tête et le résumé ne rétrécissent pas.
+      -->
+      <div class="flex flex-1 flex-col gap-4 overflow-x-clip p-4 max-lg:min-h-0 sm:gap-6 sm:p-6">
         <MenuWeekHeader
+          class="shrink-0"
           :week-label="weekLabel"
           :week-label-short="weekLabelShort"
-          :week-status-label="weekStatusLabel"
+          :week-start-key="weekId(selectedWeekStart)"
           :is-current-week="isReferenceWeekSelected"
           :clear-disabled="isWeekEmpty"
-          :copy-previous-disabled="isPreviousWeekEmpty"
           @previous="goToPreviousWeek"
           @next="goToNextWeek"
           @this-week="goToCurrentWeek"
+          @select-date="goToWeek"
           @clear="clearDialogOpen = true"
-          @copy-previous="requestCopyPreviousWeek"
+          @copy-week="copyWeekOpen = true"
           @shopping-list="shoppingListOpen = true"
         />
 
-        <MenuWeekPicker :model-value="selectedWeekId" :weeks="weekOptions" @update:model-value="selectWeek" />
-
-        <MenuWeekStats
-          :average-kcal="summary.averageKcal"
-          :target-kcal="DAILY_TARGETS.calories"
-          :overage-per-day-kcal="summary.overagePerDayKcal"
-          :overage-count="summary.overageCount"
-          :overage-total-kcal="summary.overageTotalKcal"
+        <!-- Moyenne par jour complet de la semaine, dans la forme du résumé de l'accueil ; repliée par défaut sur mobile. -->
+        <CalorieSummary
+          class="shrink-0"
+          title="Moyenne / jour"
+          state-key="menus-week-summary-open"
+          :default-open="summaryOpenByDefault"
+          :targets="DAILY_TARGETS"
+          :eaten-kcal="summary.averageKcal"
+          :extra-kcal="summary.averageExtraKcal"
           :macros="summary.macros"
+          :complete-days="summary.completeDays"
         />
 
-        <MenuWeekCalendar
-          :key="calendarKey"
-          :days="days"
-          :meal-types="mealTypes"
-          :entries="entries"
-          :day-totals="dayTotals"
-          :copied-entry-id="copiedMeal?.id"
-          @select-entry="selectEntry"
-          @edit-entry="editEntry"
-          @copy-entry="toggleCopyEntry"
-          @delete-entry="deleteEntry"
-          @move-entry="moveEntry"
-          @add="addEntry"
-        />
+        <!--
+          PC : le calendrier glisse du côté de la semaine demandée. Mode continu : une seule instance, qui défile d'une
+          semaine à l'autre et annonce celle où elle s'arrête (`visible-week`).
+        -->
+        <Transition
+          mode="out-in"
+          enter-active-class="transition duration-200 ease-out motion-reduce:transition-none"
+          leave-active-class="transition duration-150 ease-in motion-reduce:transition-none"
+          :enter-from-class="slideDirection === 'next' ? 'opacity-0 translate-x-8' : 'opacity-0 -translate-x-8'"
+          :leave-to-class="slideDirection === 'next' ? 'opacity-0 -translate-x-8' : 'opacity-0 translate-x-8'"
+        >
+          <MenuWeekCalendar
+            class="max-lg:min-h-96 lg:shrink-0"
+            ref="calendar"
+            :key="isContinuous ? `continuous-${calendarKey}` : `${weekId(selectedWeekStart)}-${calendarKey}`"
+            :days="days"
+            :meal-types="mealTypes"
+            :entries="entries"
+            :targets="DAILY_TARGETS"
+            :copied-entry-id="copiedMeal?.id"
+            :continuous="isContinuous"
+            @select-entry="selectEntry"
+            @edit-entry="editEntry"
+            @copy-entry="toggleCopyEntry"
+            @delete-entry="deleteEntry"
+            @move-entry="moveEntry"
+            @add="addEntry"
+            @visible-week="selectedWeekStart = $event"
+          />
+        </Transition>
       </div>
     </template>
   </UDashboardPanel>
@@ -338,14 +418,11 @@ const runEntryAction = (action: (entryId: string) => void) => {
     @confirm="confirmClearWeek"
   />
 
-  <ConfirmDialog
-    v-model:open="copyPreviousDialogOpen"
-    title="Copier la semaine précédente ?"
-    description="Les repas de cette semaine seront remplacés par ceux de la semaine précédente."
-    confirm-label="Remplacer"
-    confirm-color="warning"
-    confirm-icon="i-lucide-copy"
-    @confirm="copyPreviousWeek"
+  <MenuCopyWeekModal
+    v-model:open="copyWeekOpen"
+    :target-week-start="selectedWeekStart"
+    :target-meal-count="weekMeals.length"
+    @copy="copyWeek"
   />
 
   <UDrawer

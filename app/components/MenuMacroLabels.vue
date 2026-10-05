@@ -7,7 +7,7 @@ defineProps<{
 </script>
 
 <template>
-  <!-- Couleurs G/P/L identiques à la barre de composition (IngredientMacroSummary, MenuWeekStats). -->
+  <!-- Couleurs G/P/L identiques à la barre de composition (IngredientMacroSummary, CalorieSummary). -->
   <span class="tabular-nums">
     <span class="text-green-500">G{{ carbohydrates }}</span>
     <span class="text-red-700"> P{{ protein }}</span>

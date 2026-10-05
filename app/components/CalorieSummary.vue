@@ -3,16 +3,35 @@ import type { MenuWeekMacroBalance } from '~/types/menu'
 import { DAILY_TARGET_TOLERANCE, TARGET_STATUS_COLOR, TARGET_STATUS_TEXT_CLASS, targetStatus, type DailyTargets } from '~/utils/dailyTargets'
 import type { WeightProgress } from '~/utils/weightTrend'
 
-const props = defineProps<{
+/**
+ * Résumé calorique d'une journée (accueil) ou moyenne par jour d'une semaine (Menus) : jauge des kcal, macros et ligne
+ * de chiffres à pictos.
+ */
+const props = withDefaults(defineProps<{
   targets: DailyTargets
-  /** Kcal mangées le jour affiché, "En plus" compris. */
+  /** Kcal mangées (par jour), "En plus" compris. */
   eatenKcal: number
   /** Part "En plus" des kcal mangées. */
   extraKcal: number
   macros: MenuWeekMacroBalance
   /** Suivi du poids au jour affiché (rythme, part de l'objectif) ; absent sans pesée. */
   weightProgress?: WeightProgress | null
-}>()
+  title?: string
+  /** Clé de l'état replié / ouvert, partagé par les cartes qui l'utilisent (ex. tous les jours de l'accueil). */
+  stateKey?: string
+  /** État à la première ouverture de la page, gardé ensuite pour la session. */
+  defaultOpen?: boolean
+  /** Moyenne d'une semaine : nombre de jours complets pris en compte ; à 0, la carte le signale au lieu de chiffres nuls. */
+  completeDays?: number | null
+}>(), {
+  weightProgress: null,
+  title: 'Résumé',
+  stateKey: 'today-calorie-summary-open',
+  defaultOpen: true,
+  completeDays: null,
+})
+
+const hasNoCompleteDay = computed(() => props.completeDays === 0)
 
 /** Rythme affiché, en centièmes de kg/sem (arrondi comme le chiffre). */
 const roundedRate = computed(() => Math.round((props.weightProgress?.rateKgPerWeek ?? 0) * 100))
@@ -24,8 +43,8 @@ const trendIcon = computed(() =>
 /** Orange à l'inverse de l'objectif (hausse pour une perte, baisse pour une prise) ; sinon gris sur mobile, noir sur PC. */
 const trendClass = computed(() => (props.weightProgress?.againstGoal ? 'text-warning' : 'text-muted lg:text-highlighted'))
 
-/** Partagé entre les jours : le panneau garde son état quand on change de jour. */
-const open = useState('today-calorie-summary-open', () => true)
+/** Partagé par `stateKey` : sur l'accueil, le panneau garde son état quand on change de jour. */
+const open = useState(props.stateKey, () => props.defaultOpen)
 
 const remainingKcal = computed(() => props.targets.calories - props.eatenKcal)
 const isOver = computed(() => remainingKcal.value < 0)
@@ -70,9 +89,12 @@ const macroRows = computed(() => ([
       class="flex w-full cursor-pointer items-center gap-3 rounded-xl p-4 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:px-5"
     >
       <p class="flex-1 text-xs font-semibold uppercase tracking-wide text-dimmed">
-        Résumé
+        {{ title }}
       </p>
-      <p v-if="!open" class="text-xs text-dimmed">
+      <p v-if="!open && hasNoCompleteDay" class="text-xs text-dimmed">
+        Aucun jour complet
+      </p>
+      <p v-else-if="!open" class="text-xs text-dimmed">
         <span class="font-semibold tabular-nums" :class="TARGET_STATUS_TEXT_CLASS[kcalStatus]">{{ isOver ? '+' : '' }}{{ Math.abs(remainingKcal) }}</span>
         {{ isOver ? 'kcal en trop' : 'kcal restantes' }}
       </p>
@@ -84,11 +106,14 @@ const macroRows = computed(() => ([
     </button>
 
     <template #content>
+      <p v-if="hasNoCompleteDay" class="px-4 pb-4 text-sm text-muted text-pretty sm:px-5 sm:pb-5">
+        Aucun jour complet cette semaine : la moyenne ne compte que les jours dont le déjeuner et le dîner sont remplis.
+      </p>
       <!--
         À gauche la jauge et les calories, à droite les macros empilées : les deux colonnes ont la même hauteur
         (les macros se répartissent sur celle de la jauge et des calories). Les chiffres dessous (mobile, tablette) ; lg+ : jauge, kcal, macros, poids en 4 colonnes.
       -->
-      <div class="grid h-full grid-cols-[auto_minmax(0,1fr)] content-center gap-x-5 gap-y-3 px-4 pb-4 sm:px-5 sm:pb-5 lg:grid-cols-[auto_auto_minmax(0,16rem)_auto] lg:justify-between lg:gap-x-8">
+      <div v-else class="grid h-full grid-cols-[auto_minmax(0,1fr)] content-center gap-x-5 gap-y-3 px-4 pb-4 sm:px-5 sm:pb-5 lg:grid-cols-[auto_auto_minmax(0,16rem)_auto] lg:justify-between lg:gap-x-8">
         <div class="flex flex-col gap-1.5">
           <div
             class="relative mx-auto w-32 lg:w-36"
@@ -190,7 +215,7 @@ const macroRows = computed(() => ([
         -->
         <div
           class="col-span-2 flex flex-nowrap items-center justify-between gap-x-3 whitespace-nowrap border-t border-default pt-3 lg:col-span-1 lg:flex-col lg:items-start lg:justify-center lg:gap-y-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-          :class="!weightProgress && 'lg:hidden'"
+          :class="!weightProgress && completeDays === null && 'lg:hidden'"
         >
           <p class="flex items-baseline gap-1 lg:hidden" :title="`${extraKcal} kcal en plus (hors plan)`">
             <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
@@ -222,6 +247,16 @@ const macroRows = computed(() => ([
             <span class="sr-only">Objectif de poids atteint :</span>
             <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl lg:text-highlighted">{{ weightProgress.goalPercent }}</span>
             <span class="text-xs text-muted lg:text-sm">%</span>
+          </p>
+          <p
+            v-if="completeDays !== null"
+            class="flex items-baseline gap-1"
+            :title="`Moyenne sur ${completeDays} jour${completeDays > 1 ? 's' : ''} complet${completeDays > 1 ? 's' : ''} (déjeuner et dîner remplis)`"
+          >
+            <UIcon name="i-lucide-calendar-check" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
+            <span class="sr-only">Jours complets :</span>
+            <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl lg:text-highlighted">{{ completeDays }}</span>
+            <span class="text-xs text-muted lg:text-sm">j</span>
           </p>
         </div>
       </div>

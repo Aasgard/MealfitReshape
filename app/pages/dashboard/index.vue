@@ -424,7 +424,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </div>
             </Transition>
 
-            <TodayCalorieSummary
+            <CalorieSummary
               :targets="DAILY_TARGETS"
               :eaten-kcal="daySummary.kcal"
               :extra-kcal="daySummary.extraKcal"

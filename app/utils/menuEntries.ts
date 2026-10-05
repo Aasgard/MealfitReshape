@@ -4,7 +4,7 @@ import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { macrosForQuantity, type IngredientMacros } from './ingredientNutrition'
-import { DAY_KEYS } from './menuWeek'
+import { dayKeyOf, DAYS_PER_WEEK } from './menuWeek'
 import { macrosForRecipe } from './recipeNutrition'
 
 /** Ligne "Hors plan" du calendrier : repas hors objectif, comptés comme dérapages. */
@@ -23,55 +23,39 @@ export const MENU_MEAL_TYPES: MenuMealTypeRow[] = [
   { key: UNCOUNTED_MEAL_KEY, label: 'Non compté', avgLabel: 'Hors totaux', icon: 'i-lucide-save-off' },
 ]
 
+/** Lignes qui doivent être remplies pour qu'un jour compte dans les moyennes de la semaine. */
+const COMPLETE_DAY_MEALS: MealType[] = ['LUNCH', 'DINER']
+
+/** Un jour est complet quand son déjeuner et son dîner contiennent chacun au moins un élément. */
+export const isCompleteDay = (entries: Record<string, MenuEntry[]> | undefined) =>
+  COMPLETE_DAY_MEALS.every(mealType => !!entries?.[mealType]?.length)
+
 export interface MenuWeekSummary {
-  /** Total kcal du jour, par dayKey (uniquement les jours qui ont au moins un repas). */
-  dayTotals: Record<string, number>
+  /** Jours complets (voir `isCompleteDay`) : seuls comptés dans les moyennes. */
+  completeDays: number
+  /** Moyennes par jour complet, "En plus" compris, "Non compté" exclu (voir `summarizeDay`). */
   averageKcal: number
-  overagePerDayKcal: number
-  overageCount: number
-  overageTotalKcal: number
+  averageExtraKcal: number
   macros: MenuWeekMacroBalance
 }
 
-/** Totaux par jour et statistiques hebdomadaires (moyennes sur 7 jours) à partir des repas affichés. */
-export function summarizeMenuWeek(entries: MenuWeekEntries): MenuWeekSummary {
-  const dayTotals: Record<string, number> = {}
-  const macroTotals = { protein: 0, carbohydrates: 0, fat: 0 }
-  let kcalTotal = 0
-  let overageTotalKcal = 0
-  let overageCount = 0
-
-  for (const [dayKey, meals] of Object.entries(entries)) {
-    for (const [mealKey, list] of Object.entries(meals)) {
-      if (mealKey === UNCOUNTED_MEAL_KEY) continue
-
-      for (const entry of list) {
-        dayTotals[dayKey] = (dayTotals[dayKey] ?? 0) + entry.kcal
-        kcalTotal += entry.kcal
-        macroTotals.protein += entry.protein
-        macroTotals.carbohydrates += entry.carbohydrates
-        macroTotals.fat += entry.fat
-
-        if (mealKey === EXTRA_MEAL_KEY) {
-          overageTotalKcal += entry.kcal
-          overageCount++
-        }
-      }
-    }
-  }
-
-  const perDay = (value: number) => Math.round(value / DAY_KEYS.length)
+/**
+ * Moyennes par jour de la semaine (`dayKeys`) : un jour incomplet est retiré du total comme du nombre de jours, pour
+ * qu'une semaine en cours de planification ne fasse pas baisser la moyenne.
+ */
+export function summarizeMenuWeek(entries: MenuWeekEntries, dayKeys: string[]): MenuWeekSummary {
+  const days = dayKeys.map(key => entries[key]).filter(isCompleteDay).map(day => summarizeDay(day!))
+  const perDay = (pick: (day: DaySummary) => number) =>
+    days.length ? Math.round(days.reduce((total, day) => total + pick(day), 0) / days.length) : 0
 
   return {
-    dayTotals,
-    averageKcal: perDay(kcalTotal),
-    overagePerDayKcal: perDay(overageTotalKcal),
-    overageCount,
-    overageTotalKcal,
+    completeDays: days.length,
+    averageKcal: perDay(day => day.kcal),
+    averageExtraKcal: perDay(day => day.extraKcal),
     macros: {
-      protein: perDay(macroTotals.protein),
-      carbohydrates: perDay(macroTotals.carbohydrates),
-      fat: perDay(macroTotals.fat),
+      protein: perDay(day => day.macros.protein),
+      carbohydrates: perDay(day => day.macros.carbohydrates),
+      fat: perDay(day => day.macros.fat),
     },
   }
 }
@@ -175,7 +159,7 @@ export function mealsOfWeek(meals: Meal[], weekStart: Date): Meal[] {
   return meals
     .filter((meal) => {
       const index = dayIndexOf(meal, weekStart)
-      return index >= 0 && index < DAY_KEYS.length
+      return index >= 0 && index < DAYS_PER_WEEK
     })
     .sort(byCreation)
 }
@@ -210,7 +194,7 @@ export type DaySummary = {
   macros: MenuWeekMacroBalance
 }
 
-/** Totaux d'une journée : mêmes règles que `summarizeMenuWeek` (son total du jour est `kcal`). */
+/** Totaux d'une journée : "Non compté" exclu, "En plus" compris (et détaillé à part). */
 export function summarizeDay(entries: Record<string, MenuEntry[]>): DaySummary {
   const summary: DaySummary = { kcal: 0, extraKcal: 0, macros: { carbohydrates: 0, protein: 0, fat: 0 } }
   for (const [mealKey, list] of Object.entries(entries)) {
@@ -227,19 +211,15 @@ export function summarizeDay(entries: Record<string, MenuEntry[]>): DaySummary {
   return summary
 }
 
-/** Repas d'une semaine (voir `mealsOfWeek`) rangés par jour puis par ligne du calendrier, prêts pour l'affichage. */
-export function buildWeekEntries(
-  weekMeals: Meal[],
-  weekStart: Date,
+/** Repas rangés par jour (`yyyy-MM-dd`, voir `dayKeyOf`) puis par ligne du calendrier, dans leur ordre d'ajout. */
+export function buildEntriesByDay(
+  meals: Meal[],
   recipesById: Map<string, Recipe>,
   ingredientsById: Map<string, Ingredient>
 ): MenuWeekEntries {
   const entries: MenuWeekEntries = {}
-  for (const meal of weekMeals) {
-    const dayKey = DAY_KEYS[dayIndexOf(meal, weekStart)]
-    if (!dayKey) continue
-
-    const day = entries[dayKey] ??= {}
+  for (const meal of [...meals].sort(byCreation)) {
+    const day = entries[dayKeyOf(meal.date.toDate())] ??= {}
     ;(day[meal.mealType] ??= []).push(entryFromMeal(meal, recipesById, ingredientsById))
   }
   return entries

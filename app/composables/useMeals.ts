@@ -12,11 +12,13 @@ export type NewMeal = {
 }
 
 /**
- * Repas de l'utilisateur connecté (collection Firestore `meals`) pour la semaine commençant à `weekStart`
- * et la précédente (pour "Copier la semaine précédente"), et écritures associées.
+ * Repas de l'utilisateur connecté (collection Firestore `meals`) pour la semaine commençant à `weekStart`, la précédente
+ * (pour "Copier la semaine précédente") et, avec `weeksAhead`, les suivantes (préchargées pour passer de l'une à
+ * l'autre sans attente), et écritures associées. Au changement de semaine, les repas affichés restent jusqu'à
+ * l'arrivée des nouveaux (`reset: false`, défaut de VueFire).
  * La requête (`user` + plage de `date`) demande un index composite `user` ↑, `date` ↑.
  */
-export const useMeals = (weekStart: Ref<Date>) => {
+export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
   const db = useFirestore()
   const user = useCurrentUser()
 
@@ -28,7 +30,7 @@ export const useMeals = (weekStart: Ref<Date>) => {
       collection(db, 'meals'),
       // where('user', '==', uid),
       where('date', '>=', Timestamp.fromDate(subWeeks(weekStart.value, 1))),
-      where('date', '<', Timestamp.fromDate(addWeeks(weekStart.value, 1)))
+      where('date', '<', Timestamp.fromDate(addWeeks(weekStart.value, 1 + weeksAhead)))
     )
   })
 

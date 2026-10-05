@@ -1,14 +1,6 @@
 import type { MealType } from './meal'
 
-/** Une semaine sélectionnable dans le sélecteur de semaines (bande de petites cartes). */
-export interface MenuWeekOption {
-  id: string
-  /** Ex: "7-13 sept" */
-  rangeLabel: string
-  isCurrent?: boolean
-}
-
-/** Répartition hebdomadaire des macros (grammes), pour la carte "Équilibre de la semaine". */
+/** Macros en grammes : d'un jour, ou moyenne par jour d'une semaine. */
 export interface MenuWeekMacroBalance {
   protein: number
   carbohydrates: number
@@ -17,12 +9,16 @@ export interface MenuWeekMacroBalance {
 
 /** Un jour affiché en en-tête de colonne du calendrier. */
 export interface MenuDayHeader {
+  /** Date ISO du jour (voir `dayKeyOf`). */
   key: string
+  date: Date
   /** Ex: "Lun." */
   dayLabel: string
   /** Ex: "14" */
   dateLabel: string
   isSelected?: boolean
+  /** Lundi : début d'une semaine, marqué quand le calendrier en enchaîne plusieurs. */
+  isWeekStart?: boolean
 }
 
 /** Une ligne du calendrier (un type de repas : Petit déj, Déjeuner, ...). */
@@ -36,7 +32,7 @@ export interface MenuMealTypeRow {
   avgLabel?: string
 }
 
-/** Repas d'une semaine, par jour puis par type de repas : entries[dayKey][mealTypeKey]. */
+/** Repas par jour (date ISO) puis par type de repas : entries[dayKey][mealTypeKey]. */
 export type MenuWeekEntries = Record<string, Record<string, MenuEntry[]>>
 
 /** Un repas/aliment placé dans une case du calendrier. */

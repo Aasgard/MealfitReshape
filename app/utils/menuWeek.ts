@@ -1,25 +1,19 @@
-import { addDays, addWeeks, format, isSameMonth, isSameWeek, isToday, parse, startOfWeek } from 'date-fns'
+import { addDays, format, isSameMonth, isToday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { MenuDayHeader, MenuWeekOption } from '~/types/menu'
+import type { MenuDayHeader } from '~/types/menu'
 
 /** Convention date-fns pour toutes les semaines de la page Menus : 1 = lundi. */
 export const WEEK_STARTS_ON = 1
 
-/** Jours de la semaine, lundi en premier (aligné sur `WEEK_STARTS_ON`). */
-export const DAY_KEYS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'] as const
-export type MenuDayKey = typeof DAY_KEYS[number]
+export const DAYS_PER_WEEK = 7
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-/** Identifiant stable d'une semaine : date ISO de son lundi (ex. "2026-09-14"). */
-export const weekId = (date: Date) => format(date, 'yyyy-MM-dd')
+/** Clé d'un jour dans le calendrier et ses repas : sa date ISO (ex. "2026-09-14"), unique d'une semaine à l'autre. */
+export const dayKeyOf = (date: Date) => format(date, 'yyyy-MM-dd')
 
-/** Inverse de `weekId` : reconstruit le lundi de la semaine depuis son identifiant. */
-export const parseWeekId = (id: string) => startOfWeek(parse(id, 'yyyy-MM-dd', new Date()), { weekStartsOn: WEEK_STARTS_ON })
-
-/** "7-13 sept" : toujours le mois de fin de semaine, pour rester compact même quand la semaine chevauche deux mois. */
-export const formatWeekRangeShort = (start: Date, end: Date) =>
-  `${format(start, 'd')}-${format(end, 'd')} ${format(end, 'MMM', { locale: fr }).replace(/\.$/, '')}`
+/** Identifiant stable d'une semaine : la clé de son lundi. */
+export const weekId = dayKeyOf
 
 /**
  * "14 – 20 septembre" (ou "28 septembre – 4 octobre" si la semaine chevauche deux mois, année ajoutée si différente de
@@ -37,28 +31,17 @@ export const formatWeekLabel = (start: Date, end: Date, { short = false } = {}) 
   return `${format(start, 'd')} ${month(start)} – ${format(end, 'd')} ${month(end)}${yearSuffix}`
 }
 
-/** En-têtes de colonnes du calendrier pour la semaine commençant à `weekStart` (lundi) ; marque la colonne du jour courant. */
-export function buildWeekDays(weekStart: Date): MenuDayHeader[] {
-  return DAY_KEYS.map((key, index) => {
-    const date = addDays(weekStart, index)
+/** En-têtes de `weeks` semaines consécutives à partir du lundi `firstWeekStart` ; marque la colonne du jour courant. */
+export function buildDays(firstWeekStart: Date, weeks = 1): MenuDayHeader[] {
+  return Array.from({ length: weeks * DAYS_PER_WEEK }, (_, index) => {
+    const date = addDays(firstWeekStart, index)
     return {
-      key,
+      key: dayKeyOf(date),
+      date,
       dayLabel: capitalize(format(date, 'EEE', { locale: fr })),
       dateLabel: format(date, 'd'),
       isSelected: isToday(date),
-    }
-  })
-}
-
-/** Bande de `radius * 2 + 1` semaines sélectionnables, centrée sur `centerWeekStart`. */
-export function buildWeekOptions(centerWeekStart: Date, radius: number, referenceWeekStart: Date): MenuWeekOption[] {
-  return Array.from({ length: radius * 2 + 1 }, (_, i) => {
-    const start = addWeeks(centerWeekStart, i - radius)
-    const end = addDays(start, 6)
-    return {
-      id: weekId(start),
-      rangeLabel: formatWeekRangeShort(start, end),
-      isCurrent: isSameWeek(start, referenceWeekStart, { weekStartsOn: WEEK_STARTS_ON }),
+      isWeekStart: index % DAYS_PER_WEEK === 0,
     }
   })
 }

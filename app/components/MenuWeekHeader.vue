@@ -1,37 +1,62 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { getLocalTimeZone, parseDate, type DateValue } from '@internationalized/date'
+import type { DropdownMenuItem } from '@nuxt/ui'
+
+const props = withDefaults(defineProps<{
   weekLabel: string
   /** Variante à mois abrégés, affichée sur mobile. */
   weekLabelShort?: string
-  weekStatusLabel?: string
+  /** Lundi de la semaine affichée (`yyyy-MM-dd`), jour sélectionné dans le calendrier du titre. */
+  weekStartKey: string
   isCurrentWeek?: boolean
   /** Grise "Vider" quand la semaine affichée ne contient aucun repas. */
   clearDisabled?: boolean
-  /** Grise "Copier la semaine précédente" quand la semaine précédente ne contient aucun repas. */
-  copyPreviousDisabled?: boolean
 }>(), {
   weekLabelShort: undefined,
-  weekStatusLabel: undefined,
   isCurrentWeek: false,
   clearDisabled: false,
-  copyPreviousDisabled: false,
 })
 
 const emit = defineEmits<{
   previous: []
   next: []
   'this-week': []
-  'copy-previous': []
+  /** Jour choisi dans le calendrier du titre : la page affiche sa semaine. */
+  'select-date': [date: Date]
+  /** Ouvre le choix de la semaine à recopier dans celle-ci. */
+  'copy-week': []
   clear: []
   'shopping-list': []
 }>()
+
+const pickerOpen = ref(false)
+
+const pickedDate = computed({
+  get: () => parseDate(props.weekStartKey),
+  set: (value: DateValue | undefined) => {
+    if (!value) return
+    pickerOpen.value = false
+    emit('select-date', value.toDate(getLocalTimeZone()))
+  },
+})
+
+/** Mobile : les actions secondaires dans un menu, pour garder l'en-tête sur une ligne. */
+const moreItems = computed<DropdownMenuItem[][]>(() => [
+  props.isCurrentWeek ? [] : [{ label: 'Revenir à cette semaine', icon: 'i-lucide-calendar-check', onSelect: () => emit('this-week') }],
+  [
+    { label: 'Copier une semaine…', icon: 'i-lucide-copy', onSelect: () => emit('copy-week') },
+    { label: 'Vider la semaine', icon: 'i-lucide-eraser', disabled: props.clearDisabled, onSelect: () => emit('clear') },
+  ],
+].filter(group => group.length))
 </script>
 
 <template>
-  <div class="flex flex-wrap items-start justify-between gap-4">
-    <div class="flex items-start gap-3">
-      <div class="flex items-center rounded-sm border border-default overflow-hidden shrink-0 mt-0.5">
+  <!-- `data-copy-control` : changer de semaine ne doit pas annuler un repas copié, qu'on veut justement coller ailleurs. -->
+  <div class="flex items-center justify-between gap-2">
+    <div class="flex min-w-0 items-center gap-1 sm:gap-2">
+      <div class="flex shrink-0 items-center rounded-sm border border-default overflow-hidden">
         <UButton
+          data-copy-control
           icon="i-lucide-chevron-left"
           color="neutral"
           variant="ghost"
@@ -43,6 +68,7 @@ const emit = defineEmits<{
         />
         <div class="w-px h-5 bg-default" />
         <UButton
+          data-copy-control
           icon="i-lucide-chevron-right"
           color="neutral"
           variant="ghost"
@@ -54,47 +80,56 @@ const emit = defineEmits<{
         />
       </div>
 
-      <div class="flex flex-col gap-1">
-        <div class="flex items-center gap-2 flex-wrap">
-          <h1 class="text-2xl font-bold text-highlighted tracking-tight">
+      <UPopover v-model:open="pickerOpen">
+        <button
+          type="button"
+          data-copy-control
+          class="flex min-w-0 cursor-pointer items-center gap-1 rounded-sm px-1.5 py-0.5 transition-colors hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
+          aria-label="Choisir une semaine"
+        >
+          <h1 class="truncate text-xl font-bold tracking-tight text-highlighted sm:text-2xl">
             <span class="sm:hidden">{{ weekLabelShort ?? weekLabel }}</span>
             <span class="hidden sm:inline">{{ weekLabel }}</span>
           </h1>
-          <UButton
-            v-if="!isCurrentWeek"
-            label="Cette semaine"
-            color="primary"
-            variant="subtle"
-            size="xs"
-            @click="emit('this-week')"
-          />
-        </div>
-        <p v-if="weekStatusLabel" class="text-xs text-dimmed">
-          {{ weekStatusLabel }}
-        </p>
-      </div>
+          <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 text-muted" aria-hidden="true" />
+        </button>
+        <template #content>
+          <div data-copy-control>
+            <UCalendar v-model="pickedDate" :week-starts-on="1" class="p-2" />
+          </div>
+        </template>
+      </UPopover>
+
+      <UButton
+        v-if="!isCurrentWeek"
+        data-copy-control
+        label="Cette semaine"
+        color="primary"
+        variant="subtle"
+        size="xs"
+        class="hidden shrink-0 sm:inline-flex"
+        @click="emit('this-week')"
+      />
     </div>
 
-    <div class="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+    <!-- Mobile : « Courses » et un menu « … » ; à partir de la tablette, toutes les actions en boutons. -->
+    <div class="flex shrink-0 items-center gap-2">
       <UButton
         icon="i-lucide-copy"
+        label="Copier une semaine…"
         color="neutral"
         variant="outline"
         size="sm"
-        class="w-full justify-center sm:w-auto"
-        :disabled="copyPreviousDisabled"
-        @click="emit('copy-previous')"
-      >
-        <span class="sm:hidden">Copier</span>
-        <span class="hidden sm:inline">Copier la semaine précédente</span>
-      </UButton>
+        class="hidden sm:inline-flex"
+        @click="emit('copy-week')"
+      />
       <UButton
-        label="Vider"
         icon="i-lucide-eraser"
+        label="Vider"
         color="neutral"
         variant="outline"
         size="sm"
-        class="w-full justify-center sm:w-auto"
+        class="hidden sm:inline-flex"
         :disabled="clearDisabled"
         @click="emit('clear')"
       />
@@ -102,12 +137,22 @@ const emit = defineEmits<{
         icon="i-lucide-shopping-cart"
         color="primary"
         size="sm"
-        class="w-full justify-center sm:w-auto"
+        aria-label="Liste de courses"
         @click="emit('shopping-list')"
       >
-        <span class="sm:hidden">Courses</span>
         <span class="hidden sm:inline">Liste de courses</span>
       </UButton>
+      <UDropdownMenu :items="moreItems" :content="{ align: 'end' }">
+        <UButton
+          icon="i-lucide-ellipsis"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          square
+          class="sm:hidden"
+          aria-label="Plus d'actions"
+        />
+      </UDropdownMenu>
     </div>
   </div>
 </template>

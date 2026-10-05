@@ -14,17 +14,15 @@ const props = defineProps<{
   weightProgress?: WeightProgress | null
 }>()
 
-/** Vert si le rythme suit la projection, orange s'il s'en écarte, neutre sans projection. */
-const paceClass = computed(() => {
-  const onPace = props.weightProgress?.onPace
-  return onPace === true ? 'text-success' : onPace === false ? 'text-warning' : 'text-highlighted'
-})
+/** Rythme affiché, en centièmes de kg/sem (arrondi comme le chiffre). */
+const roundedRate = computed(() => Math.round((props.weightProgress?.rateKgPerWeek ?? 0) * 100))
 
-/** Sens du rythme affiché (arrondi au centième, comme le chiffre). */
-const trendIcon = computed(() => {
-  const rate = Math.round((props.weightProgress?.rateKgPerWeek ?? 0) * 100)
-  return rate < 0 ? 'i-lucide-trending-down' : rate > 0 ? 'i-lucide-trending-up' : 'i-lucide-move-right'
-})
+const trendIcon = computed(() =>
+  roundedRate.value < 0 ? 'i-lucide-trending-down' : roundedRate.value > 0 ? 'i-lucide-trending-up' : 'i-lucide-move-right',
+)
+
+/** Orange à l'inverse de l'objectif (hausse pour une perte, baisse pour une prise) ; sinon gris sur mobile, noir sur PC. */
+const trendClass = computed(() => (props.weightProgress?.againstGoal ? 'text-warning' : 'text-muted lg:text-highlighted'))
 
 /** Partagé entre les jours : le panneau garde son état quand on change de jour. */
 const open = useState('today-calorie-summary-open', () => true)
@@ -154,13 +152,13 @@ const macroRows = computed(() => ([
         <!-- lg+ : kcal mangées / objectif et « En plus », au format des chiffres de la dernière colonne. -->
         <div class="hidden flex-col justify-center gap-y-4 whitespace-nowrap lg:flex">
           <p class="flex items-baseline gap-1" :title="`${eatenKcal} kcal mangées sur un objectif de ${targets.calories} kcal`">
-            <UIcon name="i-lucide-flame" class="size-4 shrink-0 self-center text-muted" aria-hidden="true" />
+            <UIcon name="i-lucide-flame" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Mangées :</span>
             <span class="text-xl font-bold tabular-nums text-highlighted">{{ eatenKcal }}</span>
             <span class="text-sm text-muted"><span class="tabular-nums">/ {{ targets.calories }}</span> kcal</span>
           </p>
           <p class="flex items-baseline gap-1" :title="`${extraKcal} kcal en plus (hors plan)`">
-            <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-muted" aria-hidden="true" />
+            <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">En plus :</span>
             <span class="text-xl font-bold tabular-nums" :class="extraKcal > 0 ? 'text-warning' : 'text-highlighted'">
               {{ extraKcal > 0 ? '+' : '' }}{{ extraKcal }}
@@ -195,9 +193,9 @@ const macroRows = computed(() => ([
           :class="!weightProgress && 'lg:hidden'"
         >
           <p class="flex items-baseline gap-1 lg:hidden" :title="`${extraKcal} kcal en plus (hors plan)`">
-            <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-muted" aria-hidden="true" />
+            <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">En plus :</span>
-            <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="extraKcal > 0 ? 'text-warning' : 'text-highlighted'">
+            <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="extraKcal > 0 ? 'text-warning' : 'text-muted'">
               {{ extraKcal > 0 ? '+' : '' }}{{ extraKcal }}
             </span>
             <span class="text-xs text-muted lg:text-sm">kcal</span>
@@ -208,9 +206,9 @@ const macroRows = computed(() => ([
             class="flex items-baseline gap-1"
             title="Tendance du poids sur 4 semaines"
           >
-            <UIcon :name="trendIcon" class="size-4 shrink-0 self-center text-muted" aria-hidden="true" />
+            <UIcon :name="trendIcon" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Tendance du poids :</span>
-            <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="paceClass">
+            <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="trendClass">
               {{ formatSignedWeight(weightProgress.rateKgPerWeek, 2) }}
             </span>
             <span class="text-xs text-muted lg:text-sm">kg/sem</span>
@@ -220,9 +218,9 @@ const macroRows = computed(() => ([
             class="flex items-baseline gap-1"
             :title="`${weightProgress.goalPercent} % de l'objectif de poids atteint`"
           >
-            <UIcon name="i-lucide-target" class="size-4 shrink-0 self-center text-muted" aria-hidden="true" />
+            <UIcon name="i-lucide-target" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Objectif de poids atteint :</span>
-            <span class="text-base font-bold tabular-nums text-highlighted min-[380px]:text-lg lg:text-xl">{{ weightProgress.goalPercent }}</span>
+            <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl lg:text-highlighted">{{ weightProgress.goalPercent }}</span>
             <span class="text-xs text-muted lg:text-sm">%</span>
           </p>
         </div>

@@ -80,7 +80,6 @@ watch(upcomingMeals.error, (error) => {
 
 const { weighIns, error: weighInsError, promise: weighInsLoaded, saveWeighIn } = useWeighIns()
 const profile = useProfile()
-const { settings } = useAppSettings()
 watch(weighInsError, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
@@ -97,11 +96,8 @@ await Promise.all([
   profile.ready,
 ])
 
-/** Objectif du profil, comme sur Suivi du poids : sans projection quand le réglage la masque. */
-const weightGoal = computed(() => {
-  const goal = trackingGoal(profile.goal, profile.body, profile.age)
-  return goal && !settings.value.showGoalProjection ? { ...goal, projection: null } : goal
-})
+/** Objectif du profil : seule la part atteinte sert ici, la projection n'est pas utilisée. */
+const weightGoal = computed(() => trackingGoal(profile.goal, profile.body, profile.age))
 
 /** Rythme et part de l'objectif au jour affiché ; jamais de poids brut sur l'accueil. */
 const weightProgress = computed(() =>

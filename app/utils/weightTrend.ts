@@ -127,17 +127,13 @@ export function goalRatio(goal: WeightGoal, trendKg: number): number {
   return total === 0 ? 1 : Math.min(Math.max((goal.startWeightKg - trendKg) / total, 0), 1)
 }
 
-/** Écart toléré entre le rythme réel et le rythme prévu : 0,1 kg/sem, ou 25 % du prévu s'il est plus rapide. */
-const PACE_TOLERANCE_KG_PER_WEEK = 0.1
-const PACE_TOLERANCE_RATIO = 0.25
-
 export interface WeightProgress {
   /** Rythme de la tendance sur 4 semaines ; `null` tant qu'il y a moins de `MIN_WEIGH_INS_FOR_TREND` pesées. */
   rateKgPerWeek: number | null
   /** Part de l'objectif atteinte, en % entier ; `null` sans objectif. */
   goalPercent: number | null
-  /** Le rythme suit-il celui de la projection ? `null` sans rythme ou sans projection. */
-  onPace: boolean | null
+  /** Le rythme (arrondi au centième, comme affiché) va à l'inverse de l'objectif : hausse pour une perte, baisse pour une prise. */
+  againstGoal: boolean
 }
 
 /**
@@ -153,10 +149,9 @@ export function weightProgressAt(weighIns: WeighIn[], goal: WeightGoal | null, d
   const goalPercent = goal ? Math.round(goalRatio(goal, current.trendKg) * 100) : null
   if (rateKgPerWeek === null && goalPercent === null) return null
 
-  const planned = goal && rateKgPerWeek !== null ? projectionRateKgPerWeek(goal, current.date) : null
-  const tolerance = planned === null ? 0 : Math.max(PACE_TOLERANCE_KG_PER_WEEK, Math.abs(planned) * PACE_TOLERANCE_RATIO)
-  const onPace = planned === null ? null : Math.abs(rateKgPerWeek! - planned) <= tolerance
-  return { rateKgPerWeek, goalPercent, onPace }
+  const roundedRate = rateKgPerWeek === null ? 0 : Math.round(rateKgPerWeek * 100)
+  const againstGoal = !!goal && (isLossGoal(goal) ? roundedRate > 0 : roundedRate < 0)
+  return { rateKgPerWeek, goalPercent, againstGoal }
 }
 
 /**

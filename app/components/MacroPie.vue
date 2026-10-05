@@ -3,11 +3,15 @@
  * Petit camembert de répartition des macros, en grammes comme la barre de composition (IngredientMacroSummary),
  * avec les mêmes couleurs G/P/L. Un disque gris quand il n'y a aucun macro.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   carbohydrates: number
   protein: number
   fat: number
-}>()
+  /** Classe de taille du disque (ex. plus grand dans le tableau des recettes). */
+  sizeClass?: string
+}>(), {
+  sizeClass: 'size-3.5',
+})
 
 // Un cercle de rayon R tracé avec un trait d'épaisseur 2R remplit un disque de rayon 2R :
 // chaque part est un morceau de ce trait (stroke-dasharray), décalé de la somme des parts précédentes.
@@ -19,9 +23,10 @@ const slices = computed(() => {
   if (total <= 0) return []
 
   let offset = 0
+  // Protéines en premier (à partir de midi, sens horaire) : la part lue en premier est celle du tri « Ratio ».
   return ([
-    { key: 'carbohydrates', value: props.carbohydrates, colorClass: 'text-green-500' },
     { key: 'protein', value: props.protein, colorClass: 'text-red-700' },
+    { key: 'carbohydrates', value: props.carbohydrates, colorClass: 'text-green-500' },
     { key: 'fat', value: props.fat, colorClass: 'text-amber-500' },
   ] as const)
     .filter(slice => slice.value > 0)
@@ -39,7 +44,7 @@ const ariaLabel = computed(() =>
 </script>
 
 <template>
-  <svg viewBox="0 0 20 20" class="size-3.5 shrink-0" role="img" :aria-label="ariaLabel">
+  <svg viewBox="0 0 20 20" class="shrink-0" :class="sizeClass" role="img" :aria-label="ariaLabel">
     <circle cx="10" cy="10" r="10" style="fill: var(--ui-bg-accented)" />
     <circle
       v-for="slice in slices"

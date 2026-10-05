@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { parsePositiveNumber, formatGrams } from '~/utils/numberInput'
+import type { DailyTargets } from '~/utils/dailyTargets'
 
 useSeoMeta({
   title: 'Dashboard - Calculateur de besoins journaliers - Mealfit',
@@ -18,6 +19,55 @@ const goal = ref('Maintien')
 const proteinLevel = ref('Sport régulier ou musculation — 1,6 g/kg')
 const proteinBasis = ref('Poids actuel')
 const targetWeightKg = ref('')
+
+// --- Lien avec le profil : préremplissage à l'ouverture, « Définir comme objectif » après le calcul ---
+const profile = useProfile()
+const toast = useToast()
+const prefilledFromProfile = ref(false)
+
+if (profile.isBodyComplete) {
+  sexe.value = profile.body.sex
+  age.value = String(profile.age)
+  heightCm.value = formatNumber(profile.body.heightCm!, 1)
+  weightKg.value = formatNumber(profile.currentWeightKg!, 1)
+  bodyFatPercent.value = profile.body.bodyFatPercent ? formatNumber(profile.body.bodyFatPercent, 1) : ''
+  activityLevel.value = profile.body.activity
+  targetWeightKg.value = profile.goal.targetWeightKg ? formatNumber(profile.goal.targetWeightKg, 1) : ''
+  goal.value = Object.keys(CALCULATOR_GOAL_DIRECTION).find(label => CALCULATOR_GOAL_DIRECTION[label] === profile.goal.direction) ?? 'Maintien'
+  prefilledFromProfile.value = true
+}
+
+/** Résultat chiffré du dernier calcul, repris tel quel par « Définir comme objectif ». */
+const lastResult = ref<DailyTargets | null>(null)
+const confirmTargetOpen = ref(false)
+
+const targetDiffRows = computed(() => {
+  const next = lastResult.value
+  if (!next) return []
+  const current = profile.targets
+  return [
+    { label: 'Énergie', unit: 'kcal', current: current?.calories ?? null, next: Math.round(next.calories) },
+    { label: 'Glucides', unit: 'g', current: current?.carbohydrates ?? null, next: Math.round(next.carbohydrates) },
+    { label: 'Protéines', unit: 'g', current: current?.protein ?? null, next: Math.round(next.protein) },
+    { label: 'Lipides', unit: 'g', current: current?.fat ?? null, next: Math.round(next.fat) },
+  ]
+})
+
+function applyAsTarget() {
+  if (!lastResult.value) return
+  profile.setTargets(lastResult.value, 'calculator')
+  const direction = CALCULATOR_GOAL_DIRECTION[lastCalculatedGoal.value ?? goal.value]
+  if (direction) profile.setGoalDirection(direction)
+  if (usesTargetWeight.value && targetWeightValue.value !== null) profile.goal.targetWeightKg = targetWeightValue.value
+  confirmTargetOpen.value = false
+  toast.add({
+    title: 'Objectif mis à jour',
+    description: `${formatNumber(lastResult.value.calories)} kcal par jour enregistrées dans votre profil.`,
+    color: 'success',
+    icon: 'i-lucide-check',
+    actions: [{ label: 'Voir le profil', color: 'neutral', variant: 'outline', onClick: () => { navigateTo('/dashboard/profil') } }],
+  })
+}
 
 const sexeOptions = ['Homme', 'Femme']
 
@@ -131,6 +181,7 @@ function resetResults() {
   carbsLabel.value = EMPTY_RESULT
   bodyFatUsedLabel.value = EMPTY_RESULT
   lastCalculatedGoal.value = null
+  lastResult.value = null
   fullWeeklySeries.value = []
   checkpointWeights.value = {}
   steadyStateWeightKg.value = null
@@ -279,6 +330,7 @@ function calculate() {
   carbsLabel.value = formatGrams(carbsGrams)
 
   lastCalculatedGoal.value = goal.value
+  lastResult.value = { calories: targetCalories, carbohydrates: carbsGrams, protein: proteinGrams, fat: fatGrams }
 
   const initialFmKg = weight * (bodyFatPct / 100)
   const initialFfmKg = weight - initialFmKg
@@ -437,6 +489,11 @@ function handleChartPointerLeave() {
           <p class="text-sm text-muted max-w-2xl">
             Métabolisme de base estimé via Mifflin-St Jeor (ou Katch-McArdle si un % de masse grasse mesuré est renseigné),
             multiplié par un facteur d'activité (1,2 à 1,9). POC à affiner.
+          </p>
+          <p v-if="prefilledFromProfile" class="-mt-3 flex items-center gap-1.5 text-xs text-dimmed">
+            <UIcon name="i-lucide-user" class="size-3.5 shrink-0" />
+            Prérempli depuis votre
+            <ULink to="/dashboard/profil" class="text-muted underline underline-offset-2 hover:text-highlighted">profil</ULink>.
           </p>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -616,6 +673,18 @@ function handleChartPointerLeave() {
                     {{ carbsLabel }}
                   </p>
                 </div>
+                <div class="col-span-2 flex flex-wrap items-center justify-between gap-3 border-t border-default pt-4">
+                  <p class="text-xs text-muted text-pretty">
+                    Reprenez ces valeurs comme besoins du jour de votre profil.
+                  </p>
+                  <UButton
+                    label="Définir comme objectif"
+                    icon="i-lucide-target"
+                    color="neutral"
+                    variant="outline"
+                    @click="confirmTargetOpen = true"
+                  />
+                </div>
               </div>
 
               <UEmpty
@@ -787,6 +856,40 @@ function handleChartPointerLeave() {
           </div>
         </div>
       </div>
+
+      <UModal
+        v-model:open="confirmTargetOpen"
+        title="Définir comme objectif ?"
+        description="Ces valeurs remplacent les besoins du jour de votre profil."
+        :ui="{ footer: 'justify-end' }"
+      >
+        <template #body>
+          <div class="overflow-hidden rounded-lg border border-default">
+            <div class="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-3 border-b border-default px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dimmed">
+              <span />
+              <span class="text-end">Actuel</span>
+              <span class="text-end">Nouveau</span>
+            </div>
+            <div
+              v-for="row in targetDiffRows"
+              :key="row.label"
+              class="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-baseline gap-x-3 border-b border-default px-4 py-2.5 text-sm last:border-b-0"
+            >
+              <span class="text-highlighted">{{ row.label }}</span>
+              <span class="text-end tabular-nums text-dimmed">
+                {{ row.current === null ? '—' : `${formatNumber(row.current)} ${row.unit}` }}
+              </span>
+              <span class="text-end font-semibold tabular-nums text-highlighted">
+                {{ formatNumber(row.next) }} <span class="font-normal text-muted">{{ row.unit }}</span>
+              </span>
+            </div>
+          </div>
+        </template>
+        <template #footer>
+          <UButton label="Annuler" color="neutral" variant="ghost" @click="confirmTargetOpen = false" />
+          <UButton label="Définir comme objectif" icon="i-lucide-target" @click="applyAsTarget" />
+        </template>
+      </UModal>
     </template>
   </UDashboardPanel>
 </template>

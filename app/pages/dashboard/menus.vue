@@ -5,7 +5,7 @@ import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
 import { buildWeekDays, buildWeekOptions, formatWeekLabel, parseWeekId, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { buildWeekEntries, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek } from '~/utils/menuEntries'
+import { buildWeekEntries, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -106,6 +106,13 @@ const addTarget = ref<{ dayKey: string, mealTypeKey: MealType } | null>(null)
 /** Repas modifié via la même modale ; `null` = ajout d'un nouveau repas dans `addTarget`. */
 const editingMeal = ref<Meal | null>(null)
 const editingSource = computed(() => editingMeal.value ? mealSourceOf(editingMeal.value) : null)
+
+/** Contenu du jour visé et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
+const addDayBudget = computed(() => {
+  const target = addTarget.value
+  if (!target || target.mealTypeKey === UNCOUNTED_MEAL_KEY) return null
+  return { consumed: consumedOfDay(entries.value[target.dayKey] ?? {}, editingMeal.value?.id), targets: DAILY_TARGETS }
+})
 
 const addContextLabel = computed(() => {
   const target = addTarget.value
@@ -317,6 +324,7 @@ const runEntryAction = (action: (entryId: string) => void) => {
     :ingredients-by-id="ingredientsById"
     :context-label="addContextLabel"
     :initial-source="editingSource"
+    :day-budget="addDayBudget"
     @submit="submitAddedEntry"
   />
 

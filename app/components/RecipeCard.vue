@@ -125,16 +125,12 @@ const actionItems = computed(() => [
           <span class="font-medium text-highlighted tabular-nums">{{ recipe.prepTime }}</span> min prép.
         </span>
         <span v-if="recipe.cookTime != null" class="flex items-center gap-1 shrink-0">
-          <UIcon name="i-lucide-flame" class="size-3.5 shrink-0" />
+          <UIcon name="i-lucide-cooking-pot" class="size-3.5 shrink-0" />
           <span class="font-medium text-highlighted tabular-nums">{{ recipe.cookTime }}</span> min cuisson
         </span>
       </div>
 
-      <IngredientMacroSummary v-if="hasMacros" :macros="macros" class="mt-1" />
-      <p v-else class="flex items-center gap-1.5 text-xs text-dimmed mt-1">
-        <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
-        Valeurs non renseignées
-      </p>
+      <IngredientMacroSummary :macros="hasMacros ? macros : null" class="mt-1" />
 
       <div class="flex flex-wrap items-center gap-2 mt-auto pt-2 border-t border-default">
         <UBadge

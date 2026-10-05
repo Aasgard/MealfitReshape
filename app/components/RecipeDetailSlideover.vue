@@ -41,9 +41,49 @@ const lines = computed(() => {
       key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`,
       label: described?.label ?? 'Ingrédient introuvable',
       quantityLabel: described?.quantityLabel ?? `${line.quantity}`,
+      equivalentLabel: described?.equivalentLabel,
     }
   })
 })
+
+const scaledNote = computed(() =>
+  isScaled.value ? `Quantités pour ${formatParts(displayedParts.value)} (recette prévue pour ${formatParts(persons.value)})` : null
+)
+
+/**
+ * Export PDF : ouvre la boîte d'impression du navigateur ("Enregistrer en PDF") en n'imprimant
+ * que `RecipePrintSheet`. Le titre du document sert de nom de fichier proposé.
+ */
+const printRecipe = async () => {
+  const recipe = props.recipe
+  if (!recipe) return
+
+  const root = document.documentElement
+  const previousTitle = document.title
+  root.classList.add('printing-recipe')
+  document.title = recipe.title
+
+  const cleanup = () => {
+    root.classList.remove('printing-recipe')
+    document.title = previousTitle
+    window.removeEventListener('afterprint', cleanup)
+  }
+  window.addEventListener('afterprint', cleanup)
+
+  // Laisse l'image se charger (au plus 3 s) pour qu'elle figure dans le PDF.
+  const image = document.querySelector<HTMLImageElement>('#recipe-print img')
+  if (image && !image.complete) {
+    await Promise.race([
+      new Promise((resolve) => {
+        image.addEventListener('load', resolve, { once: true })
+        image.addEventListener('error', resolve, { once: true })
+      }),
+      new Promise(resolve => setTimeout(resolve, 3000)),
+    ])
+  }
+
+  window.print()
+}
 </script>
 
 <template>
@@ -52,7 +92,28 @@ const lines = computed(() => {
     :title="recipe?.title"
     :ui="{ content: 'sm:max-w-xl' }"
   >
+    <template #actions>
+      <UButton
+        v-if="recipe"
+        icon="i-lucide-file-down"
+        color="neutral"
+        variant="ghost"
+        aria-label="Exporter en PDF"
+        title="Exporter en PDF"
+        @click="printRecipe"
+      />
+    </template>
+
     <template #body>
+      <RecipePrintSheet
+        v-if="open && recipe"
+        :recipe="recipe"
+        :lines="lines"
+        :macros="hasMacros ? macros : null"
+        :parts-label="formatParts(displayedParts)"
+        :scaled-note="scaledNote"
+      />
+
       <div class="flex flex-col gap-6">
         <img
           v-if="recipe?.imageUrl"
@@ -95,7 +156,7 @@ const lines = computed(() => {
           />
           <UBadge
             v-if="recipe?.cookTime != null"
-            icon="i-lucide-flame"
+            icon="i-lucide-cooking-pot"
             :label="`${recipe.cookTime} min cuisson`"
             color="neutral"
             variant="subtle"
@@ -119,9 +180,7 @@ const lines = computed(() => {
             <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
             <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients</p>
           </div>
-          <p v-if="isScaled" class="mb-3 text-xs text-muted">
-            Quantités pour {{ formatParts(displayedParts) }} (recette prévue pour {{ formatParts(persons) }})
-          </p>
+          <p v-if="scaledNote" class="mb-3 text-xs text-muted">{{ scaledNote }}</p>
           <ul v-if="lines.length" class="rounded-lg border border-default bg-elevated overflow-hidden">
             <li
               v-for="line in lines"
@@ -129,7 +188,10 @@ const lines = computed(() => {
               class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default last:border-b-0"
             >
               <span class="text-sm font-medium text-highlighted truncate">{{ line.label }}</span>
-              <span class="text-sm tabular-nums text-muted shrink-0">{{ line.quantityLabel }}</span>
+              <span class="text-sm tabular-nums text-muted shrink-0">
+                {{ line.quantityLabel }}
+                <span v-if="line.equivalentLabel" class="text-dimmed">{{ line.equivalentLabel }}</span>
+              </span>
             </li>
           </ul>
           <p v-else class="flex items-center gap-1.5 text-xs text-dimmed">

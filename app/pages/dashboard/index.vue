@@ -332,7 +332,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
     <template #body>
       <div
-        class="flex min-h-full flex-col gap-6 overflow-x-hidden p-4 sm:p-6"
+        class="flex min-h-full flex-col gap-6 overflow-x-clip p-4 sm:p-6"
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >

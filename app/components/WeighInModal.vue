@@ -17,9 +17,6 @@ const emit = defineEmits<{
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
 
-const MIN_KG = 20
-const MAX_KG = 400
-
 const today = toIsoDay(new Date())
 const weight = ref('')
 const date = ref(today)
@@ -40,9 +37,7 @@ const lastWeighIn = computed(() => sortWeighIns(props.existing).at(-1) ?? null)
 const weightValue = computed(() => parsePositiveNumber(weight.value))
 const weightError = computed(() => {
   if (!submitted.value) return undefined
-  if (weightValue.value === null) return 'Saisissez votre poids, par exemple 78,4'
-  if (weightValue.value < MIN_KG || weightValue.value > MAX_KG) return `Le poids doit être compris entre ${MIN_KG} et ${MAX_KG} kg`
-  return undefined
+  return weightInputError(weightValue.value)
 })
 const dateError = computed(() => {
   if (!submitted.value) return undefined
@@ -64,7 +59,7 @@ function onSubmit() {
   if (weightError.value || dateError.value) return
   emit('save', {
     date: date.value,
-    weightKg: Math.round(weightValue.value! * 10) / 10,
+    weightKg: roundWeight(weightValue.value!),
     note: note.value.trim() || undefined,
   })
   open.value = false

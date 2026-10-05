@@ -36,6 +36,28 @@ export const TREND_GAP_BREAK_DAYS = 4
 
 export const toIsoDay = (date: Date) => format(date, 'yyyy-MM-dd')
 
+/** Bornes d'une saisie de poids plausible. */
+export const MIN_WEIGHT_KG = 20
+export const MAX_WEIGHT_KG = 400
+
+/** Message d'erreur pour un poids saisi (`null` : saisie vide ou illisible), `undefined` s'il est valide. */
+export function weightInputError(weightKg: number | null): string | undefined {
+  if (weightKg === null) return 'Saisissez votre poids, par exemple 78,4'
+  if (weightKg < MIN_WEIGHT_KG || weightKg > MAX_WEIGHT_KG) return `Le poids doit être compris entre ${MIN_WEIGHT_KG} et ${MAX_WEIGHT_KG} kg`
+  return undefined
+}
+
+/** Un poids est enregistré au dixième de kilo. */
+export const roundWeight = (weightKg: number) => Math.round(weightKg * 10) / 10
+
+/** Dernière pesée strictement avant `date` (`yyyy-MM-dd`), ou `null`. */
+export function weighInBefore(weighIns: WeighIn[], date: string): WeighIn | null {
+  return weighIns.reduce<WeighIn | null>(
+    (latest, w) => (w.date < date && (!latest || w.date > latest.date) ? w : latest),
+    null,
+  )
+}
+
 export function sortWeighIns(weighIns: WeighIn[]): WeighIn[] {
   return [...weighIns].sort((a, b) => a.date.localeCompare(b.date))
 }

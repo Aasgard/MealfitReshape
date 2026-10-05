@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { addDays, differenceInCalendarDays, format, startOfDay, startOfWeek } from 'date-fns'
+import { addDays, differenceInCalendarDays, format, parseISO, startOfDay, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealSource, MealType } from '~/types/meal'
@@ -78,13 +78,63 @@ watch(upcomingMeals.error, (error) => {
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas à venir : ${error.message}`, color: 'error' })
 })
 
-// Une erreur de chargement des repas (droits, index manquant...) est signalée par un toast ci-dessus, sans bloquer la page.
+const { weighIns, error: weighInsError, promise: weighInsLoaded, saveWeighIn } = useWeighIns()
+watch(weighInsError, (error) => {
+  if (!error) return
+  toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
+})
+
+// Une erreur de chargement des repas ou des pesées (droits, index manquant...) est signalée par un toast ci-dessus,
+// sans bloquer la page.
 await Promise.all([
   recipes.promise.value,
   ingredients.promise.value,
   meals.promise.value.catch(() => undefined),
   upcomingMeals.promise.value.catch(() => undefined),
+  weighInsLoaded.value.catch(() => undefined),
 ])
+
+/**
+ * Saisie de la pesée seulement pour un jour passé ou aujourd'hui qui n'en a pas encore. Pesées illisibles : rien,
+ * plutôt que de proposer d'écraser une pesée qui n'a pas pu être lue.
+ */
+const canWeighIn = computed(() =>
+  !weighInsError.value
+  && differenceInCalendarDays(selectedDay.value, today) <= 0
+  && !weighIns.value.some(w => w.date === selectedDayKey.value),
+)
+
+/** Saisies de poids en cours, par jour. */
+const weighInDrafts = ref<Record<string, string>>({})
+
+const daysLabel = (days: number) => `${days} jour${days > 1 ? 's' : ''}`
+
+/** "−0,3 kg en 2 jours", "Stable en 3 jours" ou "Première pesée", par rapport à la pesée précédant ce jour. */
+const weighInChangeLabel = (date: string, weightKg: number) => {
+  const previous = weighInBefore(weighIns.value, date)
+  if (!previous) return 'Première pesée'
+  const days = differenceInCalendarDays(parseISO(date), parseISO(previous.date))
+  const delta = formatSignedWeight(weightKg - previous.weightKg)
+  return delta === formatWeight(0) ? `Stable en ${daysLabel(days)}` : `${delta} kg en ${daysLabel(days)}`
+}
+
+/** Le listener retire la carte aussitôt ; hors ligne, l'écriture n'aboutit qu'à la synchronisation, d'où le toast immédiat. */
+const submitWeighIn = (weightKg: number) => {
+  const date = selectedDayKey.value
+  const draft = weighInDrafts.value[date] ?? ''
+  const description = weighInChangeLabel(date, weightKg)
+  delete weighInDrafts.value[date]
+
+  saveWeighIn({ date, weightKg }).catch((error: any) => {
+    weighInDrafts.value[date] = draft
+    toast.add({
+      title: 'Erreur',
+      description: `La pesée n'a pas pu être enregistrée : ${error.message || 'une erreur est survenue'}.`,
+      color: 'error',
+    })
+  })
+  toast.add({ title: `Pesée enregistrée · ${formatWeight(weightKg)} kg`, description, color: 'success', icon: 'i-lucide-check' })
+}
 
 /** Repas masqués immédiatement pendant le délai d'annulation d'une suppression (voir deleteEntry). */
 const pendingDeleteIds = ref(new Set<string>())
@@ -350,6 +400,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :leave-to-class="slideDirection === 'next' ? 'opacity-0 -translate-x-8' : 'opacity-0 translate-x-8'"
         >
           <div :key="selectedDayKey" class="flex flex-col gap-6">
+            <!-- Une fois la pesée enregistrée, la carte se replie (marge comprise) au lieu de faire sauter la page. -->
+            <Transition
+              leave-active-class="transition-all duration-300 ease-out motion-reduce:transition-none"
+              leave-from-class="grid-rows-[1fr]"
+              leave-to-class="grid-rows-[0fr] -mb-6 opacity-0"
+            >
+              <div v-if="canWeighIn" class="grid">
+                <div class="min-h-0 overflow-hidden">
+                  <TodayWeighIn v-model="weighInDrafts[selectedDayKey]" @save="submitWeighIn" />
+                </div>
+              </div>
+            </Transition>
+
             <TodayCalorieSummary
               :targets="DAILY_TARGETS"
               :eaten-kcal="daySummary.kcal"

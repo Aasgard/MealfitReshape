@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MenuWeekMacroBalance } from '~/types/menu'
 import { DAILY_TARGET_TOLERANCE, TARGET_STATUS_COLOR, TARGET_STATUS_TEXT_CLASS, targetStatus, type DailyTargets } from '~/utils/dailyTargets'
+import type { WeightProgress } from '~/utils/weightTrend'
 
 const props = defineProps<{
   targets: DailyTargets
@@ -9,7 +10,15 @@ const props = defineProps<{
   /** Part "En plus" des kcal mangées. */
   extraKcal: number
   macros: MenuWeekMacroBalance
+  /** Suivi du poids au jour affiché (rythme, part de l'objectif) ; absent sans pesée. */
+  weightProgress?: WeightProgress | null
 }>()
+
+/** Vert si le rythme suit la projection, orange s'il s'en écarte, neutre sans projection. */
+const paceClass = computed(() => {
+  const onPace = props.weightProgress?.onPace
+  return onPace === true ? 'text-success' : onPace === false ? 'text-warning' : 'text-highlighted'
+})
 
 /** Partagé entre les jours : le panneau garde son état quand on change de jour. */
 const open = useState('today-calorie-summary-open', () => true)
@@ -142,6 +151,34 @@ const macroRows = computed(() => ([
             <p class="text-xs text-dimmed">
               En plus
             </p>
+          </div>
+          <!-- Jamais de poids brut ici : le rythme de la tendance, sinon la part de l'objectif seule. -->
+          <div v-if="weightProgress">
+            <template v-if="weightProgress.rateKgPerWeek !== null">
+              <p class="flex items-baseline gap-1">
+                <span class="text-2xl font-bold tabular-nums" :class="paceClass">
+                  {{ formatSignedWeight(weightProgress.rateKgPerWeek, 2) }}
+                </span>
+                <span class="text-sm text-muted">kg/sem</span>
+              </p>
+              <p class="text-xs text-dimmed">
+                <template v-if="weightProgress.goalPercent !== null">
+                  <span class="tabular-nums">{{ weightProgress.goalPercent }}</span> % de l'objectif
+                </template>
+                <template v-else>
+                  Rythme 4 semaines
+                </template>
+              </p>
+            </template>
+            <template v-else>
+              <p class="flex items-baseline gap-1">
+                <span class="text-2xl font-bold tabular-nums text-highlighted">{{ weightProgress.goalPercent }}</span>
+                <span class="text-sm text-muted">%</span>
+              </p>
+              <p class="text-xs text-dimmed">
+                De l'objectif poids
+              </p>
+            </template>
           </div>
         </div>
 

@@ -121,6 +121,44 @@ export function projectionAt(goal: WeightGoal, date: string): number | null {
   return goal.projection[Math.min(days, goal.projection.length - 1)]!
 }
 
+/** Part du chemin parcourue entre le poids de départ et le poids visé, bornée à [0, 1]. */
+export function goalRatio(goal: WeightGoal, trendKg: number): number {
+  const total = goal.startWeightKg - goal.targetWeightKg
+  return total === 0 ? 1 : Math.min(Math.max((goal.startWeightKg - trendKg) / total, 0), 1)
+}
+
+/** Écart toléré entre le rythme réel et le rythme prévu : 0,1 kg/sem, ou 25 % du prévu s'il est plus rapide. */
+const PACE_TOLERANCE_KG_PER_WEEK = 0.1
+const PACE_TOLERANCE_RATIO = 0.25
+
+export interface WeightProgress {
+  /** Rythme de la tendance sur 4 semaines ; `null` tant qu'il y a moins de `MIN_WEIGH_INS_FOR_TREND` pesées. */
+  rateKgPerWeek: number | null
+  /** Part de l'objectif atteinte, en % entier ; `null` sans objectif. */
+  goalPercent: number | null
+  /** Le rythme suit-il celui de la projection ? `null` sans rythme ou sans projection. */
+  onPace: boolean | null
+}
+
+/**
+ * Progression au jour `date`, sans poids brut : seules les pesées jusqu'à ce jour comptent. `null` quand il n'y a
+ * rien à montrer (aucune pesée, ou ni rythme ni objectif).
+ */
+export function weightProgressAt(weighIns: WeighIn[], goal: WeightGoal | null, date: string): WeightProgress | null {
+  const points = computeTrend(weighIns.filter(w => w.date <= date))
+  const current = points.at(-1)
+  if (!current) return null
+
+  const rateKgPerWeek = points.length >= MIN_WEIGH_INS_FOR_TREND ? trendRateKgPerWeek(points) : null
+  const goalPercent = goal ? Math.round(goalRatio(goal, current.trendKg) * 100) : null
+  if (rateKgPerWeek === null && goalPercent === null) return null
+
+  const planned = goal && rateKgPerWeek !== null ? projectionRateKgPerWeek(goal, current.date) : null
+  const tolerance = planned === null ? 0 : Math.max(PACE_TOLERANCE_KG_PER_WEEK, Math.abs(planned) * PACE_TOLERANCE_RATIO)
+  const onPace = planned === null ? null : Math.abs(rateKgPerWeek! - planned) <= tolerance
+  return { rateKgPerWeek, goalPercent, onPace }
+}
+
 /**
  * Rythme prévu en kg/semaine sur les `days` jours qui précèdent `date`, pour le comparer à `trendRateKgPerWeek` :
  * il ralentit au fil de l'objectif, puis tombe à 0 une fois le poids visé atteint. La première semaine, celui du départ.

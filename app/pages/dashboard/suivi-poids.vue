@@ -64,10 +64,8 @@ const goalProgress = computed(() => {
   const g = goal.value
   const current = latest.value
   if (!g || !current) return null
-  const total = g.startWeightKg - g.targetWeightKg
-  const done = g.startWeightKg - current.trendKg
   const remainingKg = Math.abs(current.trendKg - g.targetWeightKg)
-  const ratio = total === 0 ? 1 : Math.min(Math.max(done / total, 0), 1)
+  const ratio = goalRatio(g, current.trendKg)
   const projectedKg = projectionAt(g, current.date)
   return {
     remainingKg,

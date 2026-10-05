@@ -79,6 +79,8 @@ watch(upcomingMeals.error, (error) => {
 })
 
 const { weighIns, error: weighInsError, promise: weighInsLoaded, saveWeighIn } = useWeighIns()
+const profile = useProfile()
+const { settings } = useAppSettings()
 watch(weighInsError, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
@@ -92,7 +94,19 @@ await Promise.all([
   meals.promise.value.catch(() => undefined),
   upcomingMeals.promise.value.catch(() => undefined),
   weighInsLoaded.value.catch(() => undefined),
+  profile.ready,
 ])
+
+/** Objectif du profil, comme sur Suivi du poids : sans projection quand le réglage la masque. */
+const weightGoal = computed(() => {
+  const goal = trackingGoal(profile.goal, profile.body, profile.age)
+  return goal && !settings.value.showGoalProjection ? { ...goal, projection: null } : goal
+})
+
+/** Rythme et part de l'objectif au jour affiché ; jamais de poids brut sur l'accueil. */
+const weightProgress = computed(() =>
+  weighInsError.value ? null : weightProgressAt(weighIns.value, weightGoal.value, selectedDayKey.value),
+)
 
 /**
  * Saisie de la pesée seulement pour un jour passé ou aujourd'hui qui n'en a pas encore. Pesées illisibles : rien,
@@ -133,7 +147,8 @@ const submitWeighIn = (weightKg: number) => {
       color: 'error',
     })
   })
-  toast.add({ title: `Pesée enregistrée · ${formatWeight(weightKg)} kg`, description, color: 'success', icon: 'i-lucide-check' })
+  // Jamais de poids brut sur l'accueil : seulement l'écart avec la pesée précédente.
+  toast.add({ title: 'Pesée enregistrée', description, color: 'success', icon: 'i-lucide-check' })
 }
 
 /** Repas masqués immédiatement pendant le délai d'annulation d'une suppression (voir deleteEntry). */
@@ -418,6 +433,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :eaten-kcal="daySummary.kcal"
               :extra-kcal="daySummary.extraKcal"
               :macros="daySummary.macros"
+              :weight-progress="weightProgress"
             />
 
             <div class="flex items-center justify-between gap-3">

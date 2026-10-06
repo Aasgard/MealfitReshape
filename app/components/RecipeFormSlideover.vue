@@ -179,17 +179,16 @@ function onIngredientHandleKeydown(row: IngredientRow, event: KeyboardEvent) {
 
 /** Les unités disponibles dépendent de l'ingrédient choisi : celle d'une ligne ne survit pas à un changement d'ingrédient. */
 function onIngredientRowIngredientChange(row: IngredientRow) {
-  row.unit = GRAMS_UNIT
+  row.unit = unitOptionsForRow(row)[0]!.value
 }
 
+/** Les unités propres à l'ingrédient passent avant les grammes, la plus petite (en g/ml) en tête : c'est l'unité proposée par défaut. */
 function unitOptionsForRow(row: IngredientRow) {
-  const options = [{ value: GRAMS_UNIT, label: 'Grammes (g)' }]
   const ingredient = row.ingredientId ? ingredientsById.value.get(row.ingredientId) : undefined
-  if (ingredient?.units) {
-    for (const [key, u] of Object.entries(ingredient.units)) {
-      options.push({ value: key, label: `${u.label} (${u.value} ${u.unit})` })
-    }
-  }
+  const options = Object.entries(ingredient?.units ?? {})
+    .sort(([, a], [, b]) => a.value - b.value)
+    .map(([key, u]) => ({ value: key, label: `${u.label} (${u.value} ${u.unit})` }))
+  options.push({ value: GRAMS_UNIT, label: 'Grammes (g)' })
   return options
 }
 
@@ -417,13 +416,9 @@ async function handleSubmit() {
               <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
               <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients (optionnel)</p>
             </div>
-            <UButton label="Ajouter" icon="i-lucide-plus" size="xs" color="neutral" variant="outline" @click="addIngredientRow" />
           </div>
-          <p v-if="ingredientRows.length === 0" class="text-xs text-dimmed">
-            Aucun ingrédient.
-          </p>
           <VueDraggable
-            v-else
+            v-if="ingredientRows.length > 0"
             v-model="ingredientRows"
             tag="div"
             class="flex flex-col gap-2"
@@ -461,7 +456,8 @@ async function handleSubmit() {
                   />
                 </UFormField>
               </div>
-              <div class="flex items-start gap-2 sm:contents">
+              <!-- pl-10 = poignée (32px) + gap (8px) : aligne la 2e ligne sur le sélecteur d'ingrédient en mobile -->
+              <div class="flex items-start gap-2 pl-10 sm:contents">
                 <UFormField class="w-20 shrink-0" :error="ingredientRowQuantityError(row)">
                   <UInput v-model="row.quantity" type="text" inputmode="decimal" placeholder="qté" aria-label="Quantité" size="md" variant="outline" class="w-full" />
                 </UFormField>
@@ -485,6 +481,12 @@ async function handleSubmit() {
               </div>
             </div>
           </VueDraggable>
+          <div class="flex items-center" :class="ingredientRows.length === 0 ? 'justify-between' : 'justify-end mt-2'">
+            <p v-if="ingredientRows.length === 0" class="text-xs text-dimmed">
+              Aucun ingrédient.
+            </p>
+            <UButton label="Ajouter" icon="i-lucide-plus" size="xs" color="neutral" variant="outline" @click="addIngredientRow" />
+          </div>
         </div>
 
         <UFormField label="Tags (optionnel)">

@@ -16,6 +16,12 @@ useSeoMeta({
   description: 'Dashboard - Accueil - Mealfit',
 })
 
+// Pas de zoom sur l'accueil : la balise viewport le bloque sur Android, `touch-action` sur iOS (qui ignore user-scalable).
+useHead({
+  meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' }],
+  htmlAttrs: { class: 'touch-pan-x touch-pan-y' },
+})
+
 const toast = useToast()
 const today = startOfDay(new Date())
 

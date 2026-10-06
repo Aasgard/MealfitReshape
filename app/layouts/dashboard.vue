@@ -33,6 +33,10 @@ const links = [{
     label: 'Liste de courses',
     icon: 'i-lucide-shopping-cart',
     to: '/dashboard/liste-courses',
+  }, {
+    label: 'Récipients',
+    icon: 'i-lucide-cooking-pot',
+    to: '/dashboard/recipients',
   }]
 // Masqué en attendant que la section soit prête.
 // }, {

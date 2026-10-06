@@ -2,7 +2,6 @@
 import { collection, doc, setDoc, updateDoc, Timestamp, deleteField } from 'firebase/firestore'
 import type { Container } from '~/types/container'
 import { parsePositiveNumber } from '~/utils/numberInput'
-import { resizeImage } from '~/utils/imageResize'
 
 /**
  * Slideover d'ajout/modification d'un récipient — un seul composant pour les deux modes.
@@ -22,7 +21,7 @@ const COMMENT_MAX = 200
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
-const photos = useContainerPhotos()
+const photos = useUserPhotos('containers')
 
 const isEditMode = computed(() => props.container !== null)
 const title = computed(() => isEditMode.value ? `Modifier ${props.container?.label}` : 'Ajouter un récipient')
@@ -33,92 +32,42 @@ const comment = ref('')
 const submitted = ref(false)
 const saving = ref(false)
 
-/** Photo choisie dans ce formulaire, déjà réduite ; `null` = on garde la photo existante (ou aucune). */
-const newPhoto = ref<Blob | null>(null)
-const newPhotoUrl = ref<string | null>(null)
+/** Photo choisie dans ce formulaire, déjà réduite ; vide = on garde la photo existante (ou aucune). */
+const photo = usePhotoDraft()
 /** L'utilisateur a retiré la photo existante. */
 const photoRemoved = ref(false)
-const photoProcessing = ref(false)
 /** Avancement de l'envoi (0 → 1) ; `null` hors envoi. */
 const uploadProgress = ref<number | null>(null)
-const photoError = ref<string | null>(null)
-
-const cameraInput = ref<HTMLInputElement | null>(null)
-const galleryInput = ref<HTMLInputElement | null>(null)
 
 const previewUrl = computed(() => {
-  if (newPhotoUrl.value) return newPhotoUrl.value
+  if (photo.objectUrl.value) return photo.objectUrl.value
   if (photoRemoved.value) return null
   return props.container?.imageUrl ?? null
 })
-
-function setNewPhoto(blob: Blob | null) {
-  if (newPhotoUrl.value) URL.revokeObjectURL(newPhotoUrl.value)
-  newPhoto.value = blob
-  newPhotoUrl.value = blob ? URL.createObjectURL(blob) : null
-}
-
-onBeforeUnmount(() => setNewPhoto(null))
 
 function resetForm() {
   const c = props.container
   label.value = c?.label ?? ''
   weight.value = c ? String(c.weight) : ''
   comment.value = c?.comment ?? ''
-  setNewPhoto(null)
+  photo.reset()
   photoRemoved.value = false
-  photoProcessing.value = false
   uploadProgress.value = null
-  photoError.value = null
   submitted.value = false
 }
 
 watch(open, (isOpen) => {
   if (isOpen) resetForm()
-  else setNewPhoto(null)
+  else photo.set(null)
 })
 
-async function onPhotoPicked(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  // Vide le champ pour pouvoir choisir à nouveau le même fichier.
-  input.value = ''
-  if (!file) return
-
-  photoError.value = null
-  photoProcessing.value = true
-  try {
-    setNewPhoto(await resizeImage(file))
-    photoRemoved.value = false
-  } catch (error) {
-    console.error('Photo illisible :', error)
-    photoError.value = 'Cette image n\'a pas pu être lue. Essayez une photo JPEG ou PNG.'
-  } finally {
-    photoProcessing.value = false
-  }
+async function onPhotoPicked(file: File) {
+  if (await photo.pick(file)) photoRemoved.value = false
 }
 
 function removePhoto() {
-  setNewPhoto(null)
+  photo.reset()
   photoRemoved.value = true
-  photoError.value = null
-}
-
-/** Message d'échec d'envoi selon le code Firebase Storage : une règle refusée n'est pas un problème de connexion. */
-function uploadErrorMessage(error: unknown): string {
-  const code = (error as { code?: string } | null)?.code
-  switch (code) {
-    case 'storage/unauthorized':
-    case 'storage/unauthenticated':
-      return 'Envoi refusé par les règles Firebase Storage. Vérifiez qu\'elles autorisent users/{uid}/containers, puis enregistrez à nouveau.'
-    case 'storage/quota-exceeded':
-      return 'Quota Firebase Storage dépassé : la photo n\'a pas été envoyée.'
-    case 'storage/bucket-not-found':
-    case 'storage/project-not-found':
-      return 'Firebase Storage n\'est pas activé pour ce projet : la photo n\'a pas été envoyée.'
-    default:
-      return 'L\'envoi de la photo a échoué. Vérifiez la connexion, puis enregistrez à nouveau.'
-  }
 }
 
 const labelError = computed(() => (submitted.value && !label.value.trim()) ? 'Requis' : undefined)
@@ -132,7 +81,7 @@ const isValid = computed(() => !!label.value.trim() && parsePositiveNumber(weigh
 
 async function handleSubmit() {
   submitted.value = true
-  if (!isValid.value || photoProcessing.value) return
+  if (!isValid.value || photo.processing.value) return
 
   if (!user.value) {
     toast.add({ title: 'Erreur', description: 'Vous devez être connecté.', color: 'error' })
@@ -144,16 +93,16 @@ async function handleSubmit() {
   const trimmedLabel = label.value.trim()
 
   saving.value = true
-  photoError.value = null
+  photo.error.value = null
 
   let uploaded: { url: string; path: string } | null = null
-  if (newPhoto.value) {
+  if (photo.blob.value) {
     uploadProgress.value = 0
     try {
-      uploaded = await photos.upload(uid, containerId, newPhoto.value, (ratio) => { uploadProgress.value = ratio })
+      uploaded = await photos.upload(uid, containerId, photo.blob.value, (ratio) => { uploadProgress.value = ratio })
     } catch (error) {
       console.error('Envoi de la photo échoué :', error)
-      photoError.value = uploadErrorMessage(error)
+      photo.error.value = photos.uploadErrorMessage(error)
       saving.value = false
       uploadProgress.value = null
       return
@@ -216,77 +165,19 @@ async function handleSubmit() {
   >
     <template #body>
       <form class="flex flex-col gap-6" novalidate @submit.prevent="handleSubmit">
-        <!-- Photo -->
-        <div class="flex flex-col gap-2">
-          <p class="text-sm font-medium text-default">Photo (optionnel)</p>
-          <div class="relative h-44 overflow-hidden rounded-xl border border-default bg-accented">
-            <img
-              v-if="previewUrl"
-              :src="previewUrl"
-              alt="Aperçu de la photo du récipient"
-              class="size-full object-cover"
-            >
-            <div v-else class="flex size-full flex-col items-center justify-center gap-2 text-dimmed">
-              <UIcon name="i-lucide-cooking-pot" class="size-7" />
-              <p class="text-xs">Une photo aide à reconnaître le bon récipient.</p>
-            </div>
-
-            <div v-if="photoProcessing" class="absolute inset-0 flex items-center justify-center bg-default/70">
-              <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
-            </div>
-
-            <div
-              v-if="uploadProgress !== null"
-              class="absolute inset-x-3 bottom-3 h-2 rounded-full bg-default/80 overflow-hidden"
-              role="progressbar"
-              aria-label="Envoi de la photo"
-              :aria-valuenow="Math.round(uploadProgress * 100)"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              <div class="h-full rounded-full bg-primary transition-all duration-500" :style="{ width: `${uploadProgress * 100}%` }" />
-            </div>
-          </div>
-
-          <div class="flex flex-wrap gap-2">
-            <!-- La capture directe n'a de sens que sur un appareil tactile (téléphone, tablette). -->
-            <UButton
-              label="Prendre une photo"
-              icon="i-lucide-camera"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              class="hidden pointer-coarse:inline-flex"
-              :disabled="saving || photoProcessing"
-              @click="cameraInput?.click()"
-            />
-            <UButton
-              :label="previewUrl ? 'Remplacer l\'image' : 'Choisir une image'"
-              icon="i-lucide-image-up"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              :disabled="saving || photoProcessing"
-              @click="galleryInput?.click()"
-            />
-            <UButton
-              v-if="previewUrl"
-              label="Retirer"
-              icon="i-lucide-trash-2"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :disabled="saving || photoProcessing"
-              @click="removePhoto"
-            />
-          </div>
-          <p v-if="photoError" class="text-xs text-error" role="alert">
-            {{ photoError }}
-          </p>
-
-          <input ref="cameraInput" type="file" accept="image/*" capture="environment" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhotoPicked">
-          <input ref="galleryInput" type="file" accept="image/*" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhotoPicked">
-        </div>
+        <PhotoField
+          label="Photo (optionnel)"
+          :preview-url="previewUrl"
+          alt="Aperçu de la photo du récipient"
+          placeholder-icon="i-lucide-cooking-pot"
+          placeholder-text="Une photo aide à reconnaître le bon récipient."
+          :processing="photo.processing.value"
+          :upload-progress="uploadProgress"
+          :error="photo.error.value"
+          :disabled="saving"
+          @pick="onPhotoPicked"
+          @remove="removePhoto"
+        />
 
         <UFormField label="Nom" :error="labelError">
           <UInput
@@ -342,7 +233,7 @@ async function handleSubmit() {
         :label="uploadProgress !== null ? 'Envoi de la photo...' : 'Enregistrer'"
         color="primary"
         :loading="saving"
-        :disabled="photoProcessing"
+        :disabled="photo.processing.value"
         @click="handleSubmit"
       />
     </template>

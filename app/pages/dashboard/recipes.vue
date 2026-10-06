@@ -18,6 +18,7 @@ useSeoMeta({
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
+const photos = useRecipePhotos()
 
 const recipes = useCollection<Recipe>(() => {
   const uid = user.value?.uid
@@ -160,7 +161,8 @@ const editRecipe = (recipe: Recipe) => {
 const duplicateRecipe = async (recipe: Recipe) => {
   if (!user.value) return
 
-  const { id: _id, isPublic: _isPublic, owner: _owner, createdAt: _createdAt, updatedAt: _updatedAt, ingredients, ...rest } = recipe
+  // La copie affiche la même photo sans en devenir propriétaire (pas de `imagePath`) : la supprimer ne retire pas le fichier.
+  const { id: _id, isPublic: _isPublic, owner: _owner, createdAt: _createdAt, updatedAt: _updatedAt, imagePath: _imagePath, ingredients, ...rest } = recipe
   const title = `${recipe.title} (copie)`
   const now = Timestamp.now()
 
@@ -236,7 +238,8 @@ const DELETE_GRACE_PERIOD_MS = 6000
 /** Handles des suppressions programmées mais pas encore exécutées (délai d'annulation en cours), par id de recette. */
 const pendingDeleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const performDelete = async (id: string, title: string) => {
+const performDelete = async (recipe: Recipe) => {
+  const { id, title } = recipe
   try {
     await deleteDoc(doc(db, 'recipes', id))
   } catch (error: any) {
@@ -251,6 +254,7 @@ const performDelete = async (id: string, title: string) => {
     return
   }
   pendingDeleteIds.value.delete(id)
+  photos.removeIfUnused(recipe)
 }
 
 const confirmDeleteRecipe = () => {
@@ -265,7 +269,7 @@ const confirmDeleteRecipe = () => {
 
   const timeout = setTimeout(() => {
     pendingDeleteTimeouts.delete(id)
-    performDelete(id, title)
+    performDelete(recipe)
   }, DELETE_GRACE_PERIOD_MS)
   pendingDeleteTimeouts.set(id, timeout)
 

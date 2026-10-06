@@ -39,7 +39,10 @@ export interface Recipe {
   difficulty?: string
   /** Nombre de parts que produit la recette ; `undefined` équivaut à 1. */
   persons?: number
+  /** URL de l'image : photo envoyée dans Firebase Storage, ou lien externe saisi. */
   imageUrl?: string
+  /** Chemin Storage de la photo envoyée, pour la remplacer ou la supprimer ; absent pour un lien externe. */
+  imagePath?: string
   source?: string
   instructions?: string
   tags?: string[]

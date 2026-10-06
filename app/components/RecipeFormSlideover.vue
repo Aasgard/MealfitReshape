@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { collection, addDoc, updateDoc, doc, Timestamp, deleteField, query, orderBy } from 'firebase/firestore'
+import { collection, setDoc, updateDoc, doc, Timestamp, deleteField, query, orderBy } from 'firebase/firestore'
 import { useCollection } from 'vuefire'
 import { VueDraggable } from 'vue-draggable-plus'
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
@@ -11,6 +11,8 @@ import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput
 /**
  * Slideover d'ajout/modification de recette — un seul composant pour les deux modes,
  * à l'image d'IngredientFormSlideover. `recipe` nul = création ; non nul = édition.
+ * L'image est soit une photo (réduite dans le navigateur, envoyée dans Storage avant l'écriture Firestore),
+ * soit un lien externe : choisir l'une remplace l'autre.
  */
 const props = defineProps<{
   recipe: Recipe | null
@@ -23,6 +25,7 @@ const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
 const { generate: generateFirestoreId } = useFirestoreId()
+const photos = useRecipePhotos()
 
 const isEditMode = computed(() => props.recipe !== null)
 const title = computed(() => isEditMode.value ? `Modifier ${props.recipe?.title}` : 'Ajouter une recette')
@@ -75,6 +78,37 @@ const ingredientRows = ref<IngredientRow[]>([])
 const saving = ref(false)
 const submitted = ref(false)
 
+/** Photo choisie dans ce formulaire, déjà réduite ; vide = on garde l'image existante (ou aucune). */
+const photo = usePhotoDraft()
+/** L'utilisateur a retiré la photo envoyée existante (ou l'a remplacée par un lien). */
+const photoRemoved = ref(false)
+/** Avancement de l'envoi (0 → 1) ; `null` hors envoi. */
+const uploadProgress = ref<number | null>(null)
+
+const previewUrl = computed(() => {
+  if (photo.objectUrl.value) return photo.objectUrl.value
+  if (imageUrl.value.trim()) return imageUrl.value.trim()
+  if (photoRemoved.value || !props.recipe?.imagePath) return null
+  return props.recipe.imageUrl ?? null
+})
+
+async function onPhotoPicked(file: File) {
+  if (await photo.pick(file)) imageUrl.value = ''
+}
+
+function removePhoto() {
+  photo.reset()
+  imageUrl.value = ''
+  photoRemoved.value = true
+}
+
+/** Un lien saisi remplace la photo, nouvelle ou déjà envoyée. */
+function onImageUrlInput() {
+  if (!imageUrl.value.trim()) return
+  photo.reset()
+  photoRemoved.value = true
+}
+
 function resetForm() {
   const r = props.recipe
   recipeTitle.value = r?.title ?? ''
@@ -83,7 +117,11 @@ function resetForm() {
   persons.value = r?.persons != null ? String(r.persons) : '1'
   prepTime.value = r?.prepTime != null ? String(r.prepTime) : ''
   cookTime.value = r?.cookTime != null ? String(r.cookTime) : ''
-  imageUrl.value = r?.imageUrl ?? ''
+  // Le champ lien n'affiche que les liens externes : une photo envoyée se voit dans l'aperçu.
+  imageUrl.value = r?.imagePath ? '' : (r?.imageUrl ?? '')
+  photo.reset()
+  photoRemoved.value = false
+  uploadProgress.value = null
   source.value = r?.source ?? ''
   description.value = r?.description ?? ''
   instructions.value = r?.instructions ?? ''
@@ -101,6 +139,7 @@ function resetForm() {
 
 watch(open, (isOpen) => {
   if (isOpen) resetForm()
+  else photo.set(null)
 })
 
 function toggleDifficulty(value: RecipeDifficulty) {
@@ -195,14 +234,33 @@ const isValid = computed(() => {
 
 async function handleSubmit() {
   submitted.value = true
-  if (!isValid.value) return
+  if (!isValid.value || photo.processing.value) return
 
   if (!user.value) {
     toast.add({ title: 'Erreur', description: 'Vous devez être connecté.', color: 'error' })
     return
   }
+  const uid = user.value.uid
+  const existing = props.recipe
+  const recipeId = existing?.id ?? doc(collection(db, 'recipes')).id
 
   saving.value = true
+  photo.error.value = null
+
+  let uploaded: { url: string; path: string } | null = null
+  if (photo.blob.value) {
+    uploadProgress.value = 0
+    try {
+      uploaded = await photos.upload(uid, recipeId, photo.blob.value, (ratio) => { uploadProgress.value = ratio })
+    } catch (error) {
+      console.error('Envoi de la photo échoué :', error)
+      photo.error.value = photos.uploadErrorMessage(error)
+      saving.value = false
+      uploadProgress.value = null
+      return
+    }
+  }
+
   try {
     const now = Timestamp.now()
     const trimmedTitle = recipeTitle.value.trim()
@@ -233,25 +291,42 @@ async function handleSubmit() {
     setOrClear('difficulty', difficulty.value ?? undefined)
     setOrClear('prepTime', prepTime.value.trim() ? parseNonNegativeNumber(prepTime.value)! : undefined)
     setOrClear('cookTime', cookTime.value.trim() ? parseNonNegativeNumber(cookTime.value)! : undefined)
-    setOrClear('imageUrl', imageUrl.value.trim())
     setOrClear('source', source.value.trim())
     setOrClear('description', description.value.trim())
     setOrClear('instructions', instructions.value.trim())
 
-    if (isEditMode.value) {
-      await updateDoc(doc(db, 'recipes', props.recipe!.id), payload)
+    // Image : nouvelle photo, sinon lien saisi, sinon photo envoyée conservée, sinon aucune.
+    const trimmedImageUrl = imageUrl.value.trim()
+    if (uploaded) {
+      payload.imageUrl = uploaded.url
+      payload.imagePath = uploaded.path
+    } else if (trimmedImageUrl) {
+      payload.imageUrl = trimmedImageUrl
+      if (existing) payload.imagePath = deleteField()
+    } else if (existing && (photoRemoved.value || !existing.imagePath)) {
+      payload.imageUrl = deleteField()
+      payload.imagePath = deleteField()
+    }
+
+    if (existing) {
+      await updateDoc(doc(db, 'recipes', existing.id), payload)
       toast.add({ title: 'Modifiée', description: `« ${trimmedTitle} » a été mise à jour`, color: 'success' })
     } else {
-      await addDoc(collection(db, 'recipes'), {
+      await setDoc(doc(db, 'recipes', recipeId), {
         ...payload,
-        owner: user.value.uid,
+        owner: uid,
         createdAt: now,
       })
       toast.add({ title: 'Ajoutée', description: `« ${trimmedTitle} » a été ajoutée à vos recettes`, color: 'success' })
     }
 
+    // L'ancienne photo n'est plus référencée par cette recette : remplacée ou retirée.
+    if (existing?.imagePath && (uploaded || photoRemoved.value)) photos.removeIfUnused(existing)
+
     open.value = false
   } catch (error: any) {
+    // Le document n'a pas été écrit : la photo envoyée ne serait référencée nulle part.
+    if (uploaded) photos.remove(uploaded.path)
     toast.add({
       title: 'Erreur',
       description: error.message || `Une erreur est survenue lors de ${isEditMode.value ? 'la modification' : "l'ajout"}.`,
@@ -259,6 +334,7 @@ async function handleSubmit() {
     })
   } finally {
     saving.value = false
+    uploadProgress.value = null
   }
 }
 </script>
@@ -317,9 +393,22 @@ async function handleSubmit() {
           </UFormField>
         </div>
 
-        <UFormField label="Image (URL, optionnel)">
-          <UInput v-model="imageUrl" placeholder="https://..." size="md" variant="outline" class="w-full" />
-        </UFormField>
+        <PhotoField
+          label="Image (optionnel)"
+          :preview-url="previewUrl"
+          alt="Aperçu de l'image de la recette"
+          placeholder-icon="i-lucide-image"
+          placeholder-text="Une photo du plat, ou un lien vers une image."
+          :processing="photo.processing.value"
+          :upload-progress="uploadProgress"
+          :error="photo.error.value"
+          :disabled="saving"
+          @pick="onPhotoPicked"
+          allow-url
+          v-model:url="imageUrl"
+          @update:url="onImageUrlInput"
+          @remove="removePhoto"
+        />
 
         <!-- Ingrédients -->
         <div>
@@ -418,7 +507,13 @@ async function handleSubmit() {
 
     <template #footer>
       <UButton label="Annuler" color="neutral" variant="ghost" :disabled="saving" @click="closeSlideover" />
-      <UButton label="Enregistrer" color="primary" :loading="saving" @click="handleSubmit" />
+      <UButton
+        :label="uploadProgress !== null ? 'Envoi de la photo...' : 'Enregistrer'"
+        color="primary"
+        :loading="saving"
+        :disabled="photo.processing.value"
+        @click="handleSubmit"
+      />
     </template>
   </USlideover>
 </template>

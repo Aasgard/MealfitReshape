@@ -12,7 +12,7 @@ useSeoMeta({
 const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
-const photos = useContainerPhotos()
+const photos = useUserPhotos('containers')
 
 /** Récipients de l'utilisateur, toujours privés ; tri côté client pour éviter un index composite owner + label. */
 const containers = useCollection<Container>(() => {

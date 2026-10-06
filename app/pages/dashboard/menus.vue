@@ -33,9 +33,6 @@ const onContinuousChange = (event: MediaQueryListEvent) => { isContinuous.value 
 onMounted(() => window.matchMedia(CONTINUOUS_QUERY).addEventListener('change', onContinuousChange))
 onBeforeUnmount(() => window.matchMedia(CONTINUOUS_QUERY).removeEventListener('change', onContinuousChange))
 
-/** Résumé de la semaine replié par défaut sur mobile (même seuil que `sm:`), pour laisser la place au calendrier. */
-const summaryOpenByDefault = window.matchMedia('(min-width: 40rem)').matches
-
 const calendar = useTemplateRef<{ scrollByWeeks: (delta: number) => void }>('calendar')
 
 /** Sens du dernier changement de semaine (PC), pour faire glisser le calendrier du bon côté. */
@@ -318,44 +315,43 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <UDashboardPanel id="menus">
+  <!-- Pas de marge en haut de la zone qui défile : la ligne des jours (mobile) s'y colle sans laisser voir le défilement au-dessus. -->
+  <UDashboardPanel id="menus" :ui="{ body: 'pt-0 sm:pt-0' }">
     <template #header>
       <UDashboardNavbar title="Menus de la semaine">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
       </UDashboardNavbar>
+      <!-- Dans l'en-tête du panneau (hors de la zone qui défile), comme la ligne du jour de l'accueil : la barre ne bouge pas. -->
+      <MenuWeekHeader
+        class="border-b border-default bg-default px-4 py-2 sm:px-6"
+        :week-label="weekLabel"
+        :week-label-short="weekLabelShort"
+        :week-start-key="weekId(selectedWeekStart)"
+        :is-current-week="isReferenceWeekSelected"
+        :clear-disabled="isWeekEmpty"
+        @previous="goToPreviousWeek"
+        @next="goToNextWeek"
+        @this-week="goToCurrentWeek"
+        @select-date="goToWeek"
+        @clear="clearDialogOpen = true"
+        @copy-week="copyWeekOpen = true"
+        @shopping-list="shoppingListOpen = true"
+      />
     </template>
 
     <template #body>
       <!--
-        Mobile, tablette : le calendrier garde sa hauteur naturelle tant qu'elle tient, sinon il se limite à la place
-        restante (24rem au moins) et défile à l'intérieur, ligne des jours figée. PC : hauteur naturelle, la page défile.
-        L'en-tête et le résumé ne rétrécissent pas.
+        Mobile, tablette : la ligne des jours du calendrier remonte avec la page puis se colle sous l'en-tête du panneau.
+        PC : tout défile avec la page.
       -->
-      <div class="flex flex-1 flex-col gap-4 overflow-x-clip p-4 max-lg:min-h-0 sm:gap-6 sm:p-6">
-        <MenuWeekHeader
-          class="shrink-0"
-          :week-label="weekLabel"
-          :week-label-short="weekLabelShort"
-          :week-start-key="weekId(selectedWeekStart)"
-          :is-current-week="isReferenceWeekSelected"
-          :clear-disabled="isWeekEmpty"
-          @previous="goToPreviousWeek"
-          @next="goToNextWeek"
-          @this-week="goToCurrentWeek"
-          @select-date="goToWeek"
-          @clear="clearDialogOpen = true"
-          @copy-week="copyWeekOpen = true"
-          @shopping-list="shoppingListOpen = true"
-        />
-
-        <!-- Moyenne par jour complet de la semaine, dans la forme du résumé de l'accueil ; repliée par défaut sur mobile. -->
+      <div class="flex flex-1 flex-col gap-4 overflow-x-clip p-4 sm:gap-6 sm:p-6">
+        <!-- Moyenne par jour complet de la semaine, dans la forme du résumé de l'accueil ; ouverte par défaut. -->
         <CalorieSummary
           class="shrink-0"
           title="Moyenne / jour"
           state-key="menus-week-summary-open"
-          :default-open="summaryOpenByDefault"
           :targets="DAILY_TARGETS"
           :eaten-kcal="summary.averageKcal"
           :extra-kcal="summary.averageExtraKcal"
@@ -375,7 +371,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :leave-to-class="slideDirection === 'next' ? 'opacity-0 -translate-x-8' : 'opacity-0 translate-x-8'"
         >
           <MenuWeekCalendar
-            class="max-lg:min-h-96 lg:shrink-0"
+            class="shrink-0"
             ref="calendar"
             :key="isContinuous ? `continuous-${calendarKey}` : `${weekId(selectedWeekStart)}-${calendarKey}`"
             :days="days"

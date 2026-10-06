@@ -51,8 +51,9 @@ const moreItems = computed<DropdownMenuItem[][]>(() => [
 </script>
 
 <template>
-  <!-- `data-copy-control` : changer de semaine ne doit pas annuler un repas copié, qu'on veut justement coller ailleurs. -->
   <div class="flex items-center justify-between gap-2">
+    <!-- Racine unique, sans commentaire avant elle : sinon Vue en fait un fragment (attributs et mesures perdus). -->
+    <!-- `data-copy-control` : changer de semaine ne doit pas annuler un repas copié, qu'on veut justement coller ailleurs. -->
     <div class="flex min-w-0 items-center gap-1 sm:gap-2">
       <div class="flex shrink-0 items-center rounded-sm border border-default overflow-hidden">
         <UButton

@@ -38,6 +38,7 @@ const emit = defineEmits<{
 }>()
 
 const scrollContainer = useTemplateRef<HTMLElement>('scrollContainer')
+const headerStrip = useTemplateRef<HTMLElement>('headerStrip')
 
 /** Glisser-déposer en cours : l'aimantation et le changement de semaine attendent la fin du geste. */
 const isDragging = ref(false)
@@ -229,6 +230,14 @@ const onScroll = () => {
 }
 onBeforeUnmount(() => clearTimeout(settleTimeout))
 
+/** La bande des jours (mode continu) suit le défilement horizontal de la grille. */
+const onBodyScroll = () => {
+  const strip = headerStrip.value
+  const container = scrollContainer.value
+  if (strip && container) strip.scrollLeft = container.scrollLeft
+  onScroll()
+}
+
 const onDragEnd = () => {
   isDragging.value = false
   onScroll()
@@ -244,19 +253,44 @@ defineExpose({
 </script>
 
 <template>
-  <!--
-    Mode continu (mobile, tablette) : le calendrier prend la hauteur que lui laisse la page et défile à l'intérieur, la
-    ligne des jours reste visible en haut. PC : hauteur naturelle, la page défile et la ligne des jours avec elle.
-  -->
-  <div class="flex flex-col rounded-xl border border-default bg-default overflow-hidden">
+  <div class="flex flex-col rounded-xl border border-default bg-default overflow-clip">
+    <!--
+      Pas de commentaire avant la racine : elle doit rester unique (glissement de <Transition> sur PC).
+      Mode continu (mobile, tablette) : la page défile ; la ligne des jours est une bande à part, collée en haut de la zone
+      qui défile (sous l'en-tête du panneau), qui suit le défilement horizontal de la grille. PC : elle défile avec la page.
+      `overflow-clip` (et non `hidden`) : arrondit les coins sans empêcher la bande de coller à la page.
+    -->
+    <div
+      v-if="continuous"
+      ref="headerStrip"
+      class="sticky top-0 z-20 overflow-hidden border-b border-default bg-elevated"
+    >
+      <div class="flex w-max">
+        <div
+          v-for="(week, w) in weeks"
+          :key="`head-${week[0]!.key}`"
+          class="grid"
+          :class="w > 0 && 'border-l border-default'"
+          :style="CONTINUOUS_GRID_STYLE"
+        >
+          <div class="sticky left-0 z-10 border-r border-default bg-elevated" />
+          <MenuWeekDayHead
+            v-for="day in week"
+            :key="`head-${day.key}`"
+            :day="day"
+            :totals="dayTotals[day.key]!"
+            class="border-r border-default last:border-r-0"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- Mode continu : le défilement s'arrête au début d'un jour (juste après la colonne figée). -->
     <div
       ref="scrollContainer"
-      :class="[
-        continuous ? 'min-h-0 flex-1 overflow-auto overscroll-contain' : 'overflow-x-auto',
-        continuous && !isDragging ? 'snap-x snap-mandatory scroll-pl-14' : '',
-      ]"
-      @scroll.passive="onScroll"
+      class="overflow-x-auto"
+      :class="continuous && !isDragging ? 'overscroll-x-contain snap-x snap-mandatory scroll-pl-14' : continuous ? 'overscroll-x-contain' : ''"
+      @scroll.passive="onBodyScroll"
     >
       <!-- items-start : une semaine moins remplie garde ses lignes basses au lieu de s'étirer à la hauteur de sa voisine. -->
       <div
@@ -271,34 +305,31 @@ defineExpose({
           :class="[continuous ? 'snap-end' : 'min-w-220 grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]', w > 0 && 'border-l border-default']"
           :style="continuous ? CONTINUOUS_GRID_STYLE : undefined"
         >
-          <div data-sticky-corner class="sticky left-0 border-b border-r border-default bg-elevated" :class="continuous ? 'top-0 z-30' : 'z-10'" />
+          <!-- Mode continu : coin et en-têtes de hauteur nulle, gardés comme repères de colonnes (aimantation, calculs). -->
           <div
-            v-for="day in week"
-            :key="`head-${day.key}`"
-            :data-day-key="day.key"
-            class="snap-start border-b border-r border-default last:border-r-0 px-2 py-2 text-center"
-            :class="[
-              day.isSelected ? 'bg-[color-mix(in_oklch,var(--ui-primary)_5%,var(--ui-bg-elevated))]' : 'bg-elevated',
-              continuous && 'sticky top-0 z-20',
-            ]"
-          >
-            <p
-              class="text-xs font-semibold uppercase tracking-wide"
-              :class="day.isSelected ? 'text-primary' : 'text-dimmed'"
-            >
-              {{ day.dayLabel }} <span class="tabular-nums" :class="day.isSelected ? 'text-primary' : 'text-highlighted'">{{ day.dateLabel }}</span>
-            </p>
-            <!-- Totaux du jour, sous les yeux pendant qu'on le remplit : kcal colorées selon l'objectif (bleu, vert, orange). -->
-            <p class="mt-1 text-sm font-bold tabular-nums" :class="dayTotals[day.key]!.kcal ? dayTotals[day.key]!.statusClass : 'text-dimmed'">
-              {{ dayTotals[day.key]!.kcal }} <span class="text-xs font-normal text-muted">kcal</span>
-            </p>
-            <p class="text-xs tabular-nums text-dimmed">
-              <template v-for="(macro, i) in dayTotals[day.key]!.macroItems" :key="macro.letter">
-                {{ i ? ' ' : '' }}{{ macro.letter }}<span class="font-semibold" :class="dayTotals[day.key]!.kcal ? macro.statusClass : ''">{{ macro.value }}</span>
-              </template>
-            </p>
-          </div>
-  
+            data-sticky-corner
+            class="sticky left-0"
+            :class="continuous ? 'h-0' : 'z-10 border-b border-r border-default bg-elevated'"
+          />
+          <template v-if="continuous">
+            <div
+              v-for="day in week"
+              :key="`mark-${day.key}`"
+              :data-day-key="day.key"
+              class="h-0 snap-start"
+            />
+          </template>
+          <template v-else>
+            <MenuWeekDayHead
+              v-for="day in week"
+              :key="`head-${day.key}`"
+              :data-day-key="day.key"
+              :day="day"
+              :totals="dayTotals[day.key]!"
+              class="border-b border-r border-default last:border-r-0"
+            />
+          </template>
+
           <template v-for="mealType in visibleMealTypes" :key="mealType.key">
             <!-- Icône seule ; le libellé reste lisible au survol et par les lecteurs d'écran. -->
             <div

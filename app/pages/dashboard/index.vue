@@ -5,10 +5,10 @@ import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
-import type { MealSlot, TodayCookingRecipe, TodayMealRow } from '~/types/today'
+import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow } from '~/types/today'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
-import { buildDayEntries, consumedOfDay, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
-import { recipesToCook } from '~/utils/recipesToCook'
+import { buildDayEntries, consumedOfDay, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
 import { WEEK_STARTS_ON } from '~/utils/menuWeek'
 
 useSeoMeta({
@@ -180,13 +180,35 @@ const isCollapsed = (row: TodayMealRow) =>
 const mealRows = computed(() => allMealRows.value.filter(row => !isCollapsed(row)))
 const secondaryMealRows = computed(() => allMealRows.value.filter(isCollapsed))
 
-/** "aujourd'hui", "hier", "demain", puis le nom du jour : la fenêtre ne dure que 7 jours, il n'y a pas d'ambiguïté. */
+/** "Auj.", "Hier", "Dem.", puis le jour abrégé ("Ven.") : la fenêtre ne dure que 7 jours, il n'y a pas d'ambiguïté. */
 const cookingDayLabel = (day: Date) => {
   const offset = differenceInCalendarDays(day, today)
-  if (offset === 0) return "aujourd'hui"
-  if (offset === -1) return 'hier'
-  if (offset === 1) return 'demain'
-  return format(day, 'EEEE', { locale: fr })
+  if (offset === 0) return 'Auj.'
+  if (offset === -1) return 'Hier'
+  if (offset === 1) return 'Dem.'
+  return capitalize(format(day, 'EEE', { locale: fr }))
+}
+
+/**
+ * Récipients regroupés par jour (les repas arrivent triés, ceux d'un même jour se suivent) : le jour n'est écrit qu'une fois,
+ * et l'icône du repas n'apparaît que si la recette revient à plusieurs repas ce jour-là. Ex : "Auj. ☀ 1 🌇 0,5".
+ */
+const cookingDays = (portions: RecipeToCookPortion[]): TodayCookingDay[] => {
+  const days: { day: Date, portions: RecipeToCookPortion[] }[] = []
+  for (const portion of portions) {
+    const last = days.at(-1)
+    if (last && differenceInCalendarDays(portion.day, last.day) === 0) last.portions.push(portion)
+    else days.push({ day: portion.day, portions: [portion] })
+  }
+
+  return days.map(({ day, portions: dayPortions }) => ({
+    key: String(day.getTime()),
+    label: cookingDayLabel(day),
+    portions: dayPortions.map((portion): TodayCookingPortion => {
+      const row = dayPortions.length > 1 ? MENU_MEAL_TYPES.find(item => item.key === portion.mealType) : undefined
+      return { key: portion.mealType, meal: row && { label: row.label, icon: row.icon }, parts: portion.parts }
+    }),
+  }))
 }
 
 /**
@@ -201,7 +223,7 @@ const cookingRecipes = computed<TodayCookingRecipe[]>(() =>
       recipeId: recipe.id,
       title: recipe.title,
       imageUrl: recipe.imageUrl,
-      daysLabel: capitalize(item.days.map(cookingDayLabel).join(', ')),
+      days: cookingDays(item.portions),
       parts: item.parts,
     }]
   })

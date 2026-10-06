@@ -13,8 +13,9 @@ const emit = defineEmits<{
   open: [recipeId: string, parts: number]
 }>()
 
-const formatParts = (parts: number) =>
-  `${parts.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} part${parts > 1 ? 's' : ''}`
+const formatNumber = (parts: number) => parts.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+
+const formatParts = (parts: number) => `${formatNumber(parts)} part${parts > 1 ? 's' : ''}`
 </script>
 
 <template>
@@ -44,9 +45,37 @@ const formatParts = (parts: number) =>
             <p class="truncate font-semibold text-highlighted">
               {{ recipe.title }}
             </p>
-            <p class="truncate text-xs text-dimmed">
-              {{ recipe.daysLabel }}
-            </p>
+            <!--
+              Un bloc insécable par jour : un retour à la ligne commence toujours par un jour.
+              Chaque bloc porte son « · » devant lui ; la marge négative pousse celui d'un début de ligne hors du cadre, qui le masque.
+            -->
+            <span class="mt-0.5 block overflow-hidden text-xs text-dimmed">
+              <span class="-ms-3 flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                <span
+                  v-for="day in recipe.days"
+                  :key="day.key"
+                  class="inline-flex items-center gap-1 whitespace-nowrap"
+                >
+                  <span class="w-2 text-center" aria-hidden="true">·</span>
+                  <span>{{ day.label }}</span>
+                  <span
+                    v-for="portion in day.portions"
+                    :key="portion.key"
+                    class="inline-flex items-center gap-0.5"
+                  >
+                    <UIcon
+                      v-if="portion.meal"
+                      :name="portion.meal.icon"
+                      class="size-3.5 shrink-0"
+                      :title="portion.meal.label"
+                      aria-hidden="true"
+                    />
+                    <span v-if="portion.meal" class="sr-only">{{ portion.meal.label }}</span>
+                    <span class="font-semibold tabular-nums text-muted">{{ formatNumber(portion.parts) }}</span>
+                  </span>
+                </span>
+              </span>
+            </span>
           </div>
           <p class="shrink-0 text-sm font-semibold tabular-nums text-highlighted">
             {{ formatParts(recipe.parts) }}

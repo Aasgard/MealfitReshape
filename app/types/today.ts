@@ -17,14 +17,30 @@ export type TodayMealRow = MealSlot & {
   entries: MenuEntry[]
 }
 
+/** Un récipient à remplir pour une recette de la liste "Cuisiner" : les parts d'un repas. */
+export type TodayCookingPortion = {
+  key: string
+  /** Repas, seulement quand la recette revient à plusieurs repas ce jour-là (sinon le jour suffit). */
+  meal?: { label: string, icon: string }
+  parts: number
+}
+
+/** Les récipients d'un même jour, écrits derrière un seul libellé. Ex : "Auj. ☀ 1 🌇 0,5". */
+export type TodayCookingDay = {
+  key: string
+  /** Jour abrégé. Ex : "Auj.", "Dem.", "Ven.". */
+  label: string
+  portions: TodayCookingPortion[]
+}
+
 /** Une recette de la liste "Cuisiner" de l'accueil, à préparer en une fois. */
 export type TodayCookingRecipe = {
   recipeId: string
   title: string
   /** Photo de la recette, affichée à la place de l'icône. */
   imageUrl?: string
-  /** Jours où elle est mangée. Ex : "Aujourd'hui, jeudi, samedi". */
-  daysLabel: string
-  /** Somme des parts de ces jours. */
+  /** Répartition des parts par jour puis par repas, pour savoir comment la conditionner. */
+  days: TodayCookingDay[]
+  /** Somme des parts de ces repas. */
   parts: number
 }

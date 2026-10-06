@@ -1,6 +1,15 @@
 import { differenceInCalendarDays } from 'date-fns'
-import type { Meal, RecipeMealSource } from '~/types/meal'
+import type { Meal, MealType, RecipeMealSource } from '~/types/meal'
 import { MENU_MEAL_TYPES } from './menuEntries'
+
+/** Un récipient d'une fournée : les parts d'un repas (jour + ligne du calendrier). */
+export type RecipeToCookPortion = {
+  /** Jour du repas (minuit, heure locale). */
+  day: Date
+  mealType: MealType
+  /** Parts de ce repas, cumulées si la recette y est saisie plusieurs fois. */
+  parts: number
+}
 
 /** Une fournée : une recette cuisinée en une fois pour tous ses repas des jours suivants. */
 export type RecipeToCook = {
@@ -9,6 +18,8 @@ export type RecipeToCook = {
   days: Date[]
   /** Somme des parts de ces repas. */
   parts: number
+  /** Parts de chaque repas, dans l'ordre : un récipient chacun. */
+  portions: RecipeToCookPortion[]
 }
 
 type RecipeMeal = Meal & RecipeMealSource
@@ -35,7 +46,7 @@ export function recipesToCook(meals: Meal[], batchDays: number): RecipeToCook[] 
     const date = meal.date.toDate()
     let batch = currentBatch.get(meal.recipeId)
     if (!batch || differenceInCalendarDays(date, batch.days[0]!) >= batchDays) {
-      batch = { recipeId: meal.recipeId, days: [], parts: 0 }
+      batch = { recipeId: meal.recipeId, days: [], parts: 0, portions: [] }
       batches.push(batch)
       currentBatch.set(meal.recipeId, batch)
     }
@@ -43,6 +54,14 @@ export function recipesToCook(meals: Meal[], batchDays: number): RecipeToCook[] 
     batch.parts += meal.value
     const lastDay = batch.days.at(-1)
     if (!lastDay || differenceInCalendarDays(date, lastDay) !== 0) batch.days.push(date)
+
+    // Repas triés : une même recette saisie deux fois au même repas tombe juste après la précédente.
+    const lastPortion = batch.portions.at(-1)
+    if (lastPortion?.mealType === meal.mealType && differenceInCalendarDays(date, lastPortion.day) === 0) {
+      lastPortion.parts += meal.value
+    } else {
+      batch.portions.push({ day: date, mealType: meal.mealType, parts: meal.value })
+    }
   }
 
   return batches

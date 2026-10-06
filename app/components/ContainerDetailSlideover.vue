@@ -15,7 +15,7 @@ useOverlayBackClose(open)
 
 const { formatDate } = useDateFormat()
 
-/** Change à chaque ouverture : la pesée repart de zéro (poids vide, 1 part). */
+/** Change à chaque ouverture : la pesée repart de zéro (poids vide, 1 part, répartition repliée). */
 const weighingKey = ref(0)
 watch(open, (isOpen) => {
   if (isOpen) weighingKey.value++

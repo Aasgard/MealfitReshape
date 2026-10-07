@@ -25,6 +25,7 @@
     "@internationalized/date": "^3.12.4",
     "@nuxt/ui": "^4.4.0",
     "@pinia/nuxt": "^0.11.3",
+    "barcode-detector": "^3.2.2",
     "date-fns": "^4.1.0",
     "firebase": "^12.9.0",
     "firebase-admin": "^13.6.1",
@@ -34,6 +35,7 @@
     "vue": "^3.5.28",
     "vue-draggable-plus": "^0.6.1",
     "vue-router": "^4.6.4",
-    "vuefire": "^3.2.2"
+    "vuefire": "^3.2.2",
+    "zxing-wasm": "3.1.3"
   }
 }

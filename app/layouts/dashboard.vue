@@ -67,6 +67,10 @@ const links = [{
     label: 'Calculateur pour trail',
     icon: 'i-lucide-sport-shoe',
     to: '/dashboard/calculateur-allure',
+  }, {
+    label: 'Scanner produit',
+    icon: 'i-lucide-scan-barcode',
+    to: '/dashboard/scanner-produit',
   }]
 }] satisfies NavigationMenuItem[]
 

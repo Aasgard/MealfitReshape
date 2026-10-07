@@ -1,67 +1,140 @@
 ---
 name: Mealfit Reshape
-description: A nutrition and training tracker that treats its own interface like a nutrition label — precise, tabular, quietly witty.
+description: A nutrition and training tracker that treats its own interface like a nutrition label — precise, tabular, quietly exact.
 colors:
   primary: "oklch(58.5% 0.233 277.117)"
-  primary-deep: "oklch(51.1% 0.262 276.966)"
+  primary-dark: "oklch(67.3% 0.182 276.935)"
   primary-soft: "oklch(93% 0.034 272.788)"
-  neutral-bg: "oklch(98.5% 0 0)"
-  neutral-surface: "oklch(100% 0 0)"
-  neutral-border: "oklch(92.2% 0 0)"
-  neutral-text-muted: "oklch(55.6% 0 0)"
-  neutral-text-dimmed: "oklch(70.8% 0 0)"
-  neutral-text-highlighted: "oklch(20.5% 0 0)"
-  success: "oklch(72.3% 0.219 149.579)"
+  macro-carbs: "oklch(72.3% 0.219 149.579)"
+  macro-protein: "oklch(50.5% 0.213 27.518)"
+  macro-fat: "oklch(76.9% 0.188 70.08)"
+  status-under: "oklch(62.3% 0.214 259.815)"
+  status-reached: "oklch(72.3% 0.219 149.579)"
+  status-over: "oklch(79.5% 0.184 86.047)"
   error: "oklch(63.7% 0.237 25.331)"
+  surface: "#ffffff"
+  surface-elevated: "oklch(97% 0 0)"
+  surface-accented: "oklch(92.2% 0 0)"
+  hairline: "oklch(92.2% 0 0)"
+  hairline-strong: "oklch(87% 0 0)"
+  ink-dimmed: "oklch(70.8% 0 0)"
+  ink-muted: "oklch(55.6% 0 0)"
+  ink: "oklch(37.1% 0 0)"
+  ink-highlighted: "oklch(20.5% 0 0)"
+  surface-dark: "oklch(20.5% 0 0)"
+  surface-elevated-dark: "oklch(26.9% 0 0)"
+  surface-accented-dark: "oklch(37.1% 0 0)"
+  hairline-dark: "oklch(26.9% 0 0)"
 typography:
-  title:
+  stat-display:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "2.25rem"
+    fontWeight: 700
+    lineHeight: 1.1
+    letterSpacing: "-0.025em"
+    fontFeature: "\"tnum\""
+  headline:
     fontFamily: "Inter, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "-0.01em"
+    lineHeight: 1.33
+    letterSpacing: "-0.025em"
+  stat:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 700
+    lineHeight: 1.33
+    letterSpacing: "normal"
+    fontFeature: "\"tnum\""
+  title:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1.125rem"
+    fontWeight: 700
+    lineHeight: 1.55
+    letterSpacing: "-0.025em"
+  card-title:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 600
+    lineHeight: 1.5
+    letterSpacing: "normal"
   body:
     fontFamily: "Inter, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.43
+    letterSpacing: "normal"
+  meta:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 400
+    lineHeight: 1.33
     letterSpacing: "normal"
   label:
     fontFamily: "Inter, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 600
-    lineHeight: 1.3
-    letterSpacing: "0.05em"
+    lineHeight: 1.33
+    letterSpacing: "0.025em"
 rounded:
   sm: "0.125rem"
-  md: "0.5rem"
-  lg: "0.75rem"
+  md: "0.1875rem"
+  lg: "0.25rem"
+  xl: "0.375rem"
   full: "9999px"
 spacing:
   xs: "0.375rem"
-  sm: "0.75rem"
+  sm: "0.5rem"
   md: "1rem"
+  card: "1.25rem"
   lg: "1.5rem"
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
-    textColor: "{neutral-bg}"
-    rounded: "{rounded.sm}"
-    padding: "8px 16px"
-  button-primary-hover:
-    backgroundColor: "{colors.primary-deep}"
+    textColor: "{colors.surface}"
+    rounded: "{rounded.md}"
+    padding: "6px 10px"
   button-neutral-outline:
-    backgroundColor: "transparent"
-    textColor: "{neutral-text-highlighted}"
-    rounded: "{rounded.sm}"
-  card:
-    backgroundColor: "{neutral-surface}"
-    rounded: "{rounded.lg}"
-    padding: "16px"
-  badge-subtle:
-    backgroundColor: "{primary-soft}"
-    textColor: "{primary-deep}"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "6px 10px"
+  button-add-round:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.surface}"
     rounded: "{rounded.full}"
+    size: "28px"
+  segmented-group:
+    backgroundColor: "{colors.surface-elevated}"
+    rounded: "{rounded.lg}"
+    padding: "4px"
+  card:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.xl}"
+    padding: "16px"
+  section-panel:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.xl}"
+    padding: "20px"
+  badge-subtle:
+    backgroundColor: "{colors.primary-soft}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.md}"
+    padding: "2px 6px"
+  macro-bar-track:
+    backgroundColor: "{colors.surface-accented}"
+    rounded: "{rounded.full}"
+    height: "6px"
+  input-outline:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink-highlighted}"
+    rounded: "{rounded.md}"
+    padding: "6px 10px"
+  tooltip-panel:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink-highlighted}"
+    rounded: "{rounded.lg}"
+    padding: "12px"
 ---
 
 # Design System: Mealfit Reshape
@@ -70,119 +143,195 @@ components:
 
 **Creative North Star: "The Nutrition Label"**
 
-Mealfit Reshape presents every screen the way it presents an ingredient: as a precise, tabular readout. Numbers lead, labels are small and uppercase, values sit right-aligned like a spec sheet. This isn't a lifestyle app performing warmth — it's an instrument for a small circle of people (the owner, training partners, family) who already know what they're looking for and want the data laid out cleanly. The clearest evidence of this identity living outside the obvious screens is the custom 404/500 error page: it renders the failure itself as a "Fiche nutritionnelle de cette erreur" (nutritional fact sheet of this error), with rows of stats ("Frustration: 60%", "Cafés recommandés: 1") that count up and stagger into view. The joke only works because the rest of the product is genuinely built like a spec sheet — the error page just admits it out loud.
+Mealfit Reshape reads every screen the way you read the back of a food packet: a precise, ruled readout where each number carries its unit and sits exactly where the eye expects it. Values are tabular and right-aligned, labels are small and uppercase, and rows are separated by hairlines rather than boxes. The weight page's "Relevé" grid, a single bordered block split into cells by one-pixel rules, is the label in its purest form. The weekly calendar, the sortable recipe table and the settings rows all apply the same logic to other data. This is an instrument for a small circle of people who know what they are looking at: it is precise, dry and reliable, and its personality lives in the exactness of its details (a unit that is never missing, a dash that holds a missing value's place, a column that turns indigo when it drives the sort), not in decoration.
 
-Indigo is the one signal color in an otherwise near-grayscale interface, and it's allowed to run electric: full-saturation solid buttons, a bright halo behind status icons, a solid progress fill on macro bars. It never diffuses into backgrounds or borders — those stay strictly neutral — so indigo reads as "this is active / this is yours / this is in season," not as ambient branding.
+Color is information. The interface is near-grayscale, and three color codes each own one meaning: indigo for interaction and selection, a fixed green/red/amber triad for the three macronutrients, and a blue/green/yellow triad for verdicts against a target. Nothing is tinted for atmosphere. Depth comes from hairlines and background steps, never shadows, and corners are close to square: the base radius is 2px and the largest structural surface is rounded to 6px. Nothing here tries to look soft or premium; it tries to look correct.
 
-Corners are close to square (2px base radius token), density is tight, and depth comes from borders and background-level contrast rather than shadows. Nothing here tries to look soft or premium; it tries to look correct.
+The one place the product admits the joke is the 404/500 page, which renders the failure as a "Fiche nutritionnelle de cette erreur" with deadpan stats ("Frustration 60 %", "Cafés recommandés 1"). That joke only lands because everything else plays it straight.
 
 **Key Characteristics:**
-- Data-sheet layout: label-then-value pairs, right-aligned numbers, uppercase micro-labels with tracked-out letter-spacing.
-- Indigo used sparingly but at full saturation — never tinted into surfaces, always a deliberate "this is active" signal.
-- Flat by construction: no shadows anywhere in the codebase; hierarchy comes from `border-default` and background steps (`bg-default` / `bg-elevated` / `bg-accented`).
-- Near-square corners (2px base radius) that read clinical, not soft.
-- A found deadpan humor (the error page) that the rest of the UI earns by being genuinely precise elsewhere — don't manufacture whimsy anywhere else.
+- Spec-sheet reading: label-then-value pairs, tabular figures, a smaller unit beside every number, uppercase micro-labels tracked at 0.025em.
+- Three color territories (interaction / macronutrient / verdict) that never borrow from each other.
+- Flat by construction: hairlines (`border-default`) and background steps (`bg-default` → `bg-elevated` → `bg-accented`) carry all hierarchy.
+- Near-square geometry: 2px controls, 6px cards, fully round only for bars, dots, rings and pills.
+- Stable geometry: rows and slots render even when empty, so cards and table rows in a grid always align.
+- Deadpan humor exists exactly once, at the failure state.
 
 ## Colors
 
-Almost grayscale with one electric accent; color is information, not decoration.
+Near-grayscale ink on white, with three small, strictly separated color codes; every hue on screen answers a question.
 
 ### Primary
-- **Indigo Électrique** (`oklch(58.5% 0.233 277.117)`, Tailwind indigo-500): the only accent in the system. Used at full strength on primary buttons, active filter-toggle buttons (season/units filters), the "in season" leaf status icon, the macro-bar fill, and a 10%-opacity halo behind status icons. Never used as a background tint for large surfaces.
-- **Indigo Deep** (`oklch(51.1% 0.262 276.966)`, indigo-600): hover/active state for primary buttons and the wordmark's "RESHAPE" accent word.
-- **Indigo Soft** (`oklch(93% 0.034 272.788)`, indigo-100): reserved for the rare tinted badge or icon halo background (`bg-primary/10`), not for general surfaces.
+- **Signal Indigo** (`primary`, indigo-500; `primary-dark`, indigo-400 in dark mode): the interaction and selection color. Solid primary buttons and the round "+" add buttons, the active option of segmented toggles (cards/list view, recipe type filters), the active sortable column header, the active settings-section icon, text links ("Plus", "Voir le dashboard"), the in-season leaf, the copied-meal state in the calendar, the weight trend line and its endpoint, goal-progress fills, and the card hover border (`border-primary/50`). Faint tints mark "current" without shouting: `bg-primary/5` on today's calendar column, `bg-primary/10` behind the leaf and copy icons. The home page's section-heading icons ("Cuisiner", "Manger") are the only wayfinding use.
+- **Indigo Soft** (`primary-soft`, ≈ the `bg-primary/10` tint): background of subtle badges and icon halos. Never a surface fill.
 
-### Neutral
-- **Paper White** (`oklch(98.5% 0 0)`, neutral-50): app background (`bg-default`).
-- **Surface White** (`oklch(100% 0 0)`): card and panel surfaces (`bg-elevated`, sidebar at 25% opacity).
-- **Hairline** (`oklch(92.2% 0 0)`, neutral-200): the default border color (`border-default`) that carries almost all of the app's structural hierarchy.
-- **Muted Text** (`oklch(55.6% 0 0)`, neutral-500): secondary text — categories, descriptions, unit labels.
-- **Dimmed Text** (`oklch(70.8% 0 0)`, neutral-400): tertiary text — slideover field eyebrows, least-emphasized numbers.
-- **Highlighted Text** (`oklch(20.5% 0 0)`, neutral-900): primary text — titles, headline numbers, ingredient names.
+### Macronutrient code
+A fixed identity per nutrient, used for dots, bar segments and pie slices, never for verdicts.
+- **Sprout Green: Glucides** (`macro-carbs`, green-500).
+- **Butcher Red: Protéines** (`macro-protein`, red-700). Deep enough that it does not read as an error.
+- **Oil Amber: Lipides** (`macro-fat`, amber-500).
+
+### Target status (verdict) code
+Applied only where a value is compared with a target: the calorie gauge, meal rings, macro values in the daily summary. Tolerance is ±5% for a day and ±10% for a meal.
+- **Under-Target Blue** (`status-under`, Nuxt UI `info`, blue-500): not reached yet.
+- **On-Target Green** (`status-reached`, Nuxt UI `success`, green-500): within tolerance.
+- **Over-Target Yellow** (`status-over`, Nuxt UI `warning`, yellow-500): exceeded. Also marks "En plus" (off-plan) kcal and a weight trend running against the goal. Recipe difficulty reuses success / warning / error as an easy-to-hard scale.
 
 ### Semantic
-- **Success Green** (`oklch(72.3% 0.219 149.579)`, green-500): success toasts only.
-- **Error Red** (`oklch(63.7% 0.237 25.331)`, red-500): destructive actions (delete) and error toasts only.
+- **Delete Red** (`error`, red-500): destructive actions, validation messages, error toasts. Success toasts use On-Target Green.
+
+### Neutral
+- **Label White** (`surface`, `#fff`): page and card background (`bg-default`). Dark mode: `surface-dark`, neutral-900.
+- **Recess Gray** (`surface-elevated`, neutral-100): hover fills, the segmented-toggle well, the active settings-nav item, the sidebar at 25% opacity. Dark: neutral-800.
+- **Track Gray** (`surface-accented`, neutral-200): empty bar tracks, gauge and ring tracks, image placeholders, the empty pie disc. Dark: neutral-700.
+- **Hairline** (`hairline`, neutral-200): every border and divider (`border-default`), and the 1px rules of ruled grids. Dark: neutral-800.
+- **Firm Hairline** (`hairline-strong`, neutral-300): the chart crosshair and other borders that must survive on top of data.
+- **Headline Ink** (`ink-highlighted`, neutral-900): names, titles, headline figures. **Body Ink** (`ink`, neutral-700): default text. **Muted Ink** (`ink-muted`, neutral-500): units, secondary copy, inactive headers. **Dimmed Ink** (`ink-dimmed`, neutral-400): micro-labels, meta lines, placeholders, dashes, chart axes.
 
 ### Named Rules
-**The One Signal Rule.** Indigo appears only where something is active, selected, or in-progress (a pressed filter toggle, an in-season status icon, a filled macro bar, a solid button). It never colors a static surface. If indigo is present, something is true right now.
+**The Three Territories Rule.** Indigo means "you can act on this / this is selected / this is live". Green-red-amber means "this is glucides, protéines, lipides". Blue-green-yellow means "this is under, on, or over its target". A color never crosses into another territory: no indigo macro bars, no macro colors on buttons, no status colors without a target.
+
+**The Verdict Needs a Target Rule.** Status colors appear only where a target exists. A single meal in the weekly calendar has no target of its own, so its figures stay neutral gray.
+
+**The Fixed Macro Order Rule.** Macros always read G → P → L (glucides, protéines, lipides), in labels, columns, bar segments and settings. The one exception is the macro pie, which starts with protéines at twelve o'clock because the "Ratio" sort ranks by protein share.
+
+**The Runtime Primary Rule.** The theme menu lets the user swap the primary hue and the neutral family at runtime. Always reference `primary`, `bg-elevated`, `text-muted` and the other semantic tokens, never literal `indigo-*` or `neutral-*` classes. The only literal palette classes allowed are the three macro colors.
+
+**Known debt.** Sprout Green (glucides) and On-Target Green (reached) are the same hue. They rarely share a component, but in the daily summary a green carb bar can sit beside a green "reached" value. Don't add more places where the two meet.
 
 ## Typography
 
-**Body Font:** Inter (with `sans-serif` fallback) — the only typeface in the system; the "Nutrition Label" character comes from spacing and case, not from a display face.
+**Body Font:** Inter (with `sans-serif` fallback): the only typeface in the system.
 
-**Character:** One workhorse sans, pushed toward a data-sheet feel through uppercase tracked-out labels and tabular alignment rather than through a second typeface.
+**Character:** One workhorse sans. The nutrition-label voice comes from case, weight, tracking and tabular figures, not from a second face.
 
 ### Hierarchy
-- **Title** (700, 1.5rem/24px, tight tracking): page headers and error-page headline ("Page introuvable.").
-- **Card Title** (600, ~1rem, default tracking): ingredient names, card headings.
-- **Body** (400, 0.875rem/14px, 1.5 line-height): descriptions, category labels, general copy.
-- **Numeral** (700, 1.5rem/24px, tabular): headline stat values (calories per 100g, error-page counters) — always paired with a small unit label beside it, never alone.
-- **Label** (600, 0.75rem/12px, 0.05em tracking, uppercase): section eyebrows ("Pour 100g", "Glucides", "Fiche nutritionnelle de cette erreur") and macro-row micro-labels.
+- **Stat Display** (700, 2.25rem, tight tracking, tabular): the single headline figure of a readout (the 7-day weight trend in the "Relevé").
+- **Headline** (700, 1.5rem, tight tracking): the page's day/period title in the sticky header ("Aujourd'hui"), the error-page headline.
+- **Stat** (700, 1.5rem, tabular): secondary readout figures; the calorie gauge's centre figure steps up to 1.875rem.
+- **Title** (700, 1.125rem, tight tracking): section headings inside a page ("Cuisiner", "Évolution", "Journal", "Repas & objectifs").
+- **Card Title** (600, 1rem): ingredient, recipe and meal names on cards and rows.
+- **Body** (400, 0.875rem): row labels, descriptions, table cells, form copy. Settings labels step up to 500.
+- **Meta** (400, 0.75rem): quantities, kcal-and-macro lines ("100 g · 45 kcal · G5 P3 L0"), hints, axis ticks.
+- **Label** (600, 0.75rem, 0.025em tracking, uppercase): section eyebrows ("Tendance 7 jours", "Résumé"), table column headers, the fact-sheet title.
 
 ### Named Rules
-**The Value-Needs-a-Unit Rule.** A large numeral is never shown without a smaller unit or label directly beside it (`142` + `kcal`, `60` + `%`) — the data-sheet reading only works when every number is legible without hunting for context.
+**The Value-Needs-a-Unit Rule.** A figure is never shown alone: its unit or label sits directly beside it, smaller and muted (`142` + `kcal`, `-0,35` + `kg/sem`, `20` + `g`). In tables the unit drops to Meta size in Dimmed Ink right after the value.
+
+**The Tabular Rule.** Every figure that changes, aligns in a column or animates uses `tabular-nums`. Digits never jitter.
+
+**The Dash Rule.** A missing value renders as an em dash (`—`) or "Valeurs non renseignées" in Dimmed Ink, keeping the slot's geometry. It is never left blank and never shown as zero.
 
 ## Layout
 
-Dashboard shell (Nuxt UI's `UDashboardGroup`): a collapsible, resizable sidebar (`bg-elevated/25`) on the left, main content in a `UDashboardPanel` with a fixed `UDashboardNavbar` header and a scrollable body padded `p-4` on mobile, `p-6` from `sm:` up.
+The app lives in Nuxt UI's dashboard shell: a collapsible, resizable left sidebar (`bg-elevated/25`, larger link text below `lg`), and a `UDashboardPanel` with a fixed navbar. Pages that move through time (Accueil, Menus) add a sticky date bar under the navbar with the day title on the left and "Aujourd'hui" / previous / next on the right. That bar sits outside the scroll area and responds to horizontal swipes. The body is padded 16px on mobile and 24px from `sm`, and sections stack with a 24px gap.
 
-Content density is tight: filter bars stack vertically on mobile and go horizontal (`flex-row gap-3`) from `sm:` up; card grids run `grid-cols-1` → `sm:grid-cols-2` → `lg:grid-cols-4` at `gap-4`. Standalone centered layouts (login, error page) cap at `max-w-md` for the content column and `max-w-7xl` for the header bar. Nothing in the product uses a wide marketing-style container — every surface is Operate-mode: dense, task-first, no generous whitespace for its own sake.
+Density is tight and task-first. Catalog pages (Ingrédients, Recettes, Récipients) use a card grid of 1 → 2 (`sm`) → 4 (`lg`) columns with 16px gaps, or a list view the user switches to. In list view, a sortable table with sticky headers that scrolls inside its own frame is shown from 1024px; below that, a compact two-line list with no horizontal scroll. Only one variant is mounted at a time. Tracking and settings pages cap content at `max-w-5xl`. Settings use a 12rem sticky section index beside the content from `lg`, which becomes a horizontal scroller on mobile. Calculators cap at `max-w-2xl`. Login, landing and error pages are standalone centered layouts (`max-w-md` content column, `max-w-7xl` header bar).
+
+Components adapt to their own width where it matters: the macro readout switches from two lines to one at a 16rem container width (container query), never based on how many digits it holds.
+
+### Named Rules
+**The Stable Geometry Rule.** Every slot renders whether or not it has content (an empty category line keeps its 20px height, missing macros render as dashes with the same layout), so the cards of a grid and the rows of a table always line up.
 
 ## Elevation & Depth
 
-Flat by construction — there is no `box-shadow` anywhere in the codebase. Depth and grouping are conveyed entirely through `border-default` hairlines and background-level steps (`bg-default` for the page, `bg-elevated` for panels/sidebar, `bg-accented` for recessed elements like the macro-bar track). A card is "raised" only in the sense that it has a border and sits on a lighter or darker background than its container, never through a shadow.
+Flat by construction. No hand-authored surface in the app has a shadow. Grouping comes from `border-default` hairlines and three background steps: `bg-default` for pages and cards, `bg-elevated` for wells, hover fills and active items, and `bg-accented` for recessed tracks and placeholders. Ruled grids (`gap-px` over a `bg-border` parent) split one bordered block into cells without drawing a box around each cell. Nuxt UI's own overlays (dropdowns, modals, slideovers, toasts) keep the library's default treatment. The public landing page's floating preview card is the one tolerated shadow, because it is a showcase, not app chrome.
 
 ### Named Rules
-**The Border-Not-Shadow Rule.** Never introduce a `box-shadow` to convey elevation. If a surface needs to read as distinct, give it a `border-default` and/or move it one background step (`bg-default` → `bg-elevated` → `bg-accented`).
+**The Border-Not-Shadow Rule.** Never add a `box-shadow` to convey elevation inside the app. To make a surface distinct, give it a hairline or move it one background step.
+
+**The Ruled-Grid Rule.** When several figures belong to one readout, put them in a single bordered block split by 1px rules, not in separate cards.
 
 ## Shapes
 
-Corners run close to square: the base radius token (`--ui-radius: 0.125rem`, 2px) scales all of Nuxt UI's own component radii tighter than the library's defaults, which is why buttons and inputs read clinical rather than soft. Hand-authored surfaces layer three deliberate exceptions on top of that base: cards and panels use `rounded-lg`/`rounded-xl` (8–12px) for a still-tight but touchable corner, pills/badges/avatars use `rounded-full`, and progress-bar tracks are always fully rounded regardless of their (often very thin) height. There is no intermediate "medium-rounded" card anywhere — a surface is either near-square (control-level) or fully pill-shaped (status/progress-level); nothing sits at Tailwind's default `rounded-md` softness.
+Corners are close to square. The base radius `--ui-radius` is 0.125rem (2px), and Nuxt UI derives the whole Tailwind radius scale from it: `rounded-sm` 2px, `rounded-md` 3px, `rounded-lg` 4px, `rounded-xl` 6px. Two shapes are allowed, square-ish and fully round, with nothing soft in between:
+
+- **Square-ish:** controls and small targets at 2–3px (buttons, inputs, list thumbnails, calendar meal cards, focus rings); inner panels, tooltips, meal entries and the segmented-toggle well at 4px; cards, section panels, tables and lists at 6px, the ceiling for structural surfaces.
+- **Fully round:** progress and composition bars (always round-ended, even at 6px tall), macro dots, gauge and ring strokes (`stroke-linecap: round`), status pills ("Provisoire"), avatars, and the round "+" add buttons on the home meal list.
+
+Images are cropped to fill their frame (`object-cover`) and inherit the frame's corner: the full-width 144px header of a recipe card, 24px thumbnails in the table.
 
 ## Components
 
 ### Buttons
-- **Shape:** near-square (2px base radius via `--ui-radius`), never pill-shaped except icon-only toggle buttons at small sizes.
-- **Primary:** solid indigo background, white text — the only fully-saturated surface in the interface. Reserved for the single most important action per view ("Ajouter un ingrédient", "Retour au dashboard").
-- **Neutral outline/ghost:** transparent or bordered, `color="neutral"` — used for secondary actions and for filter toggles in their "off" state.
-- **Toggle buttons:** icon-only, square, switch between `variant="outline" color="neutral"` (off) and `variant="solid" color="primary"` (on) — state is entirely color-driven, no separate active-state icon.
+Precise, compact, color-driven.
+- **Shape:** near-square (Nuxt UI `rounded-md`, 3px).
+- **Primary:** solid Signal Indigo, white label, reserved for the main action of a view ("Ajouter une pesée", "Retour au dashboard").
+- **Neutral outline / ghost:** secondary actions, row and card overflow menus (`i-lucide-ellipsis-vertical`, ghost, xs), day navigation chevrons.
+- **Round add:** a solid primary icon button made fully round (`rounded-full`), one per meal row on the home page. The only pill-shaped button.
+- **Hover / Focus:** Nuxt UI defaults (solid primary dims on hover). Hand-built interactive elements use a 2px `ring-primary` focus ring, inset inside tables and lists, offset on cards.
+
+### Segmented toggles
+- **Style:** a `bg-elevated` well with 4px radius and 4px padding, holding small icon buttons. Active option: solid primary. Inactive: neutral ghost. Used for the cards/list switch and the recipe-type filters. State is carried by color alone, plus `aria-pressed`.
+- **Pill tabs:** period ranges on charts use Nuxt UI `UTabs` `variant="pill"` at `xs` size.
 
 ### Badges
-- **Style:** `variant="subtle"`, small size, `rounded-full` — used sparingly for a single ownership signal ("Privé") on cards, not as a general tagging device.
+- **Style:** Nuxt UI `variant="subtle"`, `size="sm"`. Primary when something is true and countable ("3 unités", "5 ingrédients"), neutral when empty ("Aucune unité"). Recipe-card overlay badges get a solid `bg-default` base so they stay legible over the photo.
+- **Ownership:** "Privé" is the one ownership signal. In list rows it shrinks to a 10px custom pill (`bg-primary/10`, `ring-primary/25`).
 
-### Cards / Containers
-- **Corner Style:** `rounded-xl` (12px).
-- **Background:** `bg-default`, border `border-default` at rest, always (border no longer encodes season). Hover shifts the border to `border-primary/50` regardless of season.
-- **Footer row:** a `border-t border-default` divider at the bottom of the card content, a units `UBadge` on the left (`variant="subtle"`, `size="sm"`, leading `i-lucide-git-branch` icon, always rendered) and a single seasonality readout on the right, in priority order: `"Toute l'année"` (dimmed text) if active all 12 months, else the leaf-icon status indicator (`i-lucide-leaf`, `text-primary`, in a `size-5 bg-primary/10` circular halo) if currently in season, else `"Hors saison"` (dimmed text). The units badge itself follows the One Signal Rule: `color="primary"` with the count label ("N unité(s)") when there are any, `color="neutral"` with "Aucune unité" when there are none — indigo appears only when something is actually true.
-- **Shadow Strategy:** none (see Elevation & Depth); hover state is a border-color shift to `border-primary/50`, not a lift.
-- **Internal Padding:** `p-4` (16px), content stacked with `gap-2`.
+### Cards
+- **Corner Style:** 6px (`rounded-xl`).
+- **Background:** `bg-default` with a `border-default` hairline. Hover moves the border to `border-primary/50`. No lift, no shadow.
+- **Internal Padding:** 16px, content stacked with 8px gaps.
+- **Anatomy (ingredient / recipe):** name (Card Title) with an overflow menu; a fixed-height meta line (category, or tags/times); the macro readout; a footer row above a hairline holding a count badge on the left and the season mark on the right ("Toute l'année" / leaf / "Hors saison").
+- **Section panels:** the same frame with 16–20px padding (`p-4 sm:p-5`), a Title heading and an optional right-aligned meta ("12 pesées") or save hint.
 
-### Inputs / Selects
-- **Style:** `variant="outline"`, leading icon (search, category, visibility), `rounded-sm` corners matching the base radius token.
-- **Focus:** relies on Nuxt UI's default ring treatment; no custom override observed.
+### Lists and tables
+- **Sortable table (≥ 1024px):** in a 6px bordered frame, sticky headers in uppercase Label style, Muted Ink at rest, Signal Indigo when active, with a direction arrow. The sorted column's values turn semibold Headline Ink because that's the column the eye compares. Rows are separated by hairlines and hover to `bg-elevated/60`. Numeric columns are right-aligned, with the unit trailing in Dimmed Ink.
+- **Compact list (< 1024px):** two lines per row. Name with kcal and pie on the first; type, times and G/P/L on the second.
+- **Sort control:** where no column header exists, a small select showing the criterion's icon or macro dot, plus an outline button that flips the direction.
 
-### Progress / Macro Bars
-- **Style:** a 2px-tall (`h-2`) fully-rounded track in `bg-accented`, filled by a `bg-primary` (or `bg-primary/60` for a secondary macro) bar that animates its width over 500ms. This is the product's signature data-visualization primitive — every "amount of X out of a scale" reading in the app should reuse this exact shape, not a numeric-only readout.
+### Inputs / Fields
+- **Style:** Nuxt UI `variant="outline"` with a leading icon for search and filters, 3px corners. Number steppers use `UInputNumber` with tabular figures.
+- **Focus:** Nuxt UI's default primary ring.
+- **Setting row:** label (500, Body) and optional hint (Meta, Muted Ink) on the left, the control right-aligned. Wide controls stack under the label on mobile. Errors appear as Meta in Delete Red beneath, with `role="alert"`. Changes save immediately, confirmed by a brief success hint.
 
 ### Navigation
-- **Style:** vertical `UNavigationMenu` inside the collapsible sidebar; icon + label per item, nested children indent under a `defaultOpen` parent. Active/hover state is Nuxt UI's default, undecorated further.
+- **Sidebar:** vertical `UNavigationMenu`: Accueil, then grouped "Alimentation", "Suivi de mesures" and "Outils", open by default, with an icon and label per item. Tooltips and popovers when collapsed, Nuxt UI default active state. The header shows the logo avatar and "Mealfit". The footer holds the user menu (profile, settings, theme, appearance, log out).
+- **Wordmark:** "MEALFIT RESHAPE", bold, tight tracking, "RESHAPE" in Signal Indigo. Used on the standalone (landing, error) headers.
 
-### Error Fact Sheet (signature component)
-The 404/500 page's defining custom component: a bordered card headed "Fiche nutritionnelle de cette erreur," listing 4 deadpan stat rows (icon, label, right-aligned value) that reveal with an 80ms stagger and a 450ms ease-out count-up on numeric values, respecting `prefers-reduced-motion`. This is the clearest, most deliberate expression of the North Star and the reference to imitate when a new surface needs to feel unmistakably "Mealfit" rather than generically "Nuxt UI dashboard."
+### Macro readout (signature)
+The nutrition label at component scale. A row of three macro dots (`size-2`, macro colors) each followed by its letter (G / P / L) and its grams in medium Headline Ink, with the kcal figure (semibold) and "kcal" on the right. Underneath, a 6px fully-round composition bar in a Track Gray track: segments in macro colors, sized by grams, separated by 2px gaps, zero-value segments omitted, width animated over 500ms. With no data, the dots and figures go gray and dashed but the geometry stays the same.
+
+### Macro pie
+A small SVG disc (14–20px) in macro colors on a Track Gray base, starting with protéines at twelve o'clock and going clockwise. It stands in for the composition bar wherever a row is too narrow (tables, compact lists, meal pickers).
+
+### Target ring and calorie gauge
+Status-colored progress. **Meal ring:** 40px, 4px stroke on a Track Gray circle, the meal's icon centered, filled to kcal ÷ target in Under / On / Over color. Off-plan rows get a plain Track Gray disc instead. **Calorie gauge:** a 270° arc open at the bottom, 16px round-capped stroke, filled with the status color, with off-plan kcal continuing the arc in Over-Target Yellow. The remaining kcal sits in the centre (1.875rem, tabular, status-colored) with "kcal restantes" / "kcal en trop" beneath. Both animate `stroke-dasharray` over 500ms.
+
+### Ruled readout ("Relevé")
+Two to four stat cells in one 6px-bordered block, split by 1px Hairline rules (`gap-px` over `bg-border`). Each cell has an uppercase Label eyebrow, a figure (Stat or Stat Display) with its unit, and one or two Meta lines of context. A cell may end with a 6px primary progress bar and its start/percent captions. The settings page uses the same construction for per-meal shares.
+
+### Weight trend chart
+A hand-drawn SVG at real pixel width, so labels keep their size on mobile. Daily weigh-ins are small dots in Dimmed Ink, the 7-day trend is a 2.5px Signal Indigo line that draws in over 900ms, the calculator projection is a 1.5px dashed Dimmed Ink line, and the goal is a 1px Muted Ink rule with a semibold caption. Gridlines are Hairline and axis ticks are Meta in Dimmed Ink. Hover, touch and arrow keys move a Firm Hairline crosshair, with a 4px-radius tooltip listing Pesée / Tendance (indigo) / Projection. A legend of tiny inline SVG swatches sits beneath.
+
+### Weekly menu calendar
+A grid of days × meal rows, with today's column tinted `bg-primary/5`. Each cell holds 3px-radius meal cards (name in Meta medium, then quantity, kcal and G/P/L in neutral Dimmed Ink). They are draggable, and their edit / copy / delete icons turn indigo or red on hover. Each cell ends with a dashed "+" slot. A copied meal gets a solid primary border, and every "+" slot tints to show where it will paste. The drop placeholder is a dashed, faintly indigo ghost.
+
+### Error fact sheet (signature)
+The 404/500 page: a 4px-radius bordered `bg-elevated` panel headed "Fiche nutritionnelle de cette erreur" (Label), with four deadpan rows: an icon in a `bg-primary/10` square, a label, and a right-aligned tabular value. Rows reveal with an 80ms stagger over 420ms on the ease-out-expo curve, and numeric values count up over 450ms. Respects `prefers-reduced-motion`.
+
+### Motion
+Motion confirms that a value changed. It is never decoration. One curve does the expressive work, ease-out-expo `cubic-bezier(0.16, 1, 0.3, 1)`: computed content reveals over 300ms with a 6px rise, the error rows take 420ms, the trend line draws over 900ms. Bars, rings and the gauge animate width or dash over 500ms. Swiping between days slides content 32px with a fade (200ms in, 150ms out). A global `prefers-reduced-motion` rule collapses every animation and transition to near-zero.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep indigo reserved for active/selected/in-progress states only (The One Signal Rule) — a screen with indigo everywhere has lost the signal.
-- **Do** pair every large numeral with a smaller unit or label beside it (The Value-Needs-a-Unit Rule).
-- **Do** convey elevation with `border-default` and background steps, never `box-shadow` (The Border-Not-Shadow Rule).
-- **Do** reuse the macro-bar primitive (`bg-accented` track + `bg-primary` animated fill) for any new "amount relative to a scale" display.
-- **Do** treat the error page's data-sheet humor as evidence of the brand's real voice when a new surface needs personality, not as a one-off joke to leave alone.
+- **Do** keep each color in its territory: indigo for interaction, selection and live data; green / red-700 / amber for G / P / L; blue / green / yellow only for a value compared with a target (The Three Territories Rule).
+- **Do** reference semantic tokens (`primary`, `bg-elevated`, `text-dimmed`, `border-default`) so the runtime theme switch keeps working. Literal palette classes are reserved for the three macro colors.
+- **Do** pair every figure with a smaller, muted unit beside it, and set it in `tabular-nums` (The Value-Needs-a-Unit and Tabular Rules).
+- **Do** reuse the macro readout, macro pie and target ring for any new nutrition display instead of inventing a new chart.
+- **Do** keep slots rendered when empty, with dashes in Dimmed Ink, so grids align (The Stable Geometry Rule).
+- **Do** group related figures in one ruled block split by 1px hairlines (The Ruled-Grid Rule).
+- **Do** offer a table from 1024px and a compact two-line list below it for any sortable collection, never a horizontally scrolling table on mobile.
+- **Do** honor `prefers-reduced-motion` in every new animation and use the ease-out-expo curve for reveals.
 
 ### Don't:
-- **Don't** introduce a second typeface or a display/hero font — the data-sheet feel comes from Inter's spacing and case, not from typographic variety.
-- **Don't** add drop shadows to cards, buttons, or panels for a "lifted" look.
-- **Don't** round corners past `rounded-xl` (12px) on structural surfaces, or below `rounded-full` on pills/badges — nothing should land at a generic `rounded-md` softness.
-- **Don't** tint large surfaces with indigo (backgrounds, page sections); keep it on controls, borders, and fills only.
-- **Don't** invent whimsical copy or illustration elsewhere in the product to match the error page's tone — that humor is earned once, at the failure state, precisely because the rest of the app plays it straight.
+- **Don't** add `box-shadow` to cards, panels or buttons inside the app. The landing page's floating preview is the only exception.
+- **Don't** round a structural surface past `rounded-xl` (6px in this system), or give a card or panel pill-shaped corners.
+- **Don't** introduce a second typeface or a display font.
+- **Don't** tint large surfaces with indigo. The strongest allowed surface tint is `bg-primary/5` on the current day's column.
+- **Don't** color a single meal's figures with status colors. It has no target of its own.
+- **Don't** reorder the macros or reassign their colors. The macro pie's protein-first start is the only exception.
+- **Don't** put more green "reached" verdicts next to green glucides elements (known debt).
+- **Don't** write whimsical copy or add illustrations outside the error page. The humor is earned once, at the failure state.

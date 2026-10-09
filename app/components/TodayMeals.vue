@@ -14,6 +14,7 @@ const emit = defineEmits<{
   add: [mealType: MealType]
   /** Clic sur un repas issu d'une recette ou d'un aliment : ouvre sa fiche. */
   open: [entry: MenuEntry]
+  edit: [entry: MenuEntry]
   delete: [entry: MenuEntry]
 }>()
 
@@ -30,6 +31,7 @@ const secondaryCount = computed(() => props.secondaryRows.reduce((total, row) =>
       :row="row"
       @add="emit('add', $event)"
       @open="emit('open', $event)"
+      @edit="emit('edit', $event)"
       @delete="emit('delete', $event)"
     />
 
@@ -67,6 +69,7 @@ const secondaryCount = computed(() => props.secondaryRows.reduce((total, row) =>
           :row="row"
           @add="emit('add', $event)"
           @open="emit('open', $event)"
+          @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
         />
       </template>

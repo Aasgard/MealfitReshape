@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { TodayMealRow } from '~/types/today'
 import { MEAL_TARGET_TOLERANCE, TARGET_STATUS_COLOR, targetStatus } from '~/utils/dailyTargets'
 import { MENU_MEAL_TYPES } from '~/utils/menuEntries'
 
-/** Un repas de la liste "Manger" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré (supprimable). */
+/** Un repas de la liste "Manger" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré (modifiable, supprimable). */
 const props = defineProps<{
   row: TodayMealRow
 }>()
@@ -14,10 +15,17 @@ const emit = defineEmits<{
   add: [mealType: MealType]
   /** Clic sur un repas issu d'une recette ou d'un aliment : ouvre sa fiche. */
   open: [entry: MenuEntry]
+  edit: [entry: MenuEntry]
   delete: [entry: MenuEntry]
 }>()
 
 const isOpenable = (entry: MenuEntry) => !!(entry.recipeId || entry.ingredientId)
+
+/** Menu « ⋮ » d'un repas enregistré. */
+const entryActions = (entry: MenuEntry): DropdownMenuItem[][] => [
+  [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit', entry) }],
+  [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => emit('delete', entry) }],
+]
 
 /** Même icône que la ligne du calendrier des menus de la semaine. */
 const icon = computed(() => MENU_MEAL_TYPES.find(type => type.key === props.row.mealType)?.icon ?? 'i-lucide-utensils')
@@ -86,7 +94,7 @@ const ringLength = computed(() =>
     </div>
 
     <ul v-if="row.entries.length" class="mt-3 flex flex-col gap-2">
-      <!-- Le bouton de suppression est à côté de la zone cliquable, pas dedans : un <button> ne peut pas en contenir un autre. -->
+      <!-- Le menu d'actions est à côté de la zone cliquable, pas dedans : un <button> ne peut pas en contenir un autre. -->
       <li
         v-for="entry in row.entries"
         :key="entry.id"
@@ -113,15 +121,16 @@ const ringLength = computed(() =>
             </p>
           </div>
         </component>
-        <UButton
-          icon="i-lucide-trash-2"
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          class="shrink-0 text-dimmed hover:text-error"
-          :aria-label="`Supprimer ${entry.label}`"
-          @click="emit('delete', entry)"
-        />
+        <UDropdownMenu :items="entryActions(entry)" :content="{ align: 'end' }" :ui="{ content: 'w-40' }">
+          <UButton
+            icon="i-lucide-ellipsis-vertical"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            class="shrink-0 text-dimmed"
+            :aria-label="`Actions pour ${entry.label}`"
+          />
+        </UDropdownMenu>
       </li>
     </ul>
   </div>

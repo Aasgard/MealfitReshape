@@ -7,7 +7,7 @@ import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow } from '~/types/today'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
-import { buildDayEntries, consumedOfDay, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { buildDayEntries, consumedOfDay, mealSourceOf, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
 import { WEEK_STARTS_ON } from '~/utils/menuWeek'
 
@@ -62,7 +62,7 @@ const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
 const selectedWeekStart = computed(() => startOfWeek(selectedDay.value, { weekStartsOn: WEEK_STARTS_ON }))
 
 // Semaine du jour affiché (et la précédente) : naviguer dans une même semaine ne relance pas de requête.
-const { meals, addMeal, replaceMeals } = useMeals(selectedWeekStart)
+const { meals, addMeal, updateMealSource, replaceMeals } = useMeals(selectedWeekStart)
 watch(meals.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
@@ -258,28 +258,45 @@ const openEntryDetail = (entry: MenuEntry) => {
 /** Repas pour lequel la fenêtre d'ajout est ouverte (au jour affiché). */
 const addModalOpen = ref(false)
 const addTarget = ref<MealSlot | null>(null)
+/** Repas modifié via la même fenêtre ; `null` = ajout d'un nouveau repas dans `addTarget`. */
+const editingMeal = ref<Meal | null>(null)
+const editingSource = computed(() => editingMeal.value ? mealSourceOf(editingMeal.value) : null)
+
+const findMealSlot = (mealType: MealType) => ALL_MEAL_SLOTS.find(slot => slot.mealType === mealType) ?? null
 
 const openAddModal = (mealType: MealType) => {
-  addTarget.value = ALL_MEAL_SLOTS.find(slot => slot.mealType === mealType) ?? null
+  editingMeal.value = null
+  addTarget.value = findMealSlot(mealType)
+  addModalOpen.value = true
+}
+
+/** Ouvre la fenêtre pré-remplie avec le contenu du repas ; son jour et son repas ne changent pas. */
+const openEditModal = (entry: MenuEntry) => {
+  const meal = meals.value.find(m => m.id === entry.id)
+  if (!meal) return
+  editingMeal.value = meal
+  addTarget.value = findMealSlot(meal.mealType)
   addModalOpen.value = true
 }
 
 const addContextLabel = computed(() => addTarget.value ? `${selectedDayTitle.value} · ${addTarget.value.label}` : '')
 
-/** Contenu du jour affiché et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
+/** Contenu du jour affiché (hors repas modifié) et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
 const addDayBudget = computed(() => {
   if (!addTarget.value || addTarget.value.mealType === UNCOUNTED_MEAL_KEY) return null
-  return { consumed: consumedOfDay(dayEntries.value), targets: DAILY_TARGETS }
+  return { consumed: consumedOfDay(dayEntries.value, editingMeal.value?.id), targets: DAILY_TARGETS }
 })
 
 const submitAddedMeal = async (source: MealSource) => {
-  if (!addTarget.value) return
+  const meal = editingMeal.value
+  if (!meal && !addTarget.value) return
   try {
-    await addMeal({ date: selectedDay.value, mealType: addTarget.value.mealType, source })
+    if (meal) await updateMealSource(meal, source)
+    else await addMeal({ date: selectedDay.value, mealType: addTarget.value!.mealType, source })
   } catch (error: any) {
     toast.add({
       title: 'Erreur',
-      description: `Le repas n'a pas pu être enregistré : ${error.message || 'une erreur est survenue'}.`,
+      description: `Le repas n'a pas pu être ${meal ? 'modifié' : 'enregistré'} : ${error.message || 'une erreur est survenue'}.`,
       color: 'error',
     })
   }
@@ -482,7 +499,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </NuxtLink>
             </div>
 
-            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" @delete="deleteEntry" />
+            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" @edit="openEditModal" @delete="deleteEntry" />
           </div>
         </Transition>
       </div>
@@ -495,6 +512,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :ingredients="ingredients"
     :ingredients-by-id="ingredientsById"
     :context-label="addContextLabel"
+    :initial-source="editingSource"
     :day-budget="addDayBudget"
     @submit="submitAddedMeal"
   />

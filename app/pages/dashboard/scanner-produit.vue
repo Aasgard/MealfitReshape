@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { SCANNER_ERROR_MESSAGES as SCANNER_ERRORS } from '~/composables/useBarcodeScanner'
 import type { ScannerErrorKind } from '~/composables/useBarcodeScanner'
 import { ingredientPrefillFromOff } from '~/utils/offNutrition'
-import type { IngredientPrefill, OffProduct } from '~/utils/offNutrition'
+import type { IngredientPrefill } from '~/utils/offNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Scanner produit - Mealfit',
@@ -14,19 +15,8 @@ useHead({
   htmlAttrs: { class: 'touch-pan-x touch-pan-y' },
 })
 
-const OFF_PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/product/'
-
 const scannerOpen = ref(false)
 const scannerError = ref<ScannerErrorKind | null>(null)
-
-const SCANNER_ERRORS: Record<ScannerErrorKind, string> = {
-  'denied': 'Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, ou importez une photo du code-barres.',
-  'no-camera': 'Aucune caméra disponible sur cet appareil. Importez une photo du code-barres ou saisissez-le.',
-  'busy': 'La caméra est utilisée par une autre application. Fermez-la, puis réessayez.',
-  'insecure': 'La caméra n’est accessible que sur une adresse sécurisée (https). Importez une photo ou saisissez le code.',
-  'decoder': 'Le module de lecture des codes-barres n’a pas pu se charger. Vérifiez la connexion, puis réessayez.',
-  'unknown': 'La caméra n’a pas pu démarrer. Réessayez, ou importez une photo du code-barres.',
-}
 
 /** Erreurs sans issue sur cet appareil : le bouton de scan reste désactivé. */
 const cameraUnavailable = computed(() => scannerError.value === 'no-camera' || scannerError.value === 'insecure')
@@ -99,59 +89,15 @@ async function onPhotoSelected(event: Event) {
 
 // --- Recherche Open Food Facts ---
 
-type OffResponse = {
-  code?: string
-  status?: number
-  status_verbose?: string
-  product?: OffProduct & {
-    nutriscore_grade?: string
-    image_front_url?: string
-    image_front_small_url?: string
-    image_url?: string
-    image_small_url?: string
-  }
-}
+const { state, lookup: lookupProduct, retry } = useOffProduct()
 
-type LookupState =
-  | { kind: 'idle' }
-  | { kind: 'loading', code: string }
-  | { kind: 'error', code: string }
-  | { kind: 'done', code: string, data: OffResponse, pretty: string, bytes: number }
-
-const state = shallowRef<LookupState>({ kind: 'idle' })
-let controller: AbortController | null = null
-
-async function lookup(code: string) {
-  controller?.abort()
-  const current = new AbortController()
-  controller = current
-  state.value = { kind: 'loading', code }
+function lookup(code: string) {
   copied.value = false
-
-  try {
-    const response = await fetch(`${OFF_PRODUCT_URL}${code}.json`, { signal: current.signal })
-    const text = await response.text()
-    // Produit inconnu : Open Food Facts répond 404 avec un JSON `status: 0`, qu'on affiche comme le reste.
-    const data = JSON.parse(text) as OffResponse
-    state.value = {
-      kind: 'done',
-      code,
-      data,
-      pretty: JSON.stringify(data, null, 2),
-      bytes: new Blob([text]).size,
-    }
-  } catch (error) {
-    if (current.signal.aborted) return
-    console.error('Recherche Open Food Facts impossible', error)
-    state.value = { kind: 'error', code }
-  }
+  lookupProduct(code)
 }
 
-function retry() {
-  if (state.value.kind === 'error') lookup(state.value.code)
-}
-
-onBeforeUnmount(() => controller?.abort())
+const pretty = computed(() => (state.value.kind === 'done' ? JSON.stringify(state.value.data, null, 2) : ''))
+const bytes = computed(() => (state.value.kind === 'done' ? new Blob([state.value.text]).size : 0))
 
 const found = computed(() => state.value.kind === 'done' && state.value.data.status === 1)
 
@@ -192,8 +138,8 @@ const productMeta = computed(() => {
 
 const sizeLabel = computed(() => {
   if (state.value.kind !== 'done') return ''
-  const kb = state.value.bytes / 1024
-  return kb < 1 ? `${state.value.bytes} o` : `${kb.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`
+  const kb = bytes.value / 1024
+  return kb < 1 ? `${bytes.value} o` : `${kb.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`
 })
 
 /**
@@ -202,7 +148,7 @@ const sizeLabel = computed(() => {
  */
 const highlightedJson = computed(() => {
   if (state.value.kind !== 'done') return ''
-  const escaped = state.value.pretty
+  const escaped = pretty.value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -239,7 +185,7 @@ const toast = useToast()
 async function copyJson() {
   if (state.value.kind !== 'done') return
   try {
-    await navigator.clipboard.writeText(state.value.pretty)
+    await navigator.clipboard.writeText(pretty.value)
     copied.value = true
     clearTimeout(copiedTimer)
     copiedTimer = setTimeout(() => (copied.value = false), 2000)

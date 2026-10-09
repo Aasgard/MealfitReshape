@@ -1,6 +1,6 @@
 import { differenceInCalendarDays } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
-import type { Meal, MealSource, MealType } from '~/types/meal'
+import type { Meal, MealSource, MealType, ScannedProduct } from '~/types/meal'
 import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { macrosForQuantity, type IngredientMacros } from './ingredientNutrition'
@@ -94,9 +94,9 @@ export function buildIngredientDraft(ingredient: Ingredient, unitId: string | nu
   return draftFromMacros(ingredient.label, macros, { ingredientId: ingredient.id, quantityLabel })
 }
 
-/** Repas saisi à la main : un libellé et des macros brutes. */
-export function buildManualDraft(label: string, macros: IngredientMacros): MenuEntryDraft {
-  return draftFromMacros(label, macros)
+/** Repas saisi à la main : un libellé et des macros brutes ; issu d'un produit scanné, il affiche la quantité mangée. */
+export function buildManualDraft(label: string, macros: IngredientMacros, product?: Pick<ScannedProduct, 'quantity' | 'unit'>): MenuEntryDraft {
+  return draftFromMacros(label, macros, product ? { quantityLabel: `${formatQuantity(product.quantity)} ${product.unit}` } : {})
 }
 
 /** Ce qui a été mangé, sans le contexte du repas : de quoi en créer un autre exemplaire (copier / coller). */
@@ -114,6 +114,7 @@ export function mealSourceOf(meal: Meal): MealSource {
         protein: meal.protein,
         fat: meal.fat,
         carbohydrates: meal.carbohydrates,
+        ...(meal.product ? { product: meal.product } : {}),
       }
   }
 }
@@ -130,7 +131,7 @@ function draftFromMeal(meal: Meal, recipesById: Map<string, Recipe>, ingredients
       return ingredient ? buildIngredientDraft(ingredient, meal.unitId ?? null, meal.quantity) : null
     }
     case 'RAW':
-      return buildManualDraft(meal.label, meal)
+      return buildManualDraft(meal.label, meal, meal.product)
   }
 }
 

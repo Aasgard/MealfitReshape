@@ -70,6 +70,16 @@ export type CameraErrorKind = 'denied' | 'no-camera' | 'busy' | 'insecure' | 'un
 /** Erreurs remontées par le viseur : caméra, ou module de lecture qui n'a pas pu se charger. */
 export type ScannerErrorKind = CameraErrorKind | 'decoder'
 
+/** Message affiché pour chaque erreur du viseur, avec le recours possible sur cet appareil. */
+export const SCANNER_ERROR_MESSAGES: Record<ScannerErrorKind, string> = {
+  'denied': 'Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur, ou importez une photo du code-barres.',
+  'no-camera': 'Aucune caméra disponible sur cet appareil. Importez une photo du code-barres ou saisissez-le.',
+  'busy': 'La caméra est utilisée par une autre application. Fermez-la, puis réessayez.',
+  'insecure': 'La caméra n’est accessible que sur une adresse sécurisée (https). Importez une photo ou saisissez le code.',
+  'decoder': 'Le module de lecture des codes-barres n’a pas pu se charger. Vérifiez la connexion, puis réessayez.',
+  'unknown': 'La caméra n’a pas pu démarrer. Réessayez, ou importez une photo du code-barres.',
+}
+
 /** Ouvre la caméra arrière. Rejette avec un `CameraErrorKind` lisible par l'interface. */
 export async function openRearCamera(): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) {

@@ -24,10 +24,31 @@ export type IngredientMealSource = {
   quantity: number
 }
 
-/** Un repas saisi à la main : un libellé et des macros brutes. */
+/**
+ * Produit scanné (Open Food Facts) d'où un repas « Macros » tire ses valeurs, sans être enregistré comme ingrédient.
+ * Copie figée au moment du scan : l'affichage ne dépend jamais d'Open Food Facts. Champs facultatifs omis plutôt
+ * qu'`undefined` (refusé par Firestore).
+ */
+export type ScannedProduct = {
+  ean: string
+  name: string
+  brand?: string
+  imageUrl?: string
+  /** Base des valeurs : pour 100 g, ou 100 ml pour une boisson. */
+  unit: 'g' | 'ml'
+  per100: IngredientMacros
+  /** Une portion et l'emballage entier, en `unit`, quand Open Food Facts les donne : raccourcis de quantité. */
+  serving?: number
+  package?: number
+  /** Quantité mangée, en `unit`. */
+  quantity: number
+}
+
+/** Un repas saisi à la main : un libellé et des macros brutes, calculées depuis un produit scanné quand `product` est présent. */
 export type RawMealSource = IngredientMacros & {
   category: 'RAW'
   label: string
+  product?: ScannedProduct
 }
 
 /** Ce qui a été mangé, sans son contexte (jour, ligne du calendrier, utilisateur). */

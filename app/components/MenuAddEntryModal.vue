@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
-import type { MealSource } from '~/types/meal'
+import type { MealSource, ScannedProduct } from '~/types/meal'
 import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, type MenuEntryDraft } from '~/utils/menuEntries'
@@ -10,11 +10,12 @@ import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeTy
 import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
 import { matchesSearch } from '~/utils/search'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
+import { isCompletePer100, readingsForQuantity, scannedProductLabel, type ScannedProductDraft } from '~/utils/offNutrition'
 
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
  * une recette de la base (en nombre de parts), un ingrédient de la base (en grammes ou en unité),
- * ou des macros brutes avec un libellé. Émet un `MealSource` ; le parent l'enregistre dans la case.
+ * ou des macros brutes avec un libellé, saisies ou tirées d'un produit scanné. Émet un `MealSource` ; le parent l'enregistre dans la case.
  * Avec `initialSource`, la modale sert à modifier ce repas : elle s'ouvre pré-remplie.
  */
 const props = defineProps<{
@@ -184,6 +185,19 @@ const protein = ref('')
 const fat = ref('')
 const carbohydrates = ref('')
 
+/**
+ * Produit scanné (onglet Macros) : tant qu'il est présent, les macros se calculent depuis ses valeurs pour 100 et la
+ * quantité mangée, au lieu d'être saisies. « Saisir à la main » le détache en gardant les valeurs calculées.
+ */
+const product = shallowRef<ScannedProductDraft | null>(null)
+const productQuantity = ref('')
+const productScan = ref<{ openScanner: () => void } | null>(null)
+/** Lien d'image mort côté Open Food Facts : la vignette disparaît plutôt que de s'afficher cassée. */
+const productImageFailed = ref(false)
+watch(product, () => {
+  productImageFailed.value = false
+})
+
 watch(open, (isOpen) => {
   if (!isOpen) return
   mode.value = 'recipe'
@@ -205,6 +219,8 @@ watch(open, (isOpen) => {
   protein.value = ''
   fat.value = ''
   carbohydrates.value = ''
+  product.value = null
+  productQuantity.value = ''
 
   const source = props.initialSource
   if (source?.category === 'RECIPE') {
@@ -222,6 +238,11 @@ watch(open, (isOpen) => {
     protein.value = String(source.protein)
     fat.value = String(source.fat)
     carbohydrates.value = String(source.carbohydrates)
+    if (source.product) {
+      const { quantity, ...scanned } = source.product
+      product.value = scanned
+      productQuantity.value = String(quantity)
+    }
   }
 })
 
@@ -418,6 +439,69 @@ const quantityValue = computed(() => parsePositiveNumber(quantity.value))
 /** Macro optionnelle : vide = 0, sinon un nombre positif ou nul. */
 const macroValue = (raw: string) => raw.trim() ? parseNonNegativeNumber(raw) : 0
 
+const productQuantityValue = computed(() => parsePositiveNumber(productQuantity.value))
+
+/** Valeurs pour la quantité mangée ; `null` sans quantité valide ou si une valeur manque dans la fiche. */
+const productMacros = computed(() => {
+  if (!product.value || productQuantityValue.value === null) return null
+  const readings = readingsForQuantity(product.value.per100, productQuantityValue.value)
+  return isCompletePer100(readings) ? readings : null
+})
+
+/** Valeurs absentes de la fiche, nommées dans l'alerte qui invite à les compléter. */
+const PER100_LABELS = { calories: 'calories', carbohydrates: 'glucides', protein: 'protéines', fat: 'lipides' } as const
+const productMissing = computed(() => {
+  const per100 = product.value?.per100
+  if (!per100) return []
+  return (Object.keys(PER100_LABELS) as (keyof typeof PER100_LABELS)[]).filter(k => per100[k] == null).map(k => PER100_LABELS[k])
+})
+
+const formatAmount = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
+
+/** Raccourcis de quantité : une portion et l'emballage entier, quand la fiche les donne. */
+const quantityShortcuts = computed(() => {
+  const p = product.value
+  if (!p) return []
+  const shortcuts = [
+    p.serving ? { label: '1 portion', value: p.serving } : null,
+    p.package ? { label: 'Emballage', value: p.package } : null,
+  ]
+  return shortcuts.filter(s => s !== null).map(s => ({ ...s, text: `${s.label} · ${formatAmount(s.value)} ${p.unit}` }))
+})
+
+const setProductQuantity = (value: number) => {
+  productQuantity.value = String(value)
+}
+
+const onProductFound = (scanned: ScannedProductDraft) => {
+  product.value = scanned
+  label.value = scannedProductLabel(scanned)
+  productQuantity.value = String(scanned.serving ?? 100)
+  submitted.value = false
+}
+
+/** Repasse en saisie libre : les valeurs connues pour la quantité choisie (100 à défaut) remplissent les champs. */
+const detachProduct = () => {
+  const p = product.value
+  if (!p) return
+  const readings = readingsForQuantity(p.per100, productQuantityValue.value ?? 100)
+  const text = (n: number | null) => (n == null ? '' : String(n))
+  kcal.value = text(readings.calories == null ? null : Math.round(readings.calories))
+  carbohydrates.value = text(readings.carbohydrates)
+  protein.value = text(readings.protein)
+  fat.value = text(readings.fat)
+  if (!label.value.trim()) label.value = scannedProductLabel(p)
+  product.value = null
+}
+
+/** Remplace le produit : le viseur s'ouvre aussitôt ; s'il est refermé sans scan, l'onglet revient à la saisie libre. */
+const scanAnotherProduct = async () => {
+  product.value = null
+  label.value = ''
+  await nextTick()
+  productScan.value?.openScanner()
+}
+
 const manualMacros = computed(() => {
   const values = {
     calories: parseNonNegativeNumber(kcal.value),
@@ -443,6 +527,12 @@ const mealSource = computed<MealSource | null>(() => {
       quantity: quantityValue.value,
     }
   }
+  if (product.value) {
+    const { per100 } = product.value
+    if (!label.value.trim() || !productMacros.value || productQuantityValue.value === null || !isCompletePer100(per100)) return null
+    const stored: ScannedProduct = { ...product.value, per100, quantity: productQuantityValue.value }
+    return { category: 'RAW', label: label.value.trim(), ...productMacros.value, product: stored }
+  }
   if (!label.value.trim() || !manualMacros.value) return null
   return { category: 'RAW', label: label.value.trim(), ...manualMacros.value }
 })
@@ -457,6 +547,10 @@ const draft = computed<MenuEntryDraft | null>(() => {
     if (!selectedIngredient.value || quantityValue.value === null) return null
     return buildIngredientDraft(selectedIngredient.value, unit.value === GRAMS_UNIT ? null : unit.value, quantityValue.value)
   }
+  if (product.value) {
+    if (!label.value.trim() || !productMacros.value || productQuantityValue.value === null) return null
+    return buildManualDraft(label.value.trim(), productMacros.value, { quantity: productQuantityValue.value, unit: product.value.unit })
+  }
   if (!label.value.trim() || !manualMacros.value) return null
   return buildManualDraft(label.value.trim(), manualMacros.value)
 })
@@ -470,7 +564,8 @@ const numberError = (raw: string, parse: (v: string) => number | null, required:
 const recipeError = computed(() => submitted.value && !recipeId.value ? 'Requis' : undefined)
 const ingredientError = computed(() => submitted.value && !ingredientId.value ? 'Requis' : undefined)
 const quantityError = computed(() => numberError(quantity.value, parsePositiveNumber, true))
-const labelError = computed(() => submitted.value && !label.value.trim() ? 'Requis' : undefined)
+const productQuantityError = computed(() => numberError(productQuantity.value, parsePositiveNumber, true))
+const labelError =computed(() => submitted.value && !label.value.trim() ? 'Requis' : undefined)
 const kcalError = computed(() => numberError(kcal.value, parseNonNegativeNumber, true))
 const proteinError = computed(() => numberError(protein.value, parseNonNegativeNumber, false))
 const fatError = computed(() => numberError(fat.value, parseNonNegativeNumber, false))
@@ -745,7 +840,90 @@ const onSubmit = () => {
           </div>
         </template>
 
+        <template v-else-if="product">
+          <!-- Fiche figée du produit scanné : ses valeurs pour 100, base du calcul des macros. -->
+          <div class="flex items-start gap-3 rounded-lg border border-default p-3">
+            <!-- Fond blanc fixe, même en sombre : les photos Open Food Facts sont détourées sur blanc. -->
+            <div v-if="product.imageUrl && !productImageFailed" class="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md border border-default bg-white p-0.5">
+              <img
+                :src="product.imageUrl"
+                alt=""
+                class="max-h-full max-w-full object-contain"
+                referrerpolicy="no-referrer"
+                @error="productImageFailed = true"
+              >
+            </div>
+            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+              <p class="line-clamp-2 text-sm font-semibold text-highlighted" :class="!product.name && 'text-dimmed'">
+                {{ product.name || 'Nom non renseigné' }}
+              </p>
+              <p class="truncate text-xs text-muted tabular-nums">
+                {{ [product.brand, `EAN ${product.ean}`].filter(Boolean).join(' · ') }}
+              </p>
+              <p class="mt-1 flex flex-wrap items-baseline gap-x-2 text-xs text-muted tabular-nums">
+                <span class="font-semibold text-highlighted">{{ product.per100.calories == null ? '—' : formatAmount(product.per100.calories) }} kcal</span>
+                <span v-for="macro in RECIPE_MACROS" :key="macro.key" class="flex items-center gap-1">
+                  <span class="size-1.5 rounded-full" :class="product.per100[macro.key] == null ? 'bg-accented' : macro.dot" />
+                  <span class="sr-only">{{ macro.label }}</span>
+                  <span aria-hidden="true">{{ macro.short }}</span>
+                  {{ product.per100[macro.key] == null ? '—' : formatAmount(product.per100[macro.key]!) }}
+                </span>
+                <span class="text-dimmed">pour 100 {{ product.unit }}</span>
+              </p>
+            </div>
+          </div>
+
+          <UAlert
+            v-if="productMissing.length"
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-circle-alert"
+            :title="`Open Food Facts ne renseigne pas : ${productMissing.join(', ')}`"
+            description="Complétez ces valeurs depuis l’étiquette pour ajouter ce produit."
+            :actions="[{ label: 'Compléter à la main', color: 'warning', variant: 'outline', icon: 'i-lucide-pencil', onClick: detachProduct }]"
+          />
+
+          <UFormField label="Libellé" :error="labelError">
+            <UInput v-model="label" size="md" variant="outline" class="w-full" />
+          </UFormField>
+
+          <UFormField label="Quantité mangée" :error="productQuantityError">
+            <div class="flex flex-col gap-2">
+              <div v-if="quantityShortcuts.length" class="flex flex-wrap gap-1.5">
+                <UButton
+                  v-for="shortcut in quantityShortcuts"
+                  :key="shortcut.label"
+                  size="xs"
+                  color="neutral"
+                  :variant="productQuantityValue === shortcut.value ? 'solid' : 'outline'"
+                  class="tabular-nums"
+                  :aria-pressed="productQuantityValue === shortcut.value"
+                  @click="setProductQuantity(shortcut.value)"
+                >
+                  {{ shortcut.text }}
+                </UButton>
+              </div>
+              <UInput
+                v-model="productQuantity"
+                type="text"
+                inputmode="decimal"
+                placeholder="100"
+                size="md"
+                variant="outline"
+                class="w-full"
+                :ui="{ base: 'tabular-nums', trailing: 'pe-3' }"
+              >
+                <template #trailing>
+                  <span class="text-sm text-muted">{{ product.unit }}</span>
+                </template>
+              </UInput>
+            </div>
+          </UFormField>
+        </template>
+
         <template v-else>
+          <MenuProductScan ref="productScan" @found="onProductFound" />
+          <USeparator label="ou saisissez les valeurs" :ui="{ label: 'text-xs text-dimmed font-normal' }" />
           <UFormField label="Libellé" :error="labelError">
             <UInput v-model="label" placeholder="ex : Restaurant, barre protéinée..." size="md" variant="outline" class="w-full" />
           </UFormField>
@@ -765,12 +943,22 @@ const onSubmit = () => {
           </div>
         </template>
 
-        <!-- Aperçu de ce qui sera ajouté (mode Macros : la saisie elle-même fait foi). -->
-        <p v-if="draft && mode !== 'macros'" class="rounded-md bg-elevated px-3 py-2 text-sm text-muted tabular-nums">
+        <!-- Aperçu de ce qui sera ajouté (mode Macros saisi à la main : la saisie elle-même fait foi). -->
+        <p v-if="draft && (mode !== 'macros' || product)" class="rounded-md bg-elevated px-3 py-2 text-sm text-muted tabular-nums">
           <span class="font-semibold text-highlighted">{{ draft.kcal }} kcal</span>
           -
           <MenuMacroLabels :carbohydrates="draft.carbohydrates" :protein="draft.protein" :fat="draft.fat" />
         </p>
+
+        <div v-if="mode === 'macros' && product" class="flex flex-wrap items-center justify-center gap-x-1 text-xs text-muted">
+          <UButton color="neutral" variant="link" size="xs" class="px-0.5 font-medium text-toned" @click="detachProduct">
+            Saisir à la main
+          </UButton>
+          <span aria-hidden="true" class="text-dimmed">·</span>
+          <UButton color="neutral" variant="link" size="xs" class="px-0.5 font-medium text-toned" @click="scanAnotherProduct">
+            Scanner un autre produit
+          </UButton>
+        </div>
       </div>
     </template>
 

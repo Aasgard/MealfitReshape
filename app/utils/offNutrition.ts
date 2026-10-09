@@ -1,3 +1,6 @@
+import type { ScannedProduct } from '~/types/meal'
+import type { IngredientMacros } from '~/utils/ingredientNutrition'
+
 /** Sous-ensemble d'une fiche produit Open Food Facts lu pour les valeurs nutritionnelles. */
 export type OffNutritionSource = {
   nutriments?: Record<string, unknown>
@@ -85,4 +88,82 @@ export function ingredientPrefillFromOff(code: string, product: OffProduct): Ing
     density: isPer100Ml(product) ? '1' : '',
     comment: `EAN ${code}`,
   }
+}
+
+/** Fiche produit telle que la renvoie l'API Open Food Facts (sous-ensemble lu par l'app). */
+export type OffProductDetails = OffProduct & {
+  nutriscore_grade?: string
+  image_front_url?: string
+  image_front_small_url?: string
+  image_url?: string
+  image_small_url?: string
+  serving_quantity?: number | string
+  product_quantity?: number | string
+}
+
+export type OffResponse = {
+  code?: string
+  status?: number
+  status_verbose?: string
+  product?: OffProductDetails
+}
+
+/** Valeurs pour 100 d'un produit scanné ; `null` = non renseignée par Open Food Facts (jamais remplacée par 0). */
+export type Per100Readings = Record<keyof IngredientMacros, number | null>
+
+/** Produit scanné avant le choix de la quantité : des valeurs peuvent encore manquer. */
+export type ScannedProductDraft = Omit<ScannedProduct, 'per100' | 'quantity'> & { per100: Per100Readings }
+
+function positiveAt(value: unknown): number | undefined {
+  const n = typeof value === 'string' ? Number(value.replace(',', '.')) : value
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n * 10) / 10 : undefined
+}
+
+const readingValue = (reading: NutrientReading, digits: number) =>
+  reading.kind === 'value' ? Math.round(reading.value * 10 ** digits) / 10 ** digits : null
+
+/** Libellé de repas d'un produit : « Produit — Marque », comme le nom d'ingrédient créé depuis le scanner. */
+export function scannedProductLabel(product: Pick<ScannedProduct, 'name' | 'brand'>): string {
+  return product.name && product.brand ? `${product.name} — ${product.brand}` : product.name || product.brand || ''
+}
+
+/** Ce qu'un repas garde d'une fiche Open Food Facts. Les champs absents sont omis (Firestore refuse `undefined`). */
+export function scannedProductFromOff(code: string, product: OffProductDetails): ScannedProductDraft {
+  const nutriments = product.nutriments ?? {}
+  const brand = product.brands?.split(',')[0]?.trim()
+  const imageUrl = product.image_front_small_url || product.image_small_url || product.image_front_url || product.image_url
+  const serving = positiveAt(product.serving_quantity)
+  const pack = positiveAt(product.product_quantity)
+  return {
+    ean: code,
+    name: (product.product_name_fr || product.product_name || '').trim(),
+    ...(brand ? { brand } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    unit: isPer100Ml(product) ? 'ml' : 'g',
+    per100: {
+      calories: readingValue(readEnergy(nutriments), 0),
+      carbohydrates: readingValue(readNutrient(nutriments, 'carbohydrates'), 1),
+      protein: readingValue(readNutrient(nutriments, 'proteins'), 1),
+      fat: readingValue(readNutrient(nutriments, 'fat'), 1),
+    },
+    ...(serving ? { serving } : {}),
+    // Un emballage d'une seule portion ne donne pas un second raccourci identique.
+    ...(pack && pack !== serving ? { package: pack } : {}),
+  }
+}
+
+/** Valeurs pour `quantity` (en g ou ml) d'un produit, à 0,1 près ; une valeur non renseignée reste `null`. */
+export function readingsForQuantity(per100: Per100Readings, quantity: number): Per100Readings {
+  const scale = (n: number | null) => (n == null ? null : Math.round((n * quantity) / 10) / 10)
+  return {
+    calories: scale(per100.calories),
+    carbohydrates: scale(per100.carbohydrates),
+    protein: scale(per100.protein),
+    fat: scale(per100.fat),
+  }
+}
+
+/** Les quatre valeurs sont connues : le produit peut servir de repas tel quel. */
+export function isCompletePer100(per100: Per100Readings): per100 is IngredientMacros {
+  return Object.values(per100).every(v => v != null)
 }

@@ -9,6 +9,7 @@ import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
+import type { IngredientPrefill } from '~/utils/offNutrition'
 
 /**
  * Slideover d'ajout/modification d'ingrédient — un seul composant pour les deux modes.
@@ -18,8 +19,11 @@ const props = withDefaults(defineProps<{
   ingredient: Ingredient | null
   /** Recettes accessibles, pour interdire la suppression d'une unité utilisée dans l'une d'elles. */
   recipes?: Recipe[]
+  /** Valeurs proposées en création, ex. depuis un produit scanné ; ignorées en édition. */
+  prefill?: IngredientPrefill | null
 }>(), {
   recipes: () => [],
+  prefill: null,
 })
 
 const open = defineModel<boolean>('open', { default: false })
@@ -77,7 +81,26 @@ function resetForm() {
     : []
   comment.value = ing?.comment ?? ''
   submitted.value = false
+
+  if (prefill.value) {
+    label.value = prefill.value.label
+    density.value = prefill.value.density
+    calories.value = prefill.value.calories
+    protein.value = prefill.value.protein
+    carbohydrates.value = prefill.value.carbohydrates
+    fat.value = prefill.value.fat
+    comment.value = prefill.value.comment
+  }
 }
+
+const prefill = computed(() => (isEditMode.value ? null : props.prefill))
+
+const valuesHint = computed(() => {
+  if (!prefill.value) return 'Valeurs pour 100 g (optionnel)'
+  return prefill.value.density
+    ? 'Valeurs pour 100 ml d’après Open Food Facts, comptées pour 100 g avec une densité de 1'
+    : 'Valeurs pour 100 g d’après Open Food Facts'
+})
 
 watch(open, (isOpen) => {
   if (isOpen) resetForm()
@@ -290,7 +313,7 @@ async function handleSubmit() {
 
         <!-- Valeurs nutritionnelles -->
         <div>
-          <p class="text-xs text-dimmed mb-2">Valeurs pour 100 g (optionnel)</p>
+          <p class="text-xs text-dimmed mb-2">{{ valuesHint }}</p>
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Calories (kcal)" :error="caloriesError">
               <UInput v-model="calories" type="text" inputmode="decimal" placeholder="ex : 52" size="md" variant="outline" class="w-full" />

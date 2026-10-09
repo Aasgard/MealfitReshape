@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import type { ScannerErrorKind } from '~/composables/useBarcodeScanner'
-import type { OffNutritionSource } from '~/components/ProductNutritionFacts.vue'
+import { ingredientPrefillFromOff } from '~/utils/offNutrition'
+import type { IngredientPrefill, OffProduct } from '~/utils/offNutrition'
 
 useSeoMeta({
   title: 'Dashboard - Scanner produit - Mealfit',
   description: 'Dashboard - Scanner produit - Mealfit',
+})
+
+// Pas de zoom, comme sur l'accueil : la balise viewport le bloque sur Android, `touch-action` sur iOS (qui ignore user-scalable).
+useHead({
+  meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' }],
+  htmlAttrs: { class: 'touch-pan-x touch-pan-y' },
 })
 
 const OFF_PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/product/'
@@ -40,6 +47,10 @@ function onScannerError(kind: ScannerErrorKind) {
 }
 
 // --- Saisie manuelle ---
+
+/** Recours rares : repliés derrière une ligne, sauf quand la caméra est inutilisable et qu'ils sont la seule issue. */
+const manualOpen = ref(false)
+const manualVisible = computed(() => manualOpen.value || cameraUnavailable.value)
 
 const manualCode = ref('')
 const manualError = ref<string>()
@@ -92,11 +103,12 @@ type OffResponse = {
   code?: string
   status?: number
   status_verbose?: string
-  product?: OffNutritionSource & {
-    product_name?: string
-    product_name_fr?: string
-    brands?: string
+  product?: OffProduct & {
     nutriscore_grade?: string
+    image_front_url?: string
+    image_front_small_url?: string
+    image_url?: string
+    image_small_url?: string
   }
 }
 
@@ -113,7 +125,6 @@ async function lookup(code: string) {
   controller?.abort()
   const current = new AbortController()
   controller = current
-  manualCode.value = code
   state.value = { kind: 'loading', code }
   copied.value = false
 
@@ -152,6 +163,33 @@ const productName = computed(() => {
 
 const productBrand = computed(() => (state.value.kind === 'done' ? state.value.data.product?.brands || null : null))
 
+/** Photo de face (l'emballage tel qu'on le reconnaît en rayon), à défaut la photo principale de la fiche. */
+const productImage = computed(() => {
+  if (!found.value || state.value.kind !== 'done') return null
+  const product = state.value.data.product
+  const full = product?.image_front_url || product?.image_url
+  if (!full) return null
+  return { full, thumb: product?.image_front_small_url || product?.image_small_url || full }
+})
+
+/** Lien d'image mort côté OFF : on retire la vignette plutôt que d'afficher une image cassée. */
+const imageFailed = ref(false)
+watch(productImage, () => {
+  imageFailed.value = false
+})
+
+/** Le titre porte à lui seul le statut : un nom, ou « Produit introuvable ». */
+const productTitle = computed(() => {
+  if (!found.value) return 'Produit introuvable'
+  return productName.value || 'Nom non renseigné'
+})
+
+const productMeta = computed(() => {
+  if (state.value.kind !== 'done') return ''
+  if (!found.value) return `Le code ${state.value.code} n’existe pas encore dans Open Food Facts.`
+  return [productBrand.value, `EAN ${state.value.code}`].filter(Boolean).join(' · ')
+})
+
 const sizeLabel = computed(() => {
   if (state.value.kind !== 'done') return ''
   const kb = state.value.bytes / 1024
@@ -179,6 +217,17 @@ const highlightedJson = computed(() => {
     },
   )
 })
+
+// --- Création de l'ingrédient ---
+
+const ingredientFormOpen = ref(false)
+const ingredientPrefill = shallowRef<IngredientPrefill | null>(null)
+
+function createIngredient() {
+  if (state.value.kind !== 'done' || !state.value.data.product) return
+  ingredientPrefill.value = ingredientPrefillFromOff(state.value.code, state.value.data.product)
+  ingredientFormOpen.value = true
+}
 
 /** Le JSON brut reste disponible mais replié : la lecture commence par le relevé nutritionnel. */
 const jsonOpen = ref(false)
@@ -216,16 +265,7 @@ async function copyJson() {
     <template #body>
       <div class="flex flex-1 flex-col p-4 sm:p-6 overflow-auto">
         <div class="w-full max-w-2xl flex flex-col gap-6 text-default">
-          <section class="rounded-xl border border-default p-4 sm:p-5 flex flex-col gap-4" aria-labelledby="scan-title">
-            <div class="flex flex-col gap-1">
-              <h2 id="scan-title" class="text-lg font-bold tracking-tight text-highlighted">
-                Lire un code-barres
-              </h2>
-              <p class="text-sm text-muted">
-                Visez le code-barres d’un emballage pour récupérer sa fiche Open Food Facts.
-              </p>
-            </div>
-
+          <section class="flex flex-col gap-3" aria-label="Lire un code-barres">
             <UButton
               size="xl"
               block
@@ -247,48 +287,65 @@ async function copyJson() {
               @update:open="scannerError = null"
             />
 
-            <div class="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-6 gap-y-4 border-t border-default pt-4">
-              <UFormField label="Depuis une photo" :error="photoError" :ui="{ label: 'font-medium', error: 'max-w-xs' }">
+            <div class="flex flex-wrap items-center gap-x-1 text-sm text-muted">
+              <span>Sans caméra :</span>
+              <UButton
+                color="neutral"
+                variant="link"
+                size="sm"
+                class="px-0.5 font-medium text-highlighted"
+                :loading="photoDecoding"
+                @click="fileInput?.click()"
+              >
+                {{ photoDecoding ? 'Lecture de la photo…' : 'Importer une photo' }}
+              </UButton>
+              <template v-if="!manualVisible">
+                <span aria-hidden="true" class="text-dimmed">·</span>
                 <UButton
                   color="neutral"
-                  variant="outline"
-                  icon="i-lucide-image-up"
-                  :loading="photoDecoding"
-                  @click="fileInput?.click()"
+                  variant="link"
+                  size="sm"
+                  class="px-0.5 font-medium text-highlighted"
+                  @click="manualOpen = true"
                 >
-                  {{ photoDecoding ? 'Lecture…' : 'Importer une photo' }}
+                  Saisir le code
                 </UButton>
-                <input
-                  ref="fileInput"
-                  type="file"
-                  accept="image/*"
-                  class="sr-only"
-                  tabindex="-1"
-                  aria-hidden="true"
-                  @change="onPhotoSelected"
-                >
-              </UFormField>
-
-              <form novalidate @submit.prevent="submitManualCode">
-                <UFormField label="Code EAN" :error="manualError" :ui="{ label: 'font-medium' }">
-                  <div class="flex gap-2">
-                    <UInput
-                      v-model="manualCode"
-                      type="text"
-                      inputmode="numeric"
-                      autocomplete="off"
-                      placeholder="3017624010701"
-                      variant="outline"
-                      class="min-w-0 flex-1"
-                      :ui="{ base: 'tabular-nums' }"
-                    />
-                    <UButton type="submit" color="neutral" variant="outline">
-                      Rechercher
-                    </UButton>
-                  </div>
-                </UFormField>
-              </form>
+              </template>
+              <input
+                ref="fileInput"
+                type="file"
+                accept="image/*"
+                class="sr-only"
+                tabindex="-1"
+                aria-hidden="true"
+                @change="onPhotoSelected"
+              >
             </div>
+
+            <p v-if="photoError" role="alert" class="-mt-1 text-sm text-error">
+              {{ photoError }}
+            </p>
+
+            <form v-if="manualVisible" id="manual-form" novalidate @submit.prevent="submitManualCode">
+              <UFormField label="Code EAN" :error="manualError" :ui="{ label: 'font-medium' }">
+                <div class="flex gap-2">
+                  <UInput
+                    v-model="manualCode"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="3017624010701"
+                    variant="outline"
+                    class="min-w-0 flex-1"
+                    :autofocus="manualOpen"
+                    :ui="{ base: 'tabular-nums' }"
+                  />
+                  <UButton type="submit" color="neutral" variant="outline">
+                    Rechercher
+                  </UButton>
+                </div>
+              </UFormField>
+            </form>
           </section>
 
           <Transition name="reveal" mode="out-in">
@@ -315,36 +372,46 @@ async function copyJson() {
             />
 
             <div v-else-if="state.kind === 'done'" :key="`done-${state.code}`" class="flex flex-col gap-4">
-              <dl class="grid grid-cols-2 sm:grid-cols-[auto_auto_1fr] gap-px overflow-hidden rounded-xl border border-default bg-border">
-                <div class="col-span-2 sm:col-span-1 bg-default p-4 flex flex-col gap-1">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-                    Code
-                  </dt>
-                  <dd class="text-2xl font-bold tabular-nums text-highlighted">
-                    {{ state.code }}
-                  </dd>
+              <header class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+                <div class="flex min-w-0 items-start gap-4">
+                  <!-- Fond blanc fixe, même en sombre : les photos OFF sont détourées sur blanc. -->
+                  <a
+                    v-if="productImage && !imageFailed"
+                    :href="productImage.full"
+                    target="_blank"
+                    rel="noopener"
+                    class="shrink-0 grid size-20 sm:size-24 place-items-center overflow-hidden rounded-lg border border-default bg-white p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    :aria-label="`Voir la photo de ${productName || 'ce produit'} en grand`"
+                  >
+                    <img
+                      :src="productImage.thumb"
+                      :alt="productName || 'Photo du produit'"
+                      class="max-h-full max-w-full object-contain"
+                      referrerpolicy="no-referrer"
+                      @error="imageFailed = true"
+                    >
+                  </a>
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <h2
+                      class="text-xl sm:text-2xl font-bold tracking-tight text-balance wrap-break-word"
+                      :class="found && !productName ? 'text-dimmed' : 'text-highlighted'"
+                    >
+                      {{ productTitle }}
+                    </h2>
+                    <p class="text-sm text-muted tabular-nums wrap-break-word">
+                      {{ productMeta }}
+                    </p>
+                  </div>
                 </div>
-                <div class="bg-default p-4 flex flex-col gap-1">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-                    Statut
-                  </dt>
-                  <dd class="flex items-center gap-1.5 text-sm font-medium" :class="found ? 'text-highlighted' : 'text-muted'">
-                    <UIcon :name="found ? 'i-lucide-check' : 'i-lucide-search-x'" class="size-4 shrink-0" />
-                    {{ found ? 'Produit trouvé' : 'Introuvable' }}
-                  </dd>
-                </div>
-                <div class="bg-default p-4 flex flex-col gap-1 min-w-0">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-                    Produit
-                  </dt>
-                  <dd class="text-base font-semibold text-highlighted wrap-break-word" :class="{ 'text-dimmed! font-normal': !productName }">
-                    {{ productName || (found ? 'Nom non renseigné' : '—') }}
-                  </dd>
-                  <dd class="text-xs text-muted wrap-break-word">
-                    {{ productBrand || (found ? '—' : 'Ce code n’existe pas encore dans Open Food Facts.') }}
-                  </dd>
-                </div>
-              </dl>
+                <UButton
+                  v-if="found"
+                  icon="i-lucide-plus"
+                  class="max-sm:hidden shrink-0"
+                  @click="createIngredient"
+                >
+                  Créer l’ingrédient
+                </UButton>
+              </header>
 
               <template v-if="found && state.data.product">
                 <ProductNutritionFacts :product="state.data.product" />
@@ -380,16 +447,15 @@ async function copyJson() {
                 <pre v-show="jsonOpen" id="json-body" class="json-view max-h-[60vh] overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap wrap-break-word" tabindex="0" aria-label="Réponse JSON" v-html="highlightedJson" />
               </section>
 
+              <!-- Sur mobile, l'action clôt la fiche : on la rencontre après avoir tout lu, plutôt qu'en tête. -->
               <UButton
-                color="neutral"
-                variant="outline"
-                icon="i-lucide-scan-barcode"
+                v-if="found"
+                icon="i-lucide-plus"
                 block
-                class="justify-center sm:w-auto sm:self-start"
-                :disabled="cameraUnavailable"
-                @click="openScanner"
+                class="sm:hidden justify-center"
+                @click="createIngredient"
               >
-                Scanner un autre produit
+                Créer l’ingrédient
               </UButton>
             </div>
 
@@ -409,6 +475,12 @@ async function copyJson() {
         v-model:open="scannerOpen"
         @detected="lookup"
         @error="onScannerError"
+      />
+
+      <IngredientFormSlideover
+        v-model:open="ingredientFormOpen"
+        :ingredient="null"
+        :prefill="ingredientPrefill"
       />
     </template>
   </UDashboardPanel>

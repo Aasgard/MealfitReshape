@@ -16,6 +16,12 @@ const phase = ref<Phase>('starting')
 const detectedCode = ref('')
 const torchAvailable = ref(false)
 const torchOn = ref(false)
+/** Webcam d'ordinateur ou caméra frontale : tout ce qui n'est pas une caméra arrière de téléphone. */
+const frontCamera = ref(false)
+/** Aperçu en miroir, comme une glace : on déplace le produit dans le sens où on le voit bouger. */
+const mirrored = ref(false)
+/** Compteur d'analyses : une webcam alterne image telle quelle et image retournée (pilotes qui inversent le flux). */
+let attempt = 0
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 const frameEl = ref<HTMLElement | null>(null)
@@ -35,7 +41,7 @@ const context = canvas?.getContext('2d', { willReadFrequently: true })
  * Copie la zone visée (le cadre, un peu élargie) dans un canvas : on n'analyse que ce que l'utilisateur vise,
  * ce qui évite de lire un autre code présent dans le champ et accélère le décodage wasm.
  */
-function captureFrameRegion(): HTMLCanvasElement | null {
+function captureFrameRegion(flip: boolean): HTMLCanvasElement | null {
   const video = videoEl.value
   const frame = frameEl.value
   if (!video || !frame || !canvas || !context || video.readyState < 2 || !video.videoWidth) return null
@@ -50,9 +56,12 @@ function captureFrameRegion(): HTMLCanvasElement | null {
   // Marge autour du cadre : un code un peu trop grand ou décalé reste lisible.
   const marginX = frameRect.width * 0.15
   const marginY = frameRect.height * 0.5
-  const left = Math.max(0, (frameRect.left - videoRect.left - marginX - offsetX) / scale)
+  const shownLeft = (frameRect.left - videoRect.left - marginX - offsetX) / scale
+  const shownRight = (frameRect.right - videoRect.left + marginX - offsetX) / scale
+  // Aperçu en miroir : le bord gauche affiché correspond au bord droit de l'image source.
+  const left = Math.max(0, mirrored.value ? video.videoWidth - shownRight : shownLeft)
+  const right = Math.min(video.videoWidth, mirrored.value ? video.videoWidth - shownLeft : shownRight)
   const top = Math.max(0, (frameRect.top - videoRect.top - marginY - offsetY) / scale)
-  const right = Math.min(video.videoWidth, (frameRect.right - videoRect.left + marginX - offsetX) / scale)
   const bottom = Math.min(video.videoHeight, (frameRect.bottom - videoRect.top + marginY - offsetY) / scale)
   const width = right - left
   const height = bottom - top
@@ -61,13 +70,15 @@ function captureFrameRegion(): HTMLCanvasElement | null {
   const downscale = Math.min(1, 1280 / width)
   canvas.width = Math.round(width * downscale)
   canvas.height = Math.round(height * downscale)
+  if (flip) context.setTransform(-1, 0, 0, 1, canvas.width, 0)
   context.drawImage(video, left, top, width, height, 0, 0, canvas.width, canvas.height)
+  context.setTransform(1, 0, 0, 1, 0, 0)
   return canvas
 }
 
 async function scanLoop(token: number) {
   if (token !== session || phase.value !== 'scanning') return
-  const region = captureFrameRegion()
+  const region = captureFrameRegion(frontCamera.value && attempt++ % 2 === 1)
   if (region) {
     try {
       const code = await detectBarcode(region)
@@ -106,6 +117,8 @@ async function start() {
   detectedCode.value = ''
   torchAvailable.value = false
   torchOn.value = false
+  frontCamera.value = false
+  mirrored.value = false
 
   // Le module de lecture se charge pendant que l'utilisateur répond à la demande d'accès caméra.
   const detectorReady = getBarcodeDetector()
@@ -124,6 +137,10 @@ async function start() {
   }
   stream = mediaStream
   torchAvailable.value = supportsTorch(mediaStream)
+  // Une webcam d'ordinateur ne déclare souvent aucun `facingMode` : seule une caméra arrière se nomme.
+  frontCamera.value = mediaStream.getVideoTracks()[0]?.getSettings().facingMode !== 'environment'
+  mirrored.value = frontCamera.value
+  attempt = 0
 
   const video = videoEl.value
   if (video) {
@@ -205,6 +222,7 @@ onBeforeUnmount(() => {
         <video
           ref="videoEl"
           class="absolute inset-0 size-full object-cover"
+          :class="{ '-scale-x-100': mirrored }"
           playsinline
           muted
           autoplay
@@ -239,9 +257,14 @@ onBeforeUnmount(() => {
               <UIcon name="i-lucide-check" class="size-4 shrink-0" />
               {{ detectedCode }}
             </p>
-            <p v-else class="text-sm text-white/85">
-              {{ phase === 'starting' ? 'Autorisez l’accès à la caméra si le navigateur le demande.' : 'Placez le code-barres dans le cadre' }}
-            </p>
+            <div v-else class="flex flex-col items-center gap-1">
+              <p class="text-sm text-white/85">
+                {{ phase === 'starting' ? 'Autorisez l’accès à la caméra si le navigateur le demande.' : 'Placez le code-barres dans le cadre' }}
+              </p>
+              <p v-if="phase === 'scanning' && frontCamera" class="max-w-xs text-xs text-white/65 text-balance">
+                Code flou ? Éloignez le produit à 20 cm environ : une webcam fait mal la mise au point de près.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -258,18 +281,30 @@ onBeforeUnmount(() => {
           <p class="text-sm font-medium text-white/90" aria-hidden="true">
             Scanner un code-barres
           </p>
-          <UButton
-            v-if="torchAvailable"
-            :icon="torchOn ? 'i-lucide-flashlight-off' : 'i-lucide-flashlight'"
-            color="neutral"
-            variant="ghost"
-            size="lg"
-            :aria-label="torchOn ? 'Éteindre la lampe' : 'Allumer la lampe'"
-            :aria-pressed="torchOn"
-            class="text-white hover:bg-white/15 active:bg-white/20 focus-visible:ring-white"
-            @click="toggleTorch"
-          />
-          <span v-else class="size-10" aria-hidden="true" />
+          <div class="flex min-w-10 justify-end gap-1">
+            <UButton
+              v-if="frontCamera"
+              icon="i-lucide-flip-horizontal-2"
+              color="neutral"
+              variant="ghost"
+              size="lg"
+              aria-label="Inverser l’image"
+              :aria-pressed="!mirrored"
+              class="text-white hover:bg-white/15 active:bg-white/20 focus-visible:ring-white"
+              @click="mirrored = !mirrored"
+            />
+            <UButton
+              v-if="torchAvailable"
+              :icon="torchOn ? 'i-lucide-flashlight-off' : 'i-lucide-flashlight'"
+              color="neutral"
+              variant="ghost"
+              size="lg"
+              :aria-label="torchOn ? 'Éteindre la lampe' : 'Allumer la lampe'"
+              :aria-pressed="torchOn"
+              class="text-white hover:bg-white/15 active:bg-white/20 focus-visible:ring-white"
+              @click="toggleTorch"
+            />
+          </div>
         </div>
       </div>
     </template>

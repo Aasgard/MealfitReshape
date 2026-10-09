@@ -39,21 +39,27 @@ const label = computed(() => current.value
       <h2 id="nutriscore-title" class="text-sm font-semibold text-highlighted">
         Nutri-Score
       </h2>
-      <span class="text-xs text-dimmed">Calcul 2023 d’Open Food Facts</span>
     </div>
 
-    <div class="flex flex-col gap-3 px-4 pt-5 pb-4 sm:flex-row sm:items-center sm:gap-6">
-      <div class="nutriscore flex w-full max-w-72 shrink-0" role="img" :aria-label="label" :class="{ 'is-unknown': !current }">
-        <span
-          v-for="g in GRADES"
-          :key="g.letter"
-          class="nutriscore-cell"
-          :class="{ 'is-current': g.letter === current }"
-          :style="{ '--grade': g.color, '--grade-ink': g.ink }"
-          aria-hidden="true"
-        >
-          {{ g.letter.toUpperCase() }}
-        </span>
+    <div class="flex flex-col gap-3 px-4 pt-5 pb-3 sm:flex-row sm:items-center sm:gap-6">
+      <!-- gap-4 : la case retenue déborde de 0,5rem sous la bande, la légende garde de l'air en dessous. -->
+      <div class="flex w-full max-w-72 shrink-0 flex-col gap-4">
+        <div class="nutriscore flex w-full" role="img" :aria-label="label" :class="{ 'is-unknown': !current }">
+          <span
+            v-for="g in GRADES"
+            :key="g.letter"
+            class="nutriscore-cell"
+            :class="{ 'is-current': g.letter === current }"
+            :style="{ '--grade': g.color, '--grade-ink': g.ink }"
+            aria-hidden="true"
+          >
+            {{ g.letter.toUpperCase() }}
+          </span>
+        </div>
+        <!-- Même légende que sous la barre des macros du relevé nutritionnel. -->
+        <p class="truncate text-[0.6875rem] leading-tight text-dimmed">
+          Calcul 2023 d’Open Food Facts
+        </p>
       </div>
 
       <p v-if="caption" class="text-sm text-muted">

@@ -197,6 +197,8 @@ Applied only where a value is compared with a target: the calorie gauge, meal ri
 
 **The Runtime Primary Rule.** The theme menu lets the user swap the primary hue and the neutral family at runtime. Always reference `primary`, `bg-elevated`, `text-muted` and the other semantic tokens, never literal `indigo-*` or `neutral-*` classes. The only literal palette classes allowed are the three macro colors.
 
+**The Regulatory Label Exception.** The Nutri-Score scale on the product scanner keeps its official colors (A `#038141`, B `#85bb2f`, C `#fecb02`, D `#ee8100`, E `#e63e11`). It is a regulatory mark people recognize by its colors, not a fourth territory: those hues never leave that scale.
+
 **Known debt.** Sprout Green (glucides) and On-Target Green (reached) are the same hue. They rarely share a component, but in the daily summary a green carb bar can sit beside a green "reached" value. Don't add more places where the two meet.
 
 ## Typography
@@ -301,6 +303,11 @@ Status-colored progress. **Meal ring:** 40px, 4px stroke on a Track Gray circle,
 
 ### Ruled readout ("Relevé")
 Two to four stat cells in one 6px-bordered block, split by 1px Hairline rules (`gap-px` over `bg-border`). Each cell has an uppercase Label eyebrow, a figure (Stat or Stat Display) with its unit, and one or two Meta lines of context. A cell may end with a 6px primary progress bar and its start/percent captions. The settings page uses the same construction for per-meal shares.
+
+**Product nutrition readout** (scanner): the same block under a header row ("Valeurs nutritionnelles", "pour 100 g/ml"), holding Énergie (2.25rem) then G / P / L with their macro dots, and the composition bar in a footer row. Each value is read independently: a real `0` shows `0 g`, a missing key shows a dash and "Non renseigné" with the cell's geometry intact, an Open Food Facts estimate gets a `≈` prefix and an "Estimée par Open Food Facts" Meta line. The bar renders only when all three macros are known.
+
+### Nutri-Score scale
+Five joined cells A–E (36px tall), unselected ones pale (`color-mix` of the official color into `bg-default`, so dark mode works), the product's grade in full color, wider and 52px tall, cut out from its neighbors by a 3px `bg-default` outline. Unknown or not-applicable grades keep the band in Track Gray with no selection and a one-line explanation beside it.
 
 ### Weight trend chart
 A hand-drawn SVG at real pixel width, so labels keep their size on mobile. Daily weigh-ins are small dots in Dimmed Ink, the 7-day trend is a 2.5px Signal Indigo line that draws in over 900ms, the calculator projection is a 1.5px dashed Dimmed Ink line, and the goal is a 1px Muted Ink rule with a semibold caption. Gridlines are Hairline and axis ticks are Meta in Dimmed Ink. Hover, touch and arrow keys move a Firm Hairline crosshair, with a 4px-radius tooltip listing Pesée / Tendance (indigo) / Projection. A legend of tiny inline SVG swatches sits beneath.

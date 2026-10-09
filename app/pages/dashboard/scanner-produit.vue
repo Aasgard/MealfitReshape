@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ScannerErrorKind } from '~/composables/useBarcodeScanner'
+import type { OffNutritionSource } from '~/components/ProductNutritionFacts.vue'
 
 useSeoMeta({
   title: 'Dashboard - Scanner produit - Mealfit',
@@ -91,7 +92,12 @@ type OffResponse = {
   code?: string
   status?: number
   status_verbose?: string
-  product?: { product_name?: string, product_name_fr?: string, brands?: string }
+  product?: OffNutritionSource & {
+    product_name?: string
+    product_name_fr?: string
+    brands?: string
+    nutriscore_grade?: string
+  }
 }
 
 type LookupState =
@@ -173,6 +179,9 @@ const highlightedJson = computed(() => {
     },
   )
 })
+
+/** Le JSON brut reste disponible mais replié : la lecture commence par le relevé nutritionnel. */
+const jsonOpen = ref(false)
 
 const copied = ref(false)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
@@ -337,14 +346,26 @@ async function copyJson() {
                 </div>
               </dl>
 
+              <template v-if="found && state.data.product">
+                <ProductNutritionFacts :product="state.data.product" />
+                <NutriScoreScale :grade="state.data.product.nutriscore_grade" />
+              </template>
+
               <section class="rounded-xl border border-default flex flex-col overflow-hidden" aria-labelledby="json-title">
-                <div class="flex items-center justify-between gap-3 border-b border-default px-4 py-2.5">
-                  <div class="flex items-baseline gap-2 min-w-0">
-                    <h2 id="json-title" class="text-sm font-semibold text-highlighted truncate">
-                      Réponse JSON
-                    </h2>
-                    <span class="text-xs text-dimmed tabular-nums shrink-0">{{ sizeLabel }}</span>
-                  </div>
+                <div class="flex items-center justify-between gap-3 pr-2" :class="{ 'border-b border-default': jsonOpen }">
+                  <h2 class="flex-1 min-w-0">
+                    <button
+                      type="button"
+                      class="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-elevated/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                      :aria-expanded="jsonOpen"
+                      aria-controls="json-body"
+                      @click="jsonOpen = !jsonOpen"
+                    >
+                      <UIcon name="i-lucide-chevron-right" class="size-4 shrink-0 text-dimmed transition-transform duration-200" :class="{ 'rotate-90': jsonOpen }" />
+                      <span id="json-title" class="text-sm font-semibold text-muted truncate">Réponse JSON</span>
+                      <span class="text-xs text-dimmed tabular-nums shrink-0">{{ sizeLabel }}</span>
+                    </button>
+                  </h2>
                   <UButton
                     size="sm"
                     color="neutral"
@@ -356,7 +377,7 @@ async function copyJson() {
                   </UButton>
                 </div>
                 <!-- eslint-disable-next-line vue/no-v-html -- JSON échappé avant coloration -->
-                <pre class="json-view max-h-[60vh] overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap wrap-break-word" tabindex="0" aria-label="Réponse JSON" v-html="highlightedJson" />
+                <pre v-show="jsonOpen" id="json-body" class="json-view max-h-[60vh] overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap wrap-break-word" tabindex="0" aria-label="Réponse JSON" v-html="highlightedJson" />
               </section>
 
               <UButton

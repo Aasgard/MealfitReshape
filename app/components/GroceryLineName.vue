@@ -2,7 +2,7 @@
 /**
  * Nom d'un article, avec ses signaux : éclair pour un achat urgent, horloge pour une denrée fragile attendue au-delà
  * de J+2. Un appui court (ou un clic) ouvre le détail des besoins : jour par jour, conseil pour les fragiles et
- * marquage urgent. Souris et clavier : popover ; toucher : panneau en bas d'écran.
+ * marquage urgent (sauf besoin aujourd'hui ou demain, déjà urgent). Souris et clavier : popover ; toucher : panneau en bas d'écran.
  */
 import { createReusableTemplate } from '@vueuse/core'
 import type { GroceryLine } from '~/utils/groceryList'
@@ -13,9 +13,13 @@ const props = withDefaults(defineProps<{
   variant?: 'prepare' | 'store'
   /** Article dans le panier : nom barré et estompé. */
   done?: boolean
-}>(), { variant: 'prepare', done: false })
+  /** Nom seul, sans éclair ni horloge (accueil : la section ne montre que des urgents). */
+  bare?: boolean
+  /** Toute la ligne est cliquable : bouton pleine largeur, avec ses marges et son survol. */
+  block?: boolean
+}>(), { variant: 'prepare', done: false, bare: false, block: false })
 
-const list = useInjectedGroceryList()
+const list = useInjectedGroceryLineActions()
 const [DefineDetail, ReuseDetail] = createReusableTemplate()
 
 const popoverOpen = ref(false)
@@ -38,7 +42,6 @@ function onClick(event: MouseEvent) {
 }
 
 const tooEarlyDays = computed(() => props.line.needs.filter(need => need.isTooEarly && !need.isPast))
-const firstUpcoming = computed(() => props.line.needs.find(need => !need.isPast))
 
 const ariaLabel = computed(() => [
   props.line.label,
@@ -101,12 +104,11 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
         </span>
       </p>
 
+      <!-- Déjà urgent par ses dates (besoin aujourd'hui ou demain) : le marquage n'y changerait rien. -->
       <USwitch
+        v-if="!line.isDueSoon"
         :model-value="line.isMarkedUrgent"
         label="Marquer urgent"
-        :description="line.isDueSoon && !line.isMarkedUrgent && firstUpcoming
-          ? `Déjà urgent : besoin ${firstUpcoming.dayLabel}.`
-          : 'Plus de stock, indispensable…'"
         @update:model-value="list.toggleUrgent(line)"
       />
 
@@ -128,8 +130,11 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
     <template #anchor>
       <button
         type="button"
-        class="flex min-w-0 cursor-pointer flex-col items-start rounded-md text-start focus-visible:outline-2 focus-visible:outline-primary"
-        :class="variant === 'store' ? 'min-h-14 justify-center py-2' : 'py-0.5'"
+        class="flex min-w-0 cursor-pointer flex-col items-start text-start focus-visible:outline-2 focus-visible:outline-primary"
+        :class="[
+          variant === 'store' ? 'min-h-14 justify-center py-2' : 'py-0.5',
+          block ? 'w-full px-4 transition-colors hover:bg-elevated/50 focus-visible:-outline-offset-2' : 'rounded-md',
+        ]"
         :aria-label="ariaLabel"
         @pointerdown="onPointerDown"
         @click="onClick"
@@ -142,8 +147,8 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
               done ? 'text-dimmed line-through' : 'font-medium text-highlighted',
             ]"
           >{{ line.label }}</span>
-          <UIcon v-if="line.isUrgent && !done" name="i-lucide-zap" class="size-3.5 shrink-0 text-error" aria-hidden="true" />
-          <UIcon v-if="line.hasTooEarlyNeed && !done" name="i-lucide-clock" class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+          <UIcon v-if="line.isUrgent && !done && !bare" name="i-lucide-zap" class="size-3.5 shrink-0 text-error" aria-hidden="true" />
+          <UIcon v-if="line.hasTooEarlyNeed && !done && !bare" name="i-lucide-clock" class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
         </span>
       </button>
     </template>

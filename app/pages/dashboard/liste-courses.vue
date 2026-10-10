@@ -33,6 +33,10 @@ onBeforeUnmount(() => {
 
 const list = useGroceryList()
 provide(GROCERY_LIST_KEY, list)
+provide(GROCERY_LINE_ACTIONS_KEY, list)
+
+// `?mode=acheter` (lien « Voir liste » de l'accueil) : ouverture directe en mode « Acheter ».
+if (useRoute().query.mode === 'acheter') list.mode = 'store'
 
 const modeItems = computed<TabsItem[]>(() => [
   { label: 'Lister', value: 'prepare', icon: 'i-lucide-list-checks' },

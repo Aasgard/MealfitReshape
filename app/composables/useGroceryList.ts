@@ -422,3 +422,14 @@ export function useInjectedGroceryList(): GroceryListState {
   if (!list) throw new Error('useInjectedGroceryList doit être appelé sous la page Liste de courses')
   return list
 }
+
+/** Gestes du détail d'un article (`GroceryLineName`) : fournis par la page Liste de courses, ou par l'accueil. */
+export type GroceryLineActions = Pick<GroceryListState, 'toggleUrgent' | 'removeManual'>
+
+export const GROCERY_LINE_ACTIONS_KEY: InjectionKey<GroceryLineActions> = Symbol('groceryLineActions')
+
+export function useInjectedGroceryLineActions(): GroceryLineActions {
+  const actions = inject(GROCERY_LINE_ACTIONS_KEY)
+  if (!actions) throw new Error('useInjectedGroceryLineActions doit être appelé sous une page qui fournit les gestes d\'un article')
+  return actions
+}

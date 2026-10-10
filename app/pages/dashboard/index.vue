@@ -6,7 +6,9 @@ import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow } from '~/types/today'
+import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
+import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
 import { buildDayEntries, consumedOfDay, mealSourceOf, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
 import { WEEK_STARTS_ON } from '~/utils/menuWeek'
@@ -91,14 +93,21 @@ watch(weighInsError, (error) => {
   toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
 })
 
-// Une erreur de chargement des repas ou des pesées (droits, index manquant...) est signalée par un toast ci-dessus,
-// sans bloquer la page.
+const shoppingList = useShoppingList()
+watch(shoppingList.items.error, (error) => {
+  if (!error) return
+  toast.add({ title: 'Erreur', description: `Impossible de charger la liste de courses : ${error.message}`, color: 'error' })
+})
+
+// Une erreur de chargement des repas, des pesées ou de la liste de courses (droits, index manquant...) est signalée
+// par un toast ci-dessus, sans bloquer la page.
 await Promise.all([
   recipes.promise.value,
   ingredients.promise.value,
   meals.promise.value.catch(() => undefined),
   upcomingMeals.promise.value.catch(() => undefined),
   weighInsLoaded.value.catch(() => undefined),
+  shoppingList.items.promise.value.catch(() => undefined),
   profile.ready,
 ])
 
@@ -228,6 +237,47 @@ const cookingRecipes = computed<TodayCookingRecipe[]>(() =>
     }]
   })
 )
+
+/** Liste de courses ouverte directement en mode « Acheter ». */
+const SHOPPING_LIST_LINK = '/dashboard/liste-courses?mode=acheter'
+
+const categoriesStore = useIngredientCategoriesStore()
+const aisleOf = (categoryId?: string) => (categoryId && categoriesStore.getCategoryById(categoryId)) || MISC_AISLE
+
+/**
+ * Articles encore à acheter (ni dans le panier, ni à la maison) dont on a besoin le jour affiché ou le lendemain, ou
+ * marqués urgents à la main. Même règle que l'éclair de la liste de courses, mais au jour affiché ; rien pour un jour
+ * passé, ces courses-là ne se font plus. Triés par jour de besoin (marqués sans besoin proche à la fin), puis comme la liste.
+ * Les lignes affichées restent calculées au vrai aujourd'hui : leur détail dit « aujourd'hui », « demain » comme la liste.
+ * Leur `isUrgent` est forcé : l'urgence est celle du jour affiché.
+ */
+const shoppingLines = computed<GroceryLine[]>(() => {
+  if (differenceInCalendarDays(selectedDay.value, today) < 0) return []
+  return shoppingList.items.value
+    .filter(item => item.status === 'toBuy')
+    .flatMap((item) => {
+      const atSelectedDay = groceryLineFromItem(item, aisleOf, selectedDay.value)
+      if (!atSelectedDay.isUrgent) return []
+      const need = atSelectedDay.isDueSoon ? atSelectedDay.needs.find(n => !n.isPast) : undefined
+      // Urgent au jour affiché, même si l'achat ne l'est pas encore au vrai aujourd'hui (annoncé ainsi aux lecteurs d'écran).
+      return [{ line: { ...groceryLineFromItem(item, aisleOf, today), isUrgent: true }, needDate: need?.date ?? '￿' }]
+    })
+    .sort((a, b) => a.needDate.localeCompare(b.needDate) || compareGroceryLines(a.line, b.line))
+    .map(({ line }) => line)
+})
+
+/** Détail d'un article ouvert depuis l'accueil : marquer urgent, retirer un ajout manuel. */
+const failShopping = (label: string) => (error: any) => {
+  toast.add({ title: 'Erreur', description: `« ${label} » n'a pas pu être modifié : ${error?.message || 'une erreur est survenue'}.`, color: 'error' })
+}
+provide(GROCERY_LINE_ACTIONS_KEY, {
+  toggleUrgent: (line: GroceryLine) => {
+    shoppingList.setUrgent(line.item, !line.isMarkedUrgent).catch(failShopping(line.label))
+  },
+  removeManual: (line: GroceryLine) => {
+    if (line.manual) shoppingList.removeManual(line.item).catch(failShopping(line.label))
+  },
+})
 
 /** Fiche de la recette ou de l'aliment d'un repas, ouverte au clic sur celui-ci. */
 const recipeDetailOpen = ref(false)
@@ -476,6 +526,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :macros="daySummary.macros"
               :weight-progress="weightProgress"
             />
+
+            <template v-if="shoppingLines.length">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+                  <UIcon name="i-lucide-shopping-cart" class="size-5 text-primary" aria-hidden="true" />
+                  Faire les courses
+                </h2>
+                <NuxtLink :to="SHOPPING_LIST_LINK" class="text-sm font-medium text-primary hover:underline">
+                  Voir liste
+                </NuxtLink>
+              </div>
+
+              <TodayShopping :lines="shoppingLines":to="SHOPPING_LIST_LINK" />
+            </template>
 
             <div class="flex items-center justify-between gap-3">
               <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">

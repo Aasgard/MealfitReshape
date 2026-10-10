@@ -2,7 +2,7 @@
 /**
  * Nombre de parts d'une recette dans « Ajouter depuis les menus », modifiable sans toucher aux menus (invités, restes
  * à prévoir...). Même geste que la quantité d'un article : appui long au doigt (panneau du bas), clic à la souris ou
- * Entrée au clavier (popover). La modification ne vaut que pour cet ajout.
+ * Entrée au clavier (popover). Enregistrer inclut la recette dans la liste avec ces parts ; les menus ne changent pas.
  */
 import { createReusableTemplate } from '@vueuse/core'
 import type { GroceryMealRow } from '~/composables/useGroceryList'
@@ -41,12 +41,12 @@ function close() {
 }
 
 function save() {
-  list.setMealParts(props.row, draft.value)
+  list.setRowParts(props.row, draft.value)
   close()
 }
 
 function resetToPlanned() {
-  list.setMealParts(props.row, null)
+  list.setRowParts(props.row, null)
   close()
 }
 </script>

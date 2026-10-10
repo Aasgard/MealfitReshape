@@ -47,6 +47,13 @@ const ariaLabel = computed(() => [
   'voir les besoins',
 ].filter(Boolean).join(', '))
 
+/** Ajout manuel seulement : un article venu des menus se retire en décochant ses repas. */
+function removeFromList() {
+  popoverOpen.value = false
+  drawerOpen.value = false
+  list.removeManual(props.line)
+}
+
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 </script>
 
@@ -101,6 +108,18 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
           ? `Déjà urgent : besoin ${firstUpcoming.dayLabel}.`
           : 'Plus de stock, indispensable…'"
         @update:model-value="list.toggleUrgent(line)"
+      />
+
+      <UButton
+        v-if="line.manual"
+        label="Retirer de la liste"
+        icon="i-lucide-trash-2"
+        color="error"
+        variant="soft"
+        :size="inDrawer ? 'lg' : 'sm'"
+        :block="inDrawer"
+        class="justify-center"
+        @click="removeFromList"
       />
     </div>
   </DefineDetail>

@@ -1,5 +1,4 @@
 import type { Timestamp } from 'firebase/firestore'
-import type { ShoppingNeed } from '~/utils/shoppingList'
 
 /**
  * Où en est un article :
@@ -10,9 +9,24 @@ import type { ShoppingNeed } from '~/utils/shoppingList'
 export type ShoppingItemStatus = 'toBuy' | 'atHome' | 'inCart'
 
 /**
+ * Ce qu'une recette ou un aliment seul apporte à un article, un jour donné (jour de cuisson pour une recette, jour du
+ * repas pour un aliment). Quantités figées au moment de l'inclusion du repas.
+ */
+export interface ShoppingContribution {
+  /** Regroupement du panneau : `recipe:<id>` ou `ingredient:<id>:<unité>`. */
+  key: string
+  /** Jour au format `yyyy-MM-dd`. */
+  date: string
+  grams: number
+  milliliters: number
+  /** Nom de la recette (ou « Hors recette ») au moment de l'inclusion, pour l'affichage. */
+  label: string
+}
+
+/**
  * Un article de la collection Firestore `shoppingList`, un document par article.
- * Ajouté à la main, ou depuis les menus : il garde alors l'ingrédient et ses quantités cumulées, figées à l'ajout
- * (modifier les menus ensuite ne change pas la liste). Champs facultatifs omis plutôt qu'`undefined` (refusé par Firestore).
+ * Ajouté à la main, ou depuis les menus : il porte alors ses apports, dont se déduisent quantités et besoins par jour.
+ * Champs facultatifs omis plutôt qu'`undefined` (refusé par Firestore).
  * En lecture depuis VueFire, chaque document a aussi un `id`.
  */
 export interface ShoppingItem {
@@ -25,23 +39,40 @@ export interface ShoppingItem {
   ingredientId?: string
   /** Rayon (Firestore `ingredientCategories`) ; absent ou inconnu : « Divers ». */
   categoryId?: string
-  /** Quantités cumulées, comme dans `ShoppingListItem` ; absentes pour un ajout manuel. */
-  grams?: number
-  milliliters?: number
-  pieces?: number
-  /** Poids d'une pièce, pour compter les pièces de chaque jour de besoin. */
+  /** Poids d'une pièce, si l'ingrédient a une unité « Pièce » : pour compter les pièces. */
   gramsPerPiece?: number
-  /**
-   * Quantité saisie à la main (ex. "3 pièces", "2 paquets") : remplace celle calculée depuis `grams` / `milliliters` /
-   * `pieces`, qui restent pour y revenir. Un article ainsi modifié n'est plus complété par un ajout depuis les menus.
-   */
+  /** Apports des repas inclus ; absents pour un ajout manuel. */
+  contributions?: ShoppingContribution[]
+  /** Quantité saisie à la main (ex. "3 pièces", "2 paquets") : remplace celle calculée depuis les apports. */
   quantity?: string
-  /** Recettes qui demandent l'ingrédient, puis « Hors recette ». */
-  sources?: string[]
-  /** Besoins jour par jour (par date croissante) ; absents pour un ajout manuel ou un article ajouté avant leur suivi. */
-  needs?: ShoppingNeed[]
-  /** Marqué urgent à la main (plus de stock, indispensable...), en plus de l'urgence calculée depuis `needs`. */
+  /** Marqué urgent à la main (plus de stock, indispensable...), en plus de l'urgence calculée depuis les apports. */
   urgent?: boolean
   createdAt?: Timestamp
+  updatedAt?: Timestamp
+}
+
+/**
+ * Un repas inclus dans la liste de courses (collection Firestore `shoppingMeals`), id `{uid}_{mealId}`.
+ * Garde de quoi recalculer les apports sans relire les menus : modifier un repas dans les menus ne change pas la liste.
+ * - `listed` : ses ingrédients sont dans la liste ;
+ * - `bought` : achetés (fin des courses) ; ne peut plus être décoché ni racheté. Supprimé 2 jours après le repas.
+ */
+export interface ShoppingMealInclusion {
+  id: string
+  user: string
+  /** Repas d'origine (Firestore `meals`). */
+  mealId: string
+  /** Jour du repas, `yyyy-MM-dd`. */
+  date: string
+  /** Regroupement du panneau : `recipe:<id>` ou `ingredient:<id>:<unité>`. */
+  key: string
+  recipeId?: string
+  /** Parts retenues pour une recette (parts modifiées comprises). */
+  parts?: number
+  ingredientId?: string
+  /** Quantité d'un aliment seul, en grammes (`unitId` `null`) ou en nombre de fois l'unité `unitId`. */
+  quantity?: number
+  unitId?: string | null
+  state: 'listed' | 'bought'
   updatedAt?: Timestamp
 }

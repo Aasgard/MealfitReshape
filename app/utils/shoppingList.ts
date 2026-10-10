@@ -59,30 +59,56 @@ export function gramsPerPiece(ingredient: Ingredient): number | null {
 export const piecesFor = (grams: number, pieceGrams: number) => Math.ceil(grams / pieceGrams - 1e-6)
 
 /** Jour d'un repas, au format `yyyy-MM-dd` (heure locale). */
-const mealDay = (meal: Meal) => format(meal.date.toDate(), 'yyyy-MM-dd')
+export const mealDay = (meal: Meal) => format(meal.date.toDate(), 'yyyy-MM-dd')
 
 /**
- * Jours de cuisson d'une recette : elle se prépare en entier, le jour du premier repas qu'une fournée doit couvrir.
+ * `quantity` grammes de l'ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités, en grammes, ou en ml
+ * faute de densité ; `null` si l'unité est introuvable.
+ */
+export function ingredientAmount(ingredient: Ingredient, unitId: string | null, quantity: number): { grams: number, milliliters: number } | null {
+  if (unitId == null) return { grams: quantity, milliliters: 0 }
+  const unitGrams = gramsForUnit(ingredient, unitId)
+  if (unitGrams != null) return { grams: unitGrams * quantity, milliliters: 0 }
+  const unit = ingredient.units?.[unitId]
+  if (unit?.unit === 'ml' && unit.value > 0) return { grams: 0, milliliters: unit.value * quantity }
+  return null
+}
+
+/** Une fournée de recette : le jour où elle se cuisine et les portions (par `id`) qu'elle couvre, même en partie. */
+export interface RecipeBatch<Id> {
+  day: string
+  covers: Id[]
+}
+
+/**
+ * Fournées d'une recette : elle se prépare en entier, le jour du premier repas qu'une fournée doit couvrir.
  * Recette pour 4, 2 parts mardi, mercredi, samedi et dimanche : une fournée mardi (mardi + mercredi), une samedi.
  * Autant de fournées que `ceil(parts cumulées / persons)`.
  */
-export function recipeCookDays(portions: { date: string, parts: number }[], persons: number): string[] {
-  const days: string[] = []
+export function recipeBatches<Id>(portions: { id: Id, date: string, parts: number }[], persons: number): RecipeBatch<Id>[] {
+  const batches: RecipeBatch<Id>[] = []
   let left = 0
-  for (const { date, parts } of [...portions].sort((a, b) => a.date.localeCompare(b.date))) {
+  const sorted = [...portions].sort((a, b) => a.date.localeCompare(b.date))
+  for (const { id, date, parts } of sorted) {
     let toCover = parts
     while (toCover > 1e-9) {
       if (left <= 1e-9) {
-        days.push(date)
+        batches.push({ day: date, covers: [] })
         left = persons
       }
+      const batch = batches.at(-1)!
+      if (!batch.covers.includes(id)) batch.covers.push(id)
       const taken = Math.min(toCover, left)
       left -= taken
       toCover -= taken
     }
   }
-  return days
+  return batches
 }
+
+/** Jours de cuisson d'une recette (voir `recipeBatches`). */
+export const recipeCookDays = (portions: { date: string, parts: number }[], persons: number): string[] =>
+  recipeBatches(portions.map((portion, id) => ({ ...portion, id })), persons).map(batch => batch.day)
 
 /**
  * Liste de courses des repas `meals` : chaque ligne de recette (autant de recettes entières qu'il en faut pour
@@ -117,20 +143,12 @@ export function buildShoppingList(
       needs: [],
     }
 
-    let grams = 0
-    let milliliters = 0
-    if (unitId == null) {
-      grams = quantity
-    } else {
-      const unit = ingredient.units?.[unitId]
-      const unitGrams = gramsForUnit(ingredient, unitId)
-      if (unitGrams != null) grams = unitGrams * quantity
-      else if (unit?.unit === 'ml' && unit.value > 0) milliliters = unit.value * quantity
-      else {
-        skipped.add(`${ingredient.label} (unité introuvable)`)
-        return
-      }
+    const amount = ingredientAmount(ingredient, unitId, quantity)
+    if (!amount) {
+      skipped.add(`${ingredient.label} (unité introuvable)`)
+      return
     }
+    const { grams, milliliters } = amount
     item.grams += grams
     item.milliliters += milliliters
     if (!item.sources.includes(source)) item.sources.push(source)

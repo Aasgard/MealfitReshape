@@ -8,13 +8,27 @@ useSeoMeta({
 })
 
 /**
- * Zoom bloqué sur cette page : en magasin, les touches rapides sur les articles et le balayage entre les modes ne
- * doivent pas zoomer, ni le focus d'un champ (iOS). Rétabli en quittant la page.
- * iOS ignore `user-scalable=no` pour le pincement : le `touch-pan-y` de la zone de contenu le bloque aussi.
+ * Page non zoomable : en magasin, les touches rapides sur les articles et le balayage entre les modes ne doivent pas
+ * zoomer, ni le focus d'un champ (iOS). Rétabli en quittant la page.
+ * - balise viewport : `maximum-scale=1, user-scalable=no` (Android, focus des champs sur iOS) ;
+ * - `touch-action: pan-x pan-y` sur la racine : ni pincement ni double appui, sur toute la page et les panneaux
+ *   téléportés sous `body` ;
+ * - événements `gesture*` de Safari annulés : iOS ignore `user-scalable=no` pour le pincement.
  * `interactive-widget=resizes-content` : sur Android, le clavier réduit la page au lieu de recouvrir les panneaux du bas.
  */
 useHead({
   meta: [{ key: 'viewport', name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content' }],
+})
+
+const preventGesture = (event: Event) => event.preventDefault()
+const GESTURE_EVENTS = ['gesturestart', 'gesturechange', 'gestureend'] as const
+onMounted(() => {
+  document.documentElement.style.touchAction = 'pan-x pan-y'
+  for (const name of GESTURE_EVENTS) document.addEventListener(name, preventGesture, { passive: false })
+})
+onBeforeUnmount(() => {
+  document.documentElement.style.removeProperty('touch-action')
+  for (const name of GESTURE_EVENTS) document.removeEventListener(name, preventGesture)
 })
 
 const list = useGroceryList()
@@ -57,10 +71,7 @@ function openClear() {
   clearOpen.value = true
 }
 const isClearing = ref(false)
-const clearDescription = computed(() => {
-  const count = list.lines.length
-  return `${count} article${count > 1 ? 's' : ''} ser${count > 1 ? 'ont' : 'a'} supprimé${count > 1 ? 's' : ''}, y compris ceux déjà à la maison et dans le panier.`
-})
+const clearDescription = 'Tous les articles seront retirés et les repas décochés. Ce qui a déjà été acheté reste mémorisé.'
 
 async function onConfirmClear() {
   isClearing.value = true
@@ -69,16 +80,40 @@ async function onConfirmClear() {
   if (cleared) clearOpen.value = false
 }
 
+/** « Terminer les courses » demande confirmation : les articles retirés ne reviennent pas. */
+const finishOpen = ref(false)
+function onFinish() {
+  finishOpen.value = true
+}
+
 const isFinishing = ref(false)
-async function onFinish() {
+const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? 's' : ''}`
+const finishDescription = computed(() => {
+  const inCart = list.doneCount
+  const atHome = list.atHomeLines.length
+  const left = list.toBuy.length - inCart
+  // Ex. : « 12 articles du panier et 3 déjà à la maison quitteront la liste… 4 articles non cochés restent à acheter. »
+  const removed = [
+    inCart ? `${plural(inCart, 'article')} du panier` : null,
+    atHome ? `${atHome} déjà à la maison` : null,
+  ].filter(Boolean).join(' et ')
+  const sentences: string[] = []
+  if (removed) sentences.push(`${removed} quitter${inCart + atHome > 1 ? 'ont' : 'a'} la liste, leurs repas seront marqués achetés.`)
+  if (left) sentences.push(`${plural(left, 'article')} non coché${left > 1 ? 's' : ''} rest${left > 1 ? 'ent' : 'e'} à acheter.`)
+  return sentences.join(' ')
+})
+
+async function onConfirmFinish() {
   isFinishing.value = true
   await list.finishShopping()
   isFinishing.value = false
+  finishOpen.value = false
 }
 </script>
 
 <template>
-  <UDashboardPanel id="liste-courses">
+  <!-- En mode Lister sur grand écran, la page ne défile pas : chaque panneau fait défiler son contenu. -->
+  <UDashboardPanel id="liste-courses" :ui="{ body: list.mode === 'prepare' ? 'lg:overflow-hidden' : undefined }">
     <template #header>
       <UDashboardNavbar title="Liste de courses">
         <template #leading>
@@ -99,15 +134,15 @@ async function onFinish() {
         <template #right>
           <UButton
             v-if="list.mode === 'prepare'"
-            icon="i-lucide-trash-2"
+            icon="i-lucide-rotate-ccw"
             color="neutral"
             variant="ghost"
             size="sm"
             :disabled="!list.lines.length"
-            aria-label="Vider la liste"
+            aria-label="Repartir de zéro"
             @click="openClear"
           >
-            <span class="hidden sm:inline">Vider la liste</span>
+            <span class="hidden sm:inline">Repartir de zéro</span>
           </UButton>
           <UButton
             v-else-if="list.doneCount > 0"
@@ -127,7 +162,7 @@ async function onFinish() {
 
     <template #body>
       <!-- overflow-x-clip : le décalage du slide ne doit pas élargir la page pendant la transition. -->
-      <div ref="swipeArea" class="mx-auto w-full min-w-0 max-w-6xl touch-pan-y overflow-x-clip">
+      <div ref="swipeArea" class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 touch-pan-y flex-col overflow-x-clip lg:min-h-0">
         <Transition :name="slideName" mode="out-in">
           <GroceryPrepareView v-if="list.mode === 'prepare'" />
           <GroceryStoreView v-else :finishing="isFinishing" @finish="onFinish" />
@@ -140,13 +175,23 @@ async function onFinish() {
 
   <ConfirmDialog
     v-model:open="clearOpen"
-    title="Vider la liste de courses ?"
+    title="Repartir de zéro ?"
     :description="clearDescription"
-    confirm-label="Vider la liste"
+    confirm-label="Repartir de zéro"
     confirm-color="error"
-    confirm-icon="i-lucide-trash-2"
+    confirm-icon="i-lucide-rotate-ccw"
     :loading="isClearing"
     @confirm="onConfirmClear"
+  />
+
+  <ConfirmDialog
+    v-model:open="finishOpen"
+    title="Terminer les courses ?"
+    :description="finishDescription"
+    confirm-label="Terminer les courses"
+    confirm-icon="i-lucide-check-check"
+    :loading="isFinishing"
+    @confirm="onConfirmFinish"
   />
 </template>
 

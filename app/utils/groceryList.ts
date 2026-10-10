@@ -1,8 +1,8 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { IngredientCategory } from '~/types/ingredientCategory'
-import type { ShoppingItem, ShoppingItemStatus } from '~/types/shoppingList'
-import { formatShoppingQuantity, piecesFor, type ShoppingNeed } from './shoppingList'
+import type { ShoppingContribution, ShoppingItem, ShoppingItemStatus } from '~/types/shoppingList'
+import { compareShoppingSources, formatShoppingQuantity, piecesFor, type ShoppingNeed } from './shoppingList'
 
 /** Page « Liste de courses » : une ligne affichée par article de la collection `shoppingList`. */
 
@@ -52,7 +52,7 @@ export interface GroceryLine {
   sources: string[]
   manual: boolean
   status: ShoppingItemStatus
-  /** Besoins jour par jour, passés compris ; vides pour un ajout manuel ou un article ajouté avant leur suivi. */
+  /** Besoins jour par jour, passés compris, tirés des apports ; vides pour un ajout manuel. */
   needs: GroceryNeedRow[]
   /** "mar. 14 → sam. 18", "pour demain"... sur les besoins à venir ; vide s'il n'y en a pas. */
   rangeLabel: string
@@ -83,6 +83,21 @@ function dayLabel(date: Date, today: Date) {
   return shortDay(date)
 }
 
+/** Apports cumulés par jour (toutes recettes confondues), par date croissante. */
+function needsFromContributions(contributions: ShoppingContribution[]): ShoppingNeed[] {
+  const byDate = new Map<string, ShoppingNeed>()
+  for (const c of contributions) {
+    const need = byDate.get(c.date) ?? { date: c.date, grams: 0, milliliters: 0, sources: [] }
+    need.grams += c.grams
+    need.milliliters += c.milliliters
+    if (!need.sources.includes(c.label)) need.sources.push(c.label)
+    byDate.set(c.date, need)
+  }
+  return [...byDate.values()]
+    .map(need => ({ ...need, sources: need.sources.sort(compareShoppingSources) }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
 function needQuantityLabel(need: ShoppingNeed, gramsPerPiece?: number) {
   const pieces = gramsPerPiece && need.grams > 0 ? piecesFor(need.grams, gramsPerPiece) : undefined
   return formatShoppingQuantity({ grams: need.grams, milliliters: need.milliliters, pieces })
@@ -95,13 +110,14 @@ export function groceryLineFromItem(
   today: Date,
 ): GroceryLine {
   const aisle = aisleOf(item.categoryId)
-  const hasQuantity = (item.grams ?? 0) > 0 || (item.milliliters ?? 0) > 0
-  const computedQuantityLabel = hasQuantity
-    ? formatShoppingQuantity({ grams: item.grams ?? 0, milliliters: item.milliliters ?? 0, pieces: item.pieces })
-    : ''
+  const totals = needsFromContributions(item.contributions ?? [])
+  const grams = totals.reduce((sum, need) => sum + need.grams, 0)
+  const milliliters = totals.reduce((sum, need) => sum + need.milliliters, 0)
+  const pieces = item.gramsPerPiece && grams > 0 ? piecesFor(grams, item.gramsPerPiece) : undefined
+  const computedQuantityLabel = grams > 0 || milliliters > 0 ? formatShoppingQuantity({ grams, milliliters, pieces }) : ''
   const isFragile = FRAGILE_AISLE_IDS.has(aisle.id) && !isEgg(item.label)
 
-  const needs = (item.needs ?? []).map((need): GroceryNeedRow => {
+  const needs = totals.map((need): GroceryNeedRow => {
     const date = parseISO(need.date)
     const offset = differenceInCalendarDays(date, today)
     return {
@@ -133,7 +149,7 @@ export function groceryLineFromItem(
     quantityLabel: item.quantity || computedQuantityLabel,
     computedQuantityLabel,
     isQuantityEdited: !!item.quantity,
-    sources: item.sources ?? [],
+    sources: [...new Set(totals.flatMap(need => need.sources))].sort(compareShoppingSources),
     manual: !item.ingredientId,
     status: item.status,
     needs,

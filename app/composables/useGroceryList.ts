@@ -5,18 +5,40 @@ import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import type { IngredientCategory } from '~/types/ingredientCategory'
 import type { DayRange } from '~/composables/useMeals'
+import type { InclusionDraft } from '~/composables/useShoppingList'
+import type { Meal } from '~/types/meal'
+import type { ShoppingMealInclusion } from '~/types/shoppingList'
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
-import { groupPlannedMeals, mealHasIngredients, plannedMealKey, type PlannedMealRow } from '~/utils/plannedMealRows'
-import { buildShoppingList } from '~/utils/shoppingList'
+import { groupPlannedMeals, plannedMealKey, type PlannedMealRow } from '~/utils/plannedMealRows'
+import { mealDay } from '~/utils/shoppingList'
+import type { ShoppingCatalog } from '~/utils/shoppingPlan'
 
 export type GroceryMode = 'prepare' | 'store'
 
-/** Une ligne de repas planifiés, avec ses parts saisies à la main le cas échéant. */
+/** Une ligne de repas de la fenêtre, avec sa présence dans la liste. */
 export interface GroceryMealRow extends PlannedMealRow {
+  /** Repas de la fenêtre regroupés sur cette ligne. */
+  meals: Meal[]
   /** Parts planifiées dans les menus, pour une recette. */
   plannedParts?: number
-  /** Les parts affichées ont été saisies à la main. */
+  /** Les parts retenues diffèrent de celles des menus. */
   isPartsEdited: boolean
+  /** Tous les repas de la ligne sont dans la liste. */
+  isChecked: boolean
+  /** Une partie seulement (ex. la période s'est étendue à un nouveau repas de la recette). */
+  isIndeterminate: boolean
+  /** Au moins un repas déjà acheté : ses parts ne se modifient plus. */
+  hasBought: boolean
+  /** Tous achetés : la ligne est verrouillée. */
+  isLocked: boolean
+}
+
+/** Repas inclus dans la fenêtre mais disparus des menus depuis. */
+export interface GroceryOrphanRow {
+  key: string
+  label: string
+  inclusions: ShoppingMealInclusion[]
+  isBought: boolean
 }
 
 export interface GroceryAisleGroup {
@@ -29,13 +51,13 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
 
 /**
  * État de la page « Liste de courses », partagé par les modes « Lister » et « Acheter » : les articles de la
- * collection `shoppingList` et, pour en ajouter, les repas planifiés sur une période (ingrédients cumulés comme dans
- * `buildShoppingList`). Le mode, la période et les repas décochés restent locaux.
+ * collection `shoppingList` et les repas planifiés d'une période, cochés s'ils sont dans la liste. Cocher, décocher ou
+ * changer des parts met la liste à jour aussitôt (voir `planItemWrites`). Le mode et la période restent locaux.
  */
 export function useGroceryList() {
   const toast = useToast()
   const shoppingList = useShoppingList()
-  const { recipesById, ingredientsById } = useFoodCatalog()
+  const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
   const categoriesStore = useIngredientCategoriesStore()
 
   const mode = ref<GroceryMode>('prepare')
@@ -63,7 +85,7 @@ export function useGroceryList() {
     ...[...categoriesStore.categories].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, 'fr')),
   ])
 
-  // --- Source : repas planifiés sur la période ---
+  // --- Source : repas planifiés sur la période, reflétés dans la liste ---
 
   const toDateValue = (date: Date) => parseDate(format(date, 'yyyy-MM-dd'))
   // Par défaut, les 7 prochains jours à partir d'aujourd'hui : les repas déjà passés n'ont plus rien à acheter.
@@ -79,6 +101,9 @@ export function useGroceryList() {
     if (!start || !end || start.compare(end) > 0) return null
     return { start: start.toDate(getLocalTimeZone()), end: end.toDate(getLocalTimeZone()) }
   })
+  const rangeDays = computed(() => (range.value
+    ? { start: format(range.value.start, 'yyyy-MM-dd'), end: format(range.value.end, 'yyyy-MM-dd') }
+    : null))
 
   const meals = useMealsBetween(range)
   watch(meals.error, (error) => {
@@ -86,101 +111,166 @@ export function useGroceryList() {
   })
 
   const rangeMeals = computed(() => (range.value ? meals.value : []))
-  const plannedRows = computed(() => groupPlannedMeals(rangeMeals.value, recipesById.value, ingredientsById.value))
+  const inclusionByMealId = computed(() => new Map(shoppingList.inclusions.value.map(inclusion => [inclusion.mealId, inclusion])))
 
-  /**
-   * Parts de recette saisies à la main, par ligne (`recipe:<id>`), à la place des parts planifiées (invités, restes à
-   * prévoir...). Remises à zéro au changement de période.
-   */
-  const partsOverrides = ref(new Map<string, number>())
-  watch(range, () => {
-    if (partsOverrides.value.size) partsOverrides.value = new Map()
-  })
+  /** Sans recettes ni ingrédients chargés, un recalcul viderait la liste : les gestes attendent le catalogue. */
+  const isCatalogReady = computed(() => !recipes.pending.value && !ingredients.pending.value)
+  const catalog = (): ShoppingCatalog => ({ recipesById: recipesById.value, ingredientsById: ingredientsById.value })
 
-  /** Repas de la période aux parts saisies : chaque repas de la recette garde sa proportion du total, donc ses jours. */
-  const adjustedMeals = computed(() => {
-    if (!partsOverrides.value.size) return rangeMeals.value
-    const plannedParts = new Map(plannedRows.value.map(row => [row.key, row.parts]))
-    return rangeMeals.value.map((meal) => {
-      if (meal.category !== 'RECIPE') return meal
+  const formatParts = (parts: number) => `${parts.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} part${parts > 1 ? 's' : ''}`
+
+  /** La fenêtre (la période) montre ses repas, cochés s'ils sont dans la liste ; la changer ne retire rien de la liste. */
+  const mealRows = computed<GroceryMealRow[]>(() => {
+    const mealsByKey = new Map<string, Meal[]>()
+    for (const meal of rangeMeals.value) {
       const key = plannedMealKey(meal)
-      const override = partsOverrides.value.get(key)
-      const planned = plannedParts.get(key)
-      return override != null && planned ? { ...meal, value: meal.value * override / planned } : meal
+      mealsByKey.set(key, [...(mealsByKey.get(key) ?? []), meal])
+    }
+    return groupPlannedMeals(rangeMeals.value, recipesById.value, ingredientsById.value).map((row) => {
+      const rowMeals = mealsByKey.get(row.key) ?? []
+      const rowInclusions = rowMeals.map(meal => inclusionByMealId.value.get(meal.id))
+      const includedCount = rowInclusions.filter(Boolean).length
+      const boughtCount = rowInclusions.filter(inclusion => inclusion?.state === 'bought').length
+      const isRecipe = row.key.startsWith('recipe:')
+      const parts = isRecipe
+        ? rowMeals.reduce((sum, meal, i) => sum + (rowInclusions[i]?.parts ?? (meal.category === 'RECIPE' ? meal.value : 0)), 0)
+        : undefined
+      const isPartsEdited = isRecipe && rowMeals.some((meal, i) => {
+        const included = rowInclusions[i]?.parts
+        return meal.category === 'RECIPE' && included != null && Math.abs(included - meal.value) > 1e-6
+      })
+      return {
+        ...row,
+        ...(parts != null ? { parts, quantityLabel: formatParts(parts) } : {}),
+        meals: rowMeals,
+        plannedParts: row.parts,
+        isPartsEdited,
+        isChecked: row.isSelectable && rowMeals.length > 0 && includedCount === rowMeals.length,
+        isIndeterminate: includedCount > 0 && includedCount < rowMeals.length,
+        hasBought: boughtCount > 0,
+        isLocked: boughtCount > 0 && boughtCount === rowMeals.length,
+      }
+    })
+  })
+  const selectableMealRows = computed(() => mealRows.value.filter(row => row.isSelectable))
+  const includedRowCount = computed(() => mealRows.value.filter(row => row.isChecked || row.isIndeterminate).length)
+
+  /** Repas inclus dans la fenêtre mais disparus des menus depuis : à retirer de la liste à la main. */
+  const orphanRows = computed<GroceryOrphanRow[]>(() => {
+    const days = rangeDays.value
+    if (!days || meals.pending.value) return []
+    const windowMealIds = new Set(rangeMeals.value.map(meal => meal.id))
+    const byKey = new Map<string, ShoppingMealInclusion[]>()
+    for (const inclusion of shoppingList.inclusions.value) {
+      if (inclusion.date < days.start || inclusion.date > days.end || windowMealIds.has(inclusion.mealId)) continue
+      byKey.set(inclusion.key, [...(byKey.get(inclusion.key) ?? []), inclusion])
+    }
+    return [...byKey].map(([key, inclusions]) => {
+      const first = inclusions[0]!
+      const label = first.recipeId
+        ? recipesById.value.get(first.recipeId)?.title ?? 'Recette introuvable'
+        : ingredientsById.value.get(first.ingredientId ?? '')?.label ?? 'Aliment introuvable'
+      return { key, label, inclusions, isBought: inclusions.every(inclusion => inclusion.state === 'bought') }
     })
   })
 
-  const mealRows = computed<GroceryMealRow[]>(() => {
-    const plannedParts = new Map(plannedRows.value.map(row => [row.key, row.parts]))
-    return groupPlannedMeals(adjustedMeals.value, recipesById.value, ingredientsById.value).map(row => ({
-      ...row,
-      plannedParts: plannedParts.get(row.key),
-      isPartsEdited: partsOverrides.value.has(row.key),
-    }))
-  })
-  const selectableMealRows = computed(() => mealRows.value.filter(row => row.isSelectable))
-
-  /** Parts d'une recette saisies à la main ; `null`, ou les parts planifiées, reviennent aux menus. */
-  function setMealParts(row: GroceryMealRow, parts: number | null) {
-    const next = new Map(partsOverrides.value)
-    if (parts == null || !(parts > 0) || parts === row.plannedParts) next.delete(row.key)
-    else next.set(row.key, parts)
-    partsOverrides.value = next
-  }
-
-  /** Recettes / aliments décochés (mangés dehors, déjà cuisinés...) : leurs ingrédients ne sont pas ajoutés. */
-  const excludedMealKeys = ref(new Set<string>())
-
-  const includedMeals = computed(() =>
-    adjustedMeals.value.filter(meal => mealHasIngredients(meal) && !excludedMealKeys.value.has(plannedMealKey(meal))))
-  const fromMenus = computed(() => buildShoppingList(includedMeals.value, recipesById.value, ingredientsById.value))
-
-  function setMealIncluded(key: string, included: boolean) {
-    const next = new Set(excludedMealKeys.value)
-    if (included) next.delete(key)
-    else next.add(key)
-    excludedMealKeys.value = next
-  }
-
-  const areAllMealsIncluded = computed(() => selectableMealRows.value.every(row => !excludedMealKeys.value.has(row.key)))
-  function toggleAllMeals() {
-    excludedMealKeys.value = areAllMealsIncluded.value ? new Set(selectableMealRows.value.map(row => row.key)) : new Set()
+  /** Ce qu'un repas apporte à la liste ; `parts` remplace les parts planifiées d'une recette. */
+  function draftFor(meal: Meal, parts?: number): InclusionDraft | null {
+    const base = { mealId: meal.id, date: mealDay(meal), key: plannedMealKey(meal), state: 'listed' as const }
+    switch (meal.category) {
+      case 'RECIPE': return { ...base, recipeId: meal.recipeId, parts: parts ?? meal.value }
+      case 'INGREDIENT': return { ...base, ingredientId: meal.ingredientId, quantity: meal.quantity, unitId: meal.unitId ?? null }
+      case 'RAW': return null
+    }
   }
 
   /**
-   * Sélection (période, repas décochés, parts saisies) déjà ajoutée à la liste : le bouton passe à « Ajouté » jusqu'au
-   * prochain changement, pour ne pas cumuler deux fois les mêmes quantités par un double clic.
+   * Les gestes s'enchaînent dans l'ordre : chacun calcule ses écarts sur l'état laissé par le précédent. On attend son
+   * écriture, ou au plus 400 ms (hors ligne, l'écriture n'aboutit qu'à la synchronisation mais s'affiche tout de suite).
    */
-  const selectionKey = computed(() => [
-    range.value?.start.getTime(),
-    range.value?.end.getTime(),
-    [...excludedMealKeys.value].sort().join('|'),
-    [...partsOverrides.value].map(([key, parts]) => `${key}=${parts}`).sort().join('|'),
-  ].join('-'))
-  const addedSelectionKey = ref<string | null>(null)
-  const isSelectionAdded = computed(() => addedSelectionKey.value === selectionKey.value)
-  const isAddingFromMenus = ref(false)
-
-  async function addFromMenus() {
-    const toAdd = fromMenus.value.items
-    if (!toAdd.length || isAddingFromMenus.value) return
-    isAddingFromMenus.value = true
-    try {
-      const { created, merged } = await shoppingList.addFromMenus(toAdd, ingredientsById.value)
-      addedSelectionKey.value = selectionKey.value
-      const details = [
-        created ? `${plural(created, 'article')} ajouté${created > 1 ? 's' : ''}` : null,
-        merged ? `${plural(merged, 'quantité')} complétée${merged > 1 ? 's' : ''}` : null,
-      ].filter(Boolean).join(', ')
-      toast.add({ title: 'Liste mise à jour', description: `${details}.`, color: 'success', icon: 'i-lucide-check' })
-    }
-    catch (error) {
-      fail('Les ingrédients n\'ont pas pu être ajoutés')(error)
-    }
-    finally {
-      isAddingFromMenus.value = false
-    }
+  let queue: Promise<unknown> = Promise.resolve()
+  /** Ajoute une tâche à la file ; un échec ne bloque pas les suivantes. */
+  function enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = queue.then(task)
+    queue = run.catch(() => {})
+    return run
   }
+
+  function plan(action: string, change: () => { upserts: InclusionDraft[], removals: ShoppingMealInclusion[] }) {
+    if (!isCatalogReady.value) return
+    void enqueue(async () => {
+      try {
+        const { upserts, removals } = change()
+        if (!upserts.length && !removals.length) return
+        const write = shoppingList.applyInclusions(upserts, removals, catalog())
+        write.then((skipped) => {
+          if (skipped.length) toast.add({ title: 'Non compté', description: `${skipped.join(', ')}.`, color: 'warning', icon: 'i-lucide-info' })
+        }).catch(fail(action))
+        await Promise.race([write.catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))])
+      }
+      catch (error) {
+        fail(action)(error)
+      }
+    })
+  }
+
+  const listedOf = (rowMeals: Meal[]) => rowMeals.flatMap((meal) => {
+    const inclusion = inclusionByMealId.value.get(meal.id)
+    return inclusion?.state === 'listed' ? [inclusion] : []
+  })
+  const missingDrafts = (rowMeals: Meal[]) => rowMeals.flatMap((meal) => {
+    const draft = inclusionByMealId.value.has(meal.id) ? null : draftFor(meal)
+    return draft ? [draft] : []
+  })
+
+  /** Coché (ou en partie) : ajoute les repas manquants ; coché en entier : retire ceux qui ne sont pas encore achetés. */
+  function toggleRow(row: GroceryMealRow) {
+    if (!row.isSelectable || row.isLocked) return
+    const isChecked = row.isChecked
+    plan('La liste n\'a pas pu être mise à jour', () => isChecked
+      ? { upserts: [], removals: listedOf(row.meals) }
+      : { upserts: missingDrafts(row.meals), removals: [] })
+  }
+
+  const areAllMealsIncluded = computed(() => selectableMealRows.value.length > 0 && selectableMealRows.value.every(row => row.isChecked))
+  function toggleAllMeals() {
+    const rows = selectableMealRows.value
+    const allIncluded = areAllMealsIncluded.value
+    plan('La liste n\'a pas pu être mise à jour', () => allIncluded
+      ? { upserts: [], removals: rows.flatMap(row => listedOf(row.meals)) }
+      : { upserts: rows.flatMap(row => missingDrafts(row.meals)), removals: [] })
+  }
+
+  /**
+   * Parts d'une recette pour toute la fenêtre : chaque repas garde sa proportion du total, donc ses jours ; la recette
+   * est incluse au passage. `null` revient aux parts des menus.
+   */
+  function setRowParts(row: GroceryMealRow, parts: number | null) {
+    if (!row.key.startsWith('recipe:') || row.hasBought || !row.plannedParts) return
+    const planned = row.plannedParts
+    plan('Les parts n\'ont pas pu être modifiées', () => ({
+      upserts: row.meals.flatMap((meal) => {
+        if (meal.category !== 'RECIPE') return []
+        const draft = draftFor(meal, parts == null ? meal.value : meal.value * parts / planned)
+        return draft ? [draft] : []
+      }),
+      removals: [],
+    }))
+  }
+
+  function removeOrphans(row: GroceryOrphanRow) {
+    plan('La liste n\'a pas pu être mise à jour', () => ({
+      upserts: [],
+      removals: row.inclusions.filter(inclusion => inclusion.state === 'listed'),
+    }))
+  }
+
+  /** Les inclusions des repas passés depuis plus de 2 jours ne servent plus : supprimées une fois chargées. */
+  const stopPrune = watch(() => shoppingList.inclusions.pending.value, (pending) => {
+    if (pending) return
+    shoppingList.pruneInclusions(format(addDays(today.value, -2), 'yyyy-MM-dd')).catch(() => {})
+    queueMicrotask(() => stopPrune())
+  }, { immediate: true })
 
   // --- Liste ---
 
@@ -244,11 +334,19 @@ export function useGroceryList() {
     shoppingList.setQuantity(line.item, quantity).catch(fail(`La quantité de « ${line.label} » n'a pas pu être modifiée`))
   }
 
+  /** Retire un ajout manuel ; un article venu des menus se retire en décochant ses repas. */
+  function removeManual(line: GroceryLine) {
+    if (!line.manual) return
+    shoppingList.removeManual(line.item).catch(fail(`« ${line.label} » n'a pas pu être retiré`))
+  }
 
-  /** Fin des courses : les articles du panier et ceux déjà à la maison quittent la liste. */
+  /**
+   * Fin des courses : les articles du panier et ceux déjà à la maison quittent la liste, leurs repas sont marqués
+   * achetés. Passe par la file des gestes, pour ne pas croiser un recalcul en cours.
+   */
   async function finishShopping() {
     try {
-      const count = await shoppingList.finishShopping()
+      const count = await enqueue(() => shoppingList.finishShopping(catalog()))
       completionDismissed.value = false
       mode.value = 'prepare'
       const left = toBuy.value.length
@@ -264,16 +362,16 @@ export function useGroceryList() {
     }
   }
 
+  /** Repartir de zéro : tous les articles retirés et les repas décochés ; ce qui a été acheté reste mémorisé. */
   async function clearAll() {
     try {
-      const count = await shoppingList.clearAll()
-      addedSelectionKey.value = null
+      const count = await enqueue(() => shoppingList.clearAll())
       completionDismissed.value = false
-      toast.add({ title: 'Liste vidée', description: `${plural(count, 'article')} supprimé${count > 1 ? 's' : ''}.`, color: 'neutral', icon: 'i-lucide-check' })
+      toast.add({ title: 'Liste remise à zéro', description: `${plural(count, 'article')} retiré${count > 1 ? 's' : ''}, repas décochés.`, color: 'neutral', icon: 'i-lucide-check' })
       return true
     }
     catch (error) {
-      fail('La liste n\'a pas pu être vidée')(error)
+      fail('La liste n\'a pas pu être remise à zéro')(error)
       return false
     }
   }
@@ -286,12 +384,10 @@ export function useGroceryList() {
     range,
     mealRows,
     selectableMealRows,
-    excludedMealKeys,
+    includedRowCount,
+    orphanRows,
     areAllMealsIncluded,
-    fromMenus,
-    isSelectionAdded,
-    isAddingFromMenus,
-    skipped: computed(() => fromMenus.value.skipped),
+    isCatalogReady,
     aisleOptions,
     lines,
     toBuy,
@@ -300,16 +396,17 @@ export function useGroceryList() {
     doneCount,
     isComplete,
     completionDismissed,
-    setMealIncluded,
-    setMealParts,
+    toggleRow,
+    setRowParts,
     toggleAllMeals,
-    addFromMenus,
+    removeOrphans,
     toggleAtHome,
     toggleInCart,
     isAddItemOpen,
     addManual,
     setQuantity,
     toggleUrgent,
+    removeManual,
     finishShopping,
     clearAll,
   })

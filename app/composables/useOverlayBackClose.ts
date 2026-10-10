@@ -13,11 +13,21 @@ type OverlayEntry = { close: () => void }
 const openOverlays: OverlayEntry[] = []
 /** `history.back()` lancés par une fermeture depuis l'UI : leur `popstate` ne doit fermer aucun autre overlay. */
 let pendingOwnBacks = 0
+/**
+ * Ouvertures en attente de la fin de ces `history.back()` : un `pushState` lancé pendant un retour en cours (ex. la
+ * fiche se ferme et le formulaire s'ouvre aussitôt) se ferait défaire par lui, et la fermeture suivante quitterait la page.
+ */
+let pushesAfterBacks: (() => void)[] = []
 let listening = false
 
 function onPopState() {
   if (pendingOwnBacks > 0) {
     pendingOwnBacks--
+    if (pendingOwnBacks === 0) {
+      const pushes = pushesAfterBacks
+      pushesAfterBacks = []
+      for (const push of pushes) push()
+    }
     return
   }
   openOverlays.pop()?.close()
@@ -42,11 +52,20 @@ export function useOverlayBackClose(open: Ref<boolean>) {
     history.back()
   }
 
+  let unmounted = false
+  onUnmounted(() => { unmounted = true })
+
+  /** Entrée d'historique de l'overlay ; sans effet s'il a été refermé ou démonté entre-temps. */
+  const push = () => {
+    if (unmounted || !open.value || openOverlays.includes(entry)) return
+    history.pushState({ overlay: true }, '')
+    openOverlays.push(entry)
+  }
+
   watch(open, (isOpen) => {
     if (isOpen) {
-      if (openOverlays.includes(entry)) return
-      history.pushState({ overlay: true }, '')
-      openOverlays.push(entry)
+      if (pendingOwnBacks > 0) pushesAfterBacks.push(push)
+      else push()
     } else {
       // Fermé par "retour" : l'entrée a déjà été retirée de la pile par onPopState, rien à consommer.
       release()

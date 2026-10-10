@@ -494,11 +494,11 @@ async function handleSubmit() {
         </UFormField>
 
         <UFormField label="Description (optionnel)">
-          <UTextarea v-model="description" :rows="2" placeholder="Note libre..." variant="outline" class="w-full" />
+          <UTextarea v-model="description" :rows="2" autoresize :ui="{ base: 'overflow-hidden' }" placeholder="Note libre..." variant="outline" class="w-full" />
         </UFormField>
 
         <UFormField label="Instructions (optionnel)">
-          <UTextarea v-model="instructions" :rows="4" placeholder="Étapes de préparation..." variant="outline" class="w-full" />
+          <UTextarea v-model="instructions" :rows="4" autoresize :ui="{ base: 'overflow-hidden' }" placeholder="Étapes de préparation..." variant="outline" class="w-full" />
         </UFormField>
 
         <UFormField label="Source (optionnel)">

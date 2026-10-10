@@ -31,6 +31,11 @@ export default defineNuxtConfig({
   pinia: {
     storesDirs: ['app/stores/**'],
   },
+  experimental: {
+    // Après un déploiement, un onglet resté ouvert demande des fichiers de l'ancienne version, supprimés : on recharge
+    // l'appli dès l'échec plutôt qu'à la navigation suivante (voir aussi `error.vue`).
+    emitRouteChunkError: 'automatic-immediate',
+  },
   vuefire: {
     auth: {
       enabled: true

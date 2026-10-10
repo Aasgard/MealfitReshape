@@ -12,6 +12,25 @@ const is404 = computed(() => props.error.status === 404)
 const canRetry = computed(() => (props.error.status ?? 500) >= 500)
 const homeLink = computed(() => (user.value ? '/dashboard' : '/'))
 
+/**
+ * Fichier de code introuvable : l'appli ouverte date d'avant un déploiement et demande des fichiers de l'ancienne
+ * version (formulations de Chrome, Safari et Firefox).
+ */
+const CHUNK_ERROR = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Loading chunk .* failed/i
+const isOutdatedApp = computed(() => {
+  const cause = props.error.cause instanceof Error ? props.error.cause : undefined
+  return CHUNK_ERROR.test(props.error.message ?? '') || CHUNK_ERROR.test(cause?.message ?? '')
+})
+
+/** Recharge la nouvelle version ; `reloadNuxtApp` ne recommence pas dans les 10 s, ce qui évite une boucle. */
+onMounted(() => {
+  if (isOutdatedApp.value) reloadNuxtApp({ ttl: 10_000 })
+})
+
+function reloadApp() {
+  reloadNuxtApp({ force: true })
+}
+
 interface FactRow {
   icon: string
   label: string
@@ -20,13 +39,17 @@ interface FactRow {
   suffix?: string
 }
 
-const headline = computed(() => (is404.value ? 'Page introuvable.' : 'Une erreur est survenue.'))
+const headline = computed(() => {
+  if (is404.value) return 'Page introuvable.'
+  if (isOutdatedApp.value) return 'Une nouvelle version est disponible.'
+  return 'Une erreur est survenue.'
+})
 
-const description = computed(() =>
-  is404.value
-    ? 'L\'adresse a peut-être été mal recopiée, ou la page a été déplacée depuis.'
-    : 'Quelque chose s\'est mal passé de notre côté. Ce n\'est pas vous, c\'est nous.'
-)
+const description = computed(() => {
+  if (is404.value) return 'L\'adresse a peut-être été mal recopiée, ou la page a été déplacée depuis.'
+  if (isOutdatedApp.value) return 'L\'appli a été mise à jour pendant qu\'elle était ouverte. Rechargez-la pour continuer.'
+  return 'Quelque chose s\'est mal passé de notre côté. Ce n\'est pas vous, c\'est nous.'
+})
 
 const facts = computed<FactRow[]>(() =>
   is404.value
@@ -181,12 +204,21 @@ onMounted(() => {
 
         <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
           <UButton
+            v-if="isOutdatedApp"
+            label="Recharger"
+            icon="i-lucide-refresh-cw"
+            size="lg"
+            @click="reloadApp"
+          />
+          <UButton
             :label="user ? 'Retour au dashboard' : 'Retour à l\'accueil'"
             size="lg"
+            :color="isOutdatedApp ? 'neutral' : 'primary'"
+            :variant="isOutdatedApp ? 'outline' : 'solid'"
             @click="goHome"
           />
           <UButton
-            v-if="canRetry"
+            v-if="canRetry && !isOutdatedApp"
             label="Réessayer"
             size="lg"
             color="neutral"

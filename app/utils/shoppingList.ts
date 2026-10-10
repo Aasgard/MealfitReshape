@@ -14,7 +14,16 @@ export interface ShoppingListItem {
   milliliters: number
   /** Nombre de pièces correspondant à `grams` (arrondi au supérieur), si l'ingrédient a une unité « Pièce ». */
   pieces?: number
+  /** Recettes qui demandent l'ingrédient (par ordre alphabétique), puis « Hors recette » s'il est aussi mangé seul. */
+  sources: string[]
 }
+
+/** Source d'un ingrédient mangé seul, hors de toute recette. */
+export const OUTSIDE_RECIPE_SOURCE = 'Hors recette'
+
+/** Recettes par ordre alphabétique, « Hors recette » en dernier. */
+export const compareShoppingSources = (a: string, b: string) =>
+  a === OUTSIDE_RECIPE_SOURCE ? 1 : b === OUTSIDE_RECIPE_SOURCE ? -1 : a.localeCompare(b, 'fr')
 
 export interface ShoppingList {
   /** Triés par catégorie (ordre du catalogue) puis par nom. */
@@ -24,7 +33,7 @@ export interface ShoppingList {
 }
 
 /** Unité « Pièce » de l'ingrédient (reconnue à son libellé, sans tenir compte des accents ni de la casse), en grammes. */
-function gramsPerPiece(ingredient: Ingredient): number | null {
+export function gramsPerPiece(ingredient: Ingredient): number | null {
   const pieceUnitId = Object.entries(ingredient.units ?? {}).find(([, unit]) =>
     unit.label.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase() === 'piece'
   )?.[0]
@@ -44,8 +53,8 @@ export function buildShoppingList(
   const itemsById = new Map<string, ShoppingListItem>()
   const skipped = new Set<string>()
 
-  /** Ajoute `quantity` grammes de l'ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités. */
-  const add = (ingredientId: string, unitId: string | null, quantity: number) => {
+  /** Ajoute `quantity` grammes de l'ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités, demandés par `source`. */
+  const add = (ingredientId: string, unitId: string | null, quantity: number, source: string) => {
     if (quantity <= 0) return
 
     const ingredient = ingredientsById.get(ingredientId)
@@ -60,6 +69,7 @@ export function buildShoppingList(
       category: ingredient.category,
       grams: 0,
       milliliters: 0,
+      sources: [],
     }
 
     if (unitId == null) {
@@ -74,6 +84,7 @@ export function buildShoppingList(
         return
       }
     }
+    if (!item.sources.includes(source)) item.sources.push(source)
     itemsById.set(ingredientId, item)
   }
 
@@ -86,7 +97,7 @@ export function buildShoppingList(
         partsByRecipeId.set(meal.recipeId, (partsByRecipeId.get(meal.recipeId) ?? 0) + meal.value)
         break
       case 'INGREDIENT':
-        add(meal.ingredientId, meal.unitId ?? null, meal.quantity)
+        add(meal.ingredientId, meal.unitId ?? null, meal.quantity, OUTSIDE_RECIPE_SOURCE)
         break
       case 'RAW':
         skipped.add(`${meal.label} (macros saisies à la main)`)
@@ -104,7 +115,7 @@ export function buildShoppingList(
     const persons = recipe.persons && recipe.persons > 0 ? recipe.persons : 1
     const factor = Math.ceil(parts / persons)
     for (const line of recipe.ingredients ?? []) {
-      if (line.ingredientRef) add(line.ingredientRef.id, line.unit ?? null, line.quantity * factor)
+      if (line.ingredientRef) add(line.ingredientRef.id, line.unit ?? null, line.quantity * factor, recipe.title)
     }
   }
 
@@ -113,6 +124,7 @@ export function buildShoppingList(
     const pieceGrams = ingredient ? gramsPerPiece(ingredient) : null
     // La marge évite qu'un reste d'arrondi (600,0000001 g pour des pièces de 150 g) ne fasse acheter une pièce de plus.
     if (pieceGrams && item.grams > 0) item.pieces = Math.ceil(item.grams / pieceGrams - 1e-6)
+    item.sources.sort(compareShoppingSources)
   }
 
   const categoryOrder = (item: ShoppingListItem) => item.category?.order ?? Number.POSITIVE_INFINITY
@@ -135,7 +147,7 @@ function formatAmount(value: number, unit: 'g' | 'ml'): string {
 }
 
 /** Quantité affichée d'un ingrédient, ex. "350 g", "350 g + 200 ml" ou "4 pièces (600 g)" s'il a une unité « Pièce ». */
-export function formatShoppingQuantity(item: ShoppingListItem): string {
+export function formatShoppingQuantity(item: Pick<ShoppingListItem, 'grams' | 'milliliters' | 'pieces'>): string {
   const amount = [
     item.grams > 0 ? formatAmount(item.grams, 'g') : null,
     item.milliliters > 0 ? formatAmount(item.milliliters, 'ml') : null,

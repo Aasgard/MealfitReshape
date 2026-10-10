@@ -4,7 +4,8 @@ import type { ActivityKey, SexKey, UserBody, UserGoal, UserTargets } from '~/typ
 import type { DailyTargets } from './dailyTargets'
 import { dayReaching, rateForCalories, resolveBodyModel, simulateWeight, totalEnergyExpenditure, type BodyModel } from './weightProjection'
 import type { WeightGoal } from './weightTrend'
-import { MANUAL_AISLES } from './groceryList'
+import type { IngredientCategory } from '~/types/ingredientCategory'
+import { MISC_AISLE } from './groceryList'
 import { MEASUREMENT_ZONES, type MeasurementZoneKey } from './measurements'
 
 /**
@@ -360,10 +361,27 @@ export interface AppSettings {
   showGoalProjection: boolean
 }
 
-/** Ordre du catalogue (celui du seed), « Divers » en dernier. */
-export const DEFAULT_AISLE_ORDER = [...MANUAL_AISLES].sort((a, b) => a.order - b.order).map(a => a.id)
+/** Rayons de la maquette des réglages : sous-ensemble des catégories du catalogue (mêmes libellés, ordre et icônes que le seed). */
+const SETTINGS_AISLES: IngredientCategory[] = [
+  MISC_AISLE,
+  { id: 'vegetables', label: 'Légumes', order: 1, icon: 'carrot' },
+  { id: 'fruits', label: 'Fruits', order: 2, icon: 'apple' },
+  { id: 'legumes', label: 'Légumineuses', order: 3, icon: 'bean' },
+  { id: 'cereals_starches', label: 'Céréales & Féculents', order: 4, icon: 'wheat' },
+  { id: 'nuts_seeds', label: 'Fruits secs & Graines', order: 7, icon: 'nut' },
+  { id: 'meat', label: 'Viandes & Œuf', order: 8, icon: 'beef' },
+  { id: 'seafood', label: 'Poissons & Fruits de mer', order: 9, icon: 'fish' },
+  { id: 'dairy', label: 'Produits laitiers', order: 11, icon: 'milk' },
+  { id: 'plant_based_alternatives', label: 'Alternatives végétales', order: 12, icon: 'leaf' },
+  { id: 'fats_oils', label: 'Huiles & Matières grasses', order: 13, icon: 'droplet' },
+  { id: 'condiments_sauces', label: 'Condiments & Sauces', order: 15, icon: 'utensils' },
+  { id: 'herbs_spices', label: 'Herbes & Épices', order: 16, icon: 'sprout' },
+]
 
-export const AISLE_BY_ID = Object.fromEntries(MANUAL_AISLES.map(a => [a.id, a]))
+/** Ordre du catalogue (celui du seed), « Divers » en dernier. */
+export const DEFAULT_AISLE_ORDER = [...SETTINGS_AISLES].sort((a, b) => a.order - b.order).map(a => a.id)
+
+export const AISLE_BY_ID = Object.fromEntries(SETTINGS_AISLES.map(a => [a.id, a]))
 
 export function defaultSettings(): AppSettings {
   return {

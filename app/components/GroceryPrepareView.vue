@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Mode « Préparer » : à gauche les repas planifiés qui alimentent la liste, à droite la liste par rayon.
+ * Mode « Préparer » : à gauche les repas planifiés dont on ajoute les ingrédients à la liste, à droite la liste par rayon.
  * Ici pas de case à cocher sur les articles : « J'en ai déjà » les range dans un groupe à part,
  * pour ne jamais confondre avec la case « dans le panier » du mode magasin.
  */
@@ -9,16 +9,18 @@ import type { GroceryLine } from '~/utils/groceryList'
 const list = useInjectedGroceryList()
 
 const inputDate = useTemplateRef('inputDate')
-const sourceOpen = ref(true)
 const atHomeOpen = ref(false)
 
-const newLabel = ref('')
-const newAisleId = ref(MISC_AISLE.id)
-const aisleItems = MANUAL_AISLES.map(aisle => ({ label: aisle.label, value: aisle.id, icon: categoryIconName(aisle.icon) }))
+/** Ouvert d'office quand la liste est vide au chargement : c'est par là qu'on la remplit. */
+const sourceOpen = ref(true)
+const stopInitialOpen = watch(() => list.isLoading, (loading) => {
+  if (loading) return
+  sourceOpen.value = !list.lines.length
+  queueMicrotask(() => stopInitialOpen())
+}, { immediate: true })
 
-function onAdd() {
-  const aisle = MANUAL_AISLES.find(a => a.id === newAisleId.value)
-  if (list.addManual(newLabel.value, aisle)) newLabel.value = ''
+function openAddItem() {
+  list.isAddItemOpen = true
 }
 
 const groups = computed(() => {
@@ -35,11 +37,22 @@ const groups = computed(() => {
 })
 
 const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? 's' : ''}`
+
+const ingredientCount = computed(() => list.fromMenus.items.length)
+const sourceSummary = computed(() => {
+  if (list.isLoadingMeals) return 'Chargement des repas…'
+  if (!list.mealRows.length) return 'Aucun repas sur la période'
+  return `${list.mealRows.length} repas · ${plural(ingredientCount.value, 'ingrédient')}`
+})
+const addLabel = computed(() => {
+  if (list.isSelectionAdded) return 'Ajouté à la liste'
+  return ingredientCount.value ? `Ajouter ${plural(ingredientCount.value, 'ingrédient')} à la liste` : 'Aucun ingrédient à ajouter'
+})
 </script>
 
 <template>
-  <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-    <!-- Source : repas planifiés sur la période. -->
+  <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <!-- Source : repas planifiés sur la période, à ajouter à la liste. -->
     <UCollapsible
       v-model:open="sourceOpen"
       class="flex flex-col rounded-xl border border-default bg-default lg:sticky lg:top-0"
@@ -49,10 +62,8 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
         class="flex w-full cursor-pointer items-center gap-3 rounded-xl p-4 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:px-5"
       >
         <span class="flex-1">
-          <span class="block text-lg font-bold tracking-tight text-highlighted">Repas planifiés</span>
-          <span class="block text-xs tabular-nums text-dimmed">
-            {{ list.mealRows.length ? `${list.mealRows.length} repas · ` + plural(list.lines.filter(l => !l.manual).length, 'ingrédient') : 'Aucun repas sur la période' }}
-          </span>
+          <span class="block text-lg font-bold tracking-tight text-highlighted">Ajouter depuis les menus</span>
+          <span class="block text-xs tabular-nums text-dimmed">{{ sourceSummary }}</span>
         </span>
         <UIcon
           name="i-lucide-chevron-down"
@@ -83,10 +94,14 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
             </UInputDate>
           </UFormField>
 
-          <div v-if="list.mealRows.length" class="flex flex-col">
+          <p v-if="list.isLoadingMeals" class="py-6 text-center text-sm text-muted">
+            Chargement des repas…
+          </p>
+
+          <div v-else-if="list.mealRows.length" class="flex flex-col">
             <div class="flex items-center justify-between gap-2 border-b border-default pb-1">
               <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-                Inclure dans la liste
+                Repas à inclure
               </p>
               <UButton
                 v-if="list.selectableMealRows.length"
@@ -99,29 +114,44 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
             </div>
             <ul class="divide-y divide-default">
               <li v-for="row in list.mealRows" :key="row.key">
-                <label class="flex items-center gap-3 py-2" :class="row.selectable ? 'cursor-pointer' : 'cursor-not-allowed'">
+                <label class="flex items-center gap-3 py-2" :class="row.isSelectable ? 'cursor-pointer' : 'cursor-not-allowed'">
                   <UCheckbox
-                    :model-value="row.selectable && !list.excludedMealKeys.has(row.key)"
-                    :disabled="!row.selectable"
+                    :model-value="row.isSelectable && !list.excludedMealKeys.has(row.key)"
+                    :disabled="!row.isSelectable"
                     @update:model-value="list.setMealIncluded(row.key, $event === true)"
                   />
                   <span
                     class="min-w-0 flex-1 truncate text-sm"
-                    :class="row.selectable && !list.excludedMealKeys.has(row.key) ? 'text-highlighted' : 'text-dimmed'"
+                    :class="row.isSelectable && !list.excludedMealKeys.has(row.key) ? 'text-highlighted' : 'text-dimmed'"
                   >{{ row.label }}</span>
-                  <span class="shrink-0 text-xs tabular-nums text-dimmed">{{ row.quantityLabel }}</span>
+                  <span v-if="row.quantityLabel" class="shrink-0 text-xs tabular-nums text-dimmed">{{ row.quantityLabel }}</span>
                 </label>
               </li>
             </ul>
           </div>
           <p v-else class="rounded-lg border border-dashed border-default px-4 py-6 text-center text-sm text-muted">
-            Aucun repas planifié sur cette période.
+            {{ list.range ? 'Aucun repas planifié sur cette période.' : 'Choisissez une période complète.' }}
           </p>
 
           <p v-if="list.skipped.length" class="flex gap-2 text-xs text-muted">
             <UIcon name="i-lucide-info" class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>Non inclus : {{ list.skipped.join(', ') }}.</span>
           </p>
+
+          <div v-if="list.mealRows.length" class="flex flex-col gap-1.5">
+            <UButton
+              :label="addLabel"
+              :icon="list.isSelectionAdded ? 'i-lucide-check' : 'i-lucide-list-plus'"
+              :variant="list.isSelectionAdded ? 'subtle' : 'solid'"
+              :loading="list.isAddingFromMenus"
+              :disabled="!ingredientCount || list.isSelectionAdded"
+              block
+              @click="list.addFromMenus()"
+            />
+            <p class="text-xs text-dimmed">
+              Un ingrédient déjà à acheter voit sa quantité complétée.
+            </p>
+          </div>
 
           <UButton
             to="/dashboard/menus"
@@ -138,36 +168,33 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
 
     <!-- Liste à acheter, par rayon. -->
     <section aria-labelledby="to-buy-title" class="flex flex-col rounded-xl border border-default bg-default">
-      <div class="flex items-baseline justify-between gap-3 p-4 sm:px-5">
-        <h2 id="to-buy-title" class="text-lg font-bold tracking-tight text-highlighted">
-          À acheter
-        </h2>
-        <p class="text-xs tabular-nums text-dimmed">
-          {{ plural(list.toBuy.length, 'article') }} · {{ plural(groups.length, 'rayon') }}
-        </p>
+      <div class="flex items-center justify-between gap-3 p-4 sm:px-5">
+        <div class="min-w-0">
+          <h2 id="to-buy-title" class="text-lg font-bold tracking-tight text-highlighted">
+            À acheter
+          </h2>
+          <p class="text-xs tabular-nums text-dimmed">
+            {{ plural(list.toBuy.length, 'article') }} · {{ plural(groups.length, 'rayon') }}
+          </p>
+        </div>
+        <UButton
+          label="Ajouter un article"
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          class="shrink-0"
+          @click="openAddItem"
+        />
       </div>
 
-      <form class="flex gap-2 border-t border-default px-4 py-3 sm:px-5" @submit.prevent="onAdd">
-        <UInput
-          v-model="newLabel"
-          placeholder="Ajouter un article…"
-          icon="i-lucide-plus"
-          aria-label="Nom de l'article à ajouter"
-          class="min-w-0 flex-1"
-        />
-        <USelectMenu
-          v-model="newAisleId"
-          :items="aisleItems"
-          value-key="value"
-          :search-input="false"
-          aria-label="Rayon de l'article"
-          class="w-36 sm:w-48"
-        />
-        <UButton type="submit" label="Ajouter" color="neutral" variant="outline" :disabled="!newLabel.trim()" />
-      </form>
-
-      <p v-if="!list.toBuy.length" class="border-t border-default px-6 py-10 text-center text-sm text-muted">
-        Rien à acheter pour l'instant. Ajoutez un article ci-dessus ou planifiez des repas dans les menus.
+      <p v-if="list.isLoading" class="border-t border-default px-6 py-10 text-center text-sm text-muted">
+        Chargement de la liste…
+      </p>
+      <p v-else-if="!list.toBuy.length" class="border-t border-default px-6 py-10 text-center text-sm text-muted">
+        {{ list.atHomeLines.length
+          ? 'Tout ce qui reste est déjà à la maison.'
+          : 'La liste est vide. Ajoutez les ingrédients de vos menus, ou un article à la main.' }}
       </p>
 
       <div v-for="group in groups" :key="group.aisle.id" class="flex flex-col">
@@ -186,9 +213,7 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
                 {{ line.manual ? 'Ajout manuel' : line.sources.join(', ') }}
               </p>
             </div>
-            <span v-if="line.quantityLabel" class="shrink-0 text-end text-sm tabular-nums text-muted">
-              {{ line.quantityLabel }}
-            </span>
+            <GroceryQuantityEditor :line="line" />
             <UTooltip text="J'en ai déjà">
               <UButton
                 icon="i-lucide-house"
@@ -196,19 +221,9 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
                 variant="ghost"
                 size="sm"
                 :aria-label="`${line.label} : j'en ai déjà`"
-                @click="list.toggleAtHome(line.id)"
+                @click="list.toggleAtHome(line)"
               />
             </UTooltip>
-            <UButton
-              v-if="line.manual"
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :aria-label="`Retirer ${line.label} de la liste`"
-              class="-ms-2"
-              @click="list.removeManual(line.id)"
-            />
           </li>
         </TransitionGroup>
       </div>
@@ -234,7 +249,7 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
                 variant="ghost"
                 size="xs"
                 :aria-label="`Remettre ${line.label} dans la liste`"
-                @click="list.toggleAtHome(line.id)"
+                @click="list.toggleAtHome(line)"
               />
             </li>
           </ul>

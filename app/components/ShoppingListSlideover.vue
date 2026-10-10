@@ -2,11 +2,10 @@
 import { getLocalTimeZone, parseDate, type DateValue } from '@internationalized/date'
 import { format } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
-import type { Meal } from '~/types/meal'
 import type { Recipe } from '~/types/recipe'
 import type { DayRange } from '~/composables/useMeals'
 import { categoryIconName } from '~/utils/categoryIcon'
-import { entryFromMeal } from '~/utils/menuEntries'
+import { groupPlannedMeals, mealHasIngredients, plannedMealKey } from '~/utils/plannedMealRows'
 import { buildShoppingList, formatShoppingListText, formatShoppingQuantity, type ShoppingListItem } from '~/utils/shoppingList'
 
 /**
@@ -63,48 +62,11 @@ const isLoading = computed(() => meals.pending.value)
 
 const rangeMeals = computed(() => (range.value ? meals.value : []))
 
-/** Les macros saisies à la main n'ont pas d'ingrédients : affichées, mais pas sélectionnables. */
-const hasIngredients = (meal: Meal) => meal.category !== 'RAW'
-
-/** Clé de regroupement : une ligne par recette, par aliment dans une même unité, par libellé de macros saisies. */
-const mealKey = (meal: Meal) => {
-  switch (meal.category) {
-    case 'RECIPE': return `recipe:${meal.recipeId}`
-    case 'INGREDIENT': return `ingredient:${meal.ingredientId}:${meal.unitId ?? 'g'}`
-    case 'RAW': return `raw:${meal.label}`
-  }
-}
-
-type MealRow = { key: string, label: string, quantityLabel?: string, isSelectable: boolean, rank: number }
-const CATEGORY_RANK = { RECIPE: 0, INGREDIENT: 1, RAW: 2 } as const
-
-/** Repas regroupés (parts ou quantités cumulées), recettes puis aliments puis macros, par ordre alphabétique. */
-const mealRows = computed(() => {
-  const totals = new Map<string, Meal>()
-  for (const meal of rangeMeals.value) {
-    const key = mealKey(meal)
-    const total = totals.get(key)
-    if (!total) totals.set(key, { ...meal })
-    else if (total.category === 'RECIPE' && meal.category === 'RECIPE') total.value += meal.value
-    else if (total.category === 'INGREDIENT' && meal.category === 'INGREDIENT') total.quantity += meal.quantity
-  }
-
-  const rows: MealRow[] = [...totals].map(([key, total]) => {
-    const entry = entryFromMeal(total, props.recipesById, props.ingredientsById)
-    return {
-      key,
-      label: total.category === 'RAW' ? total.label : entry.label,
-      quantityLabel: total.category === 'RAW' ? 'Macros seules' : entry.quantityLabel,
-      isSelectable: hasIngredients(total),
-      rank: CATEGORY_RANK[total.category],
-    }
-  })
-  return rows.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label, 'fr'))
-})
+const mealRows = computed(() => groupPlannedMeals(rangeMeals.value, props.recipesById, props.ingredientsById))
 
 const selectableRows = computed(() => mealRows.value.filter(row => row.isSelectable))
 const selectedMeals = computed(() =>
-  rangeMeals.value.filter(meal => hasIngredients(meal) && !excludedMealKeys.value.has(mealKey(meal)))
+  rangeMeals.value.filter(meal => mealHasIngredients(meal) && !excludedMealKeys.value.has(plannedMealKey(meal)))
 )
 
 const toggleMealRow = (key: string, isChecked: boolean | 'indeterminate') => {

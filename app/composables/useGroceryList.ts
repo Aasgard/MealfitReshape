@@ -1,19 +1,14 @@
 import type { InjectionKey } from 'vue'
-import { parseDate, type DateValue } from '@internationalized/date'
-import { addDays, format, startOfWeek } from 'date-fns'
+import { getLocalTimeZone, parseDate, type DateValue } from '@internationalized/date'
+import { addDays, format } from 'date-fns'
+import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import type { IngredientCategory } from '~/types/ingredientCategory'
-import type { GroceryLine, ManualItem, PlannedMeal } from '~/utils/groceryList'
-import { formatShoppingListText } from '~/utils/shoppingList'
+import type { DayRange } from '~/composables/useMeals'
+import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
+import { groupPlannedMeals, mealHasIngredients, plannedMealKey } from '~/utils/plannedMealRows'
+import { buildShoppingList } from '~/utils/shoppingList'
 
 export type GroceryMode = 'prepare' | 'store'
-export type GroceryScenario = 'week' | 'in-progress' | 'no-meals' | 'empty'
-
-export const GROCERY_SCENARIO_LABELS: Record<GroceryScenario, string> = {
-  'week': 'Semaine complète',
-  'in-progress': 'Courses en cours',
-  'no-meals': 'Aucun repas planifié',
-  'empty': 'Liste vide',
-}
 
 export interface GroceryAisleGroup {
   aisle: IngredientCategory
@@ -21,73 +16,74 @@ export interface GroceryAisleGroup {
   done: GroceryLine[]
 }
 
+const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? 's' : ''}`
+
 /**
- * État de la liste de courses, partagé par les modes « Préparer » et « En magasin ».
- * Maquette en mémoire : les repas viennent d'une semaine d'exemple, pas encore de Firestore.
+ * État de la page « Liste de courses », partagé par les modes « Préparer » et « En magasin » : les articles de la
+ * collection `shoppingList` et, pour en ajouter, les repas planifiés sur une période (ingrédients cumulés comme dans
+ * `buildShoppingList`). Le mode, la période et les repas décochés restent locaux.
  */
 export function useGroceryList() {
   const toast = useToast()
+  const shoppingList = useShoppingList()
+  const { recipesById, ingredientsById } = useFoodCatalog()
+  const categoriesStore = useIngredientCategoriesStore()
 
   const mode = ref<GroceryMode>('prepare')
-  const scenario = ref<GroceryScenario>('week')
-
-  const plannedMeals = ref<PlannedMeal[]>([])
-  const manualItems = ref<ManualItem[]>([])
-  /** Repas décochés dans la colonne source : leurs ingrédients sortent de la liste. */
-  const excludedMealKeys = ref(new Set<string>())
-  /** Articles déjà à la maison : retirés de la liste à acheter, réaffichables. */
-  const atHome = ref(new Set<string>())
-  /** Articles mis dans le panier (mode magasin). */
-  const inCart = ref(new Set<string>())
-  /** Articles achetés puis vidés de la liste. */
-  const cleared = ref(new Set<string>())
   const completionDismissed = ref(false)
 
-  const toDateValue = (date: Date) => parseDate(format(date, 'yyyy-MM-dd'))
-  const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
-  const dateRange = shallowRef<{ start: DateValue | undefined, end: DateValue | undefined }>({
-    start: toDateValue(monday),
-    end: toDateValue(addDays(monday, 6)),
-  })
-
-  const range = computed(() => {
-    const { start, end } = dateRange.value ?? {}
-    if (!start || !end || start.compare(end) > 0) return null
-    return { start: start.toString(), end: end.toString() }
-  })
-
-  function loadScenario(value: GroceryScenario) {
-    scenario.value = value
-    plannedMeals.value = value === 'week' || value === 'in-progress' ? buildSamplePlannedMeals() : []
-    manualItems.value = value === 'empty' ? [] : [...SAMPLE_MANUAL_ITEMS]
-    excludedMealKeys.value = new Set()
-    atHome.value = new Set(value === 'in-progress' ? SAMPLE_AT_HOME_IN_PROGRESS : value === 'week' ? SAMPLE_AT_HOME : [])
-    inCart.value = new Set(value === 'in-progress' ? SAMPLE_IN_CART : [])
-    cleared.value = new Set()
-    completionDismissed.value = false
-    mode.value = value === 'in-progress' ? 'store' : 'prepare'
+  const fail = (action: string) => (error: any) => {
+    toast.add({ title: 'Erreur', description: `${action} : ${error?.message || 'une erreur est survenue'}.`, color: 'error' })
   }
+
+  // --- Rayons ---
+
+  const aisleOf = (categoryId?: string) => (categoryId && categoriesStore.getCategoryById(categoryId)) || MISC_AISLE
+
+  /** Rayons proposés pour un ajout manuel : « Divers », puis le catalogue dans son ordre. */
+  const aisleOptions = computed(() => [
+    MISC_AISLE,
+    ...[...categoriesStore.categories].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, 'fr')),
+  ])
 
   // --- Source : repas planifiés sur la période ---
 
-  const mealsInRange = computed(() => {
-    const r = range.value
-    return r ? plannedMeals.value.filter(m => m.date >= r.start && m.date <= r.end) : []
+  const toDateValue = (date: Date) => parseDate(format(date, 'yyyy-MM-dd'))
+  // Par défaut, les 7 prochains jours à partir d'aujourd'hui : les repas déjà passés n'ont plus rien à acheter.
+  const today = new Date()
+  const dateRange = shallowRef<{ start: DateValue | undefined, end: DateValue | undefined }>({
+    start: toDateValue(today),
+    end: toDateValue(addDays(today, 6)),
   })
-  const mealRows = computed(() => groupPlannedMeals(mealsInRange.value))
-  const selectableMealRows = computed(() => mealRows.value.filter(row => row.selectable))
-  const includedMeals = computed(() => mealsInRange.value.filter(m => !excludedMealKeys.value.has(plannedMealKey(m))))
-  const generated = computed(() => buildGeneratedLines(includedMeals.value))
 
-  const toggled = (set: Set<string>, id: string, keep?: boolean) => {
-    const next = new Set(set)
-    if (keep ?? !next.has(id)) next.add(id)
-    else next.delete(id)
-    return next
-  }
+  /** `null` tant que la plage n'est pas complète ou si la fin précède le début. */
+  const range = computed<DayRange | null>(() => {
+    const { start, end } = dateRange.value ?? {}
+    if (!start || !end || start.compare(end) > 0) return null
+    return { start: start.toDate(getLocalTimeZone()), end: end.toDate(getLocalTimeZone()) }
+  })
+
+  const meals = useMealsBetween(range)
+  watch(meals.error, (error) => {
+    if (error) fail('Impossible de charger les repas')(error)
+  })
+
+  const rangeMeals = computed(() => (range.value ? meals.value : []))
+  const mealRows = computed(() => groupPlannedMeals(rangeMeals.value, recipesById.value, ingredientsById.value))
+  const selectableMealRows = computed(() => mealRows.value.filter(row => row.isSelectable))
+
+  /** Recettes / aliments décochés (mangés dehors, déjà cuisinés...) : leurs ingrédients ne sont pas ajoutés. */
+  const excludedMealKeys = ref(new Set<string>())
+
+  const includedMeals = computed(() =>
+    rangeMeals.value.filter(meal => mealHasIngredients(meal) && !excludedMealKeys.value.has(plannedMealKey(meal))))
+  const fromMenus = computed(() => buildShoppingList(includedMeals.value, recipesById.value, ingredientsById.value))
 
   function setMealIncluded(key: string, included: boolean) {
-    excludedMealKeys.value = toggled(excludedMealKeys.value, key, !included)
+    const next = new Set(excludedMealKeys.value)
+    if (included) next.delete(key)
+    else next.add(key)
+    excludedMealKeys.value = next
   }
 
   const areAllMealsIncluded = computed(() => selectableMealRows.value.every(row => !excludedMealKeys.value.has(row.key)))
@@ -95,97 +91,143 @@ export function useGroceryList() {
     excludedMealKeys.value = areAllMealsIncluded.value ? new Set(selectableMealRows.value.map(row => row.key)) : new Set()
   }
 
+  /**
+   * Sélection (période + repas décochés) déjà ajoutée à la liste : le bouton passe à « Ajouté » jusqu'au prochain
+   * changement, pour ne pas cumuler deux fois les mêmes quantités par un double clic.
+   */
+  const selectionKey = computed(() => `${range.value?.start.getTime()}-${range.value?.end.getTime()}-${[...excludedMealKeys.value].sort().join('|')}`)
+  const addedSelectionKey = ref<string | null>(null)
+  const isSelectionAdded = computed(() => addedSelectionKey.value === selectionKey.value)
+  const isAddingFromMenus = ref(false)
+
+  async function addFromMenus() {
+    const toAdd = fromMenus.value.items
+    if (!toAdd.length || isAddingFromMenus.value) return
+    isAddingFromMenus.value = true
+    try {
+      const { created, merged } = await shoppingList.addFromMenus(toAdd, ingredientsById.value)
+      addedSelectionKey.value = selectionKey.value
+      const details = [
+        created ? `${plural(created, 'article')} ajouté${created > 1 ? 's' : ''}` : null,
+        merged ? `${plural(merged, 'quantité')} complétée${merged > 1 ? 's' : ''}` : null,
+      ].filter(Boolean).join(', ')
+      toast.add({ title: 'Liste mise à jour', description: `${details}.`, color: 'success', icon: 'i-lucide-check' })
+    }
+    catch (error) {
+      fail('Les ingrédients n\'ont pas pu être ajoutés')(error)
+    }
+    finally {
+      isAddingFromMenus.value = false
+    }
+  }
+
   // --- Liste ---
 
-  const lines = computed(() =>
-    [...generated.value.lines, ...manualItems.value.map(manualGroceryLine)]
-      .filter(line => !cleared.value.has(line.id))
-      .sort(compareGroceryLines),
-  )
-  const toBuy = computed(() => lines.value.filter(line => !atHome.value.has(line.id)))
-  const atHomeLines = computed(() => lines.value.filter(line => atHome.value.has(line.id)))
+  const isLoading = computed(() => shoppingList.items.pending.value && !shoppingList.items.value.length)
+  const lines = computed(() => shoppingList.items.value.map(item => groceryLineFromItem(item, aisleOf)).sort(compareGroceryLines))
+  /** À acheter, panier compris : les articles cochés en magasin restent dans la liste jusqu'à la fin des courses. */
+  const toBuy = computed(() => lines.value.filter(line => line.status !== 'atHome'))
+  const atHomeLines = computed(() => lines.value.filter(line => line.status === 'atHome'))
 
-  function groupByAisle(list: GroceryLine[]): GroceryAisleGroup[] {
+  const aisles = computed(() => {
     const groups: GroceryAisleGroup[] = []
-    for (const line of list) {
+    for (const line of toBuy.value) {
       let group = groups.at(-1)
       if (group?.aisle.id !== line.aisle.id) {
         group = { aisle: line.aisle, pending: [], done: [] }
         groups.push(group)
       }
-      if (inCart.value.has(line.id)) group.done.push(line)
+      if (line.status === 'inCart') group.done.push(line)
       else group.pending.push(line)
     }
     return groups
-  }
+  })
 
-  const aisles = computed(() => groupByAisle(toBuy.value))
-  const doneCount = computed(() => toBuy.value.filter(line => inCart.value.has(line.id)).length)
+  const doneCount = computed(() => toBuy.value.filter(line => line.status === 'inCart').length)
   const isComplete = computed(() => toBuy.value.length > 0 && doneCount.value === toBuy.value.length)
 
-  function toggleAtHome(id: string) {
-    atHome.value = toggled(atHome.value, id)
-    inCart.value = toggled(inCart.value, id, false)
+  function toggleAtHome(line: GroceryLine) {
+    shoppingList.setStatus(line.item, line.status === 'atHome' ? 'toBuy' : 'atHome')
+      .catch(fail(`« ${line.label} » n'a pas pu être modifié`))
   }
 
-  function toggleInCart(id: string) {
-    inCart.value = toggled(inCart.value, id)
+  function toggleInCart(line: GroceryLine) {
     completionDismissed.value = false
+    shoppingList.setStatus(line.item, line.status === 'inCart' ? 'toBuy' : 'inCart')
+      .catch(fail(`« ${line.label} » n'a pas pu être modifié`))
   }
 
-  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE) {
+  /** Modale d'ajout manuel, ouverte depuis les deux modes. */
+  const isAddItemOpen = ref(false)
+
+  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '') {
     const trimmed = label.trim()
     if (!trimmed) return false
-    const id = `manual-${Date.now()}`
-    manualItems.value = [...manualItems.value, { id, label: trimmed.charAt(0).toUpperCase() + trimmed.slice(1), aisle }]
+    shoppingList.addManual(
+      trimmed.charAt(0).toUpperCase() + trimmed.slice(1),
+      aisle.id === MISC_AISLE.id ? undefined : aisle.id,
+      quantity.trim() || undefined,
+    ).catch(fail(`« ${trimmed} » n'a pas pu être ajouté`))
     return true
   }
 
-  function removeManual(id: string) {
-    manualItems.value = manualItems.value.filter(item => item.id !== id)
+  /** Enregistre la quantité saisie ; vide ou identique au calcul : revient à la quantité calculée. */
+  function setQuantity(line: GroceryLine, value: string | null) {
+    const trimmed = value?.trim() ?? ''
+    const quantity = trimmed && trimmed !== line.computedQuantityLabel ? trimmed : null
+    if (quantity === (line.item.quantity ?? null)) return
+    shoppingList.setQuantity(line.item, quantity).catch(fail(`La quantité de « ${line.label} » n'a pas pu être modifiée`))
   }
 
-  /** Retire de la liste tout ce qui est dans le panier : les ajouts manuels disparaissent, les ingrédients sont masqués. */
-  function clearCart() {
-    const ids = [...inCart.value]
-    manualItems.value = manualItems.value.filter(item => !inCart.value.has(item.id))
-    cleared.value = new Set([...cleared.value, ...ids])
-    inCart.value = new Set()
-    completionDismissed.value = false
-    toast.add({ title: 'Liste vidée', description: `${ids.length} article${ids.length > 1 ? 's' : ''} retiré${ids.length > 1 ? 's' : ''} de la liste.`, color: 'neutral', icon: 'i-lucide-check' })
-  }
 
-  /** Recalcule la liste depuis les menus (les ajouts manuels encore présents sont conservés). */
-  function regenerate() {
-    cleared.value = new Set()
-    inCart.value = new Set()
-  }
-
-  async function copyForTodoist() {
-    const generatedText = formatShoppingListText(toBuy.value.filter(line => line.item).map(line => line.item!))
-    const manualText = toBuy.value.filter(line => line.manual).map(line => line.label).join('\n')
+  /** Fin des courses : les articles du panier et ceux déjà à la maison quittent la liste. */
+  async function finishShopping() {
     try {
-      await navigator.clipboard.writeText([generatedText, manualText].filter(Boolean).join('\n'))
-      const count = toBuy.value.length
-      toast.add({ title: 'Liste copiée', description: `${count} article${count > 1 ? 's' : ''} à coller dans Todoist.`, color: 'success', icon: 'i-lucide-clipboard-check' })
+      const count = await shoppingList.finishShopping()
+      completionDismissed.value = false
+      mode.value = 'prepare'
+      const left = toBuy.value.length
+      toast.add({
+        title: 'Courses terminées',
+        description: `${plural(count, 'article')} retiré${count > 1 ? 's' : ''} de la liste${left ? `, ${plural(left, 'article')} encore à acheter` : ''}.`,
+        color: 'success',
+        icon: 'i-lucide-check',
+      })
     }
-    catch (error: any) {
-      toast.add({ title: 'Erreur', description: `La liste n'a pas pu être copiée : ${error.message || 'une erreur est survenue'}.`, color: 'error' })
+    catch (error) {
+      fail('Les courses n\'ont pas pu être terminées')(error)
     }
   }
 
-  loadScenario('week')
+  async function clearAll() {
+    try {
+      const count = await shoppingList.clearAll()
+      addedSelectionKey.value = null
+      completionDismissed.value = false
+      toast.add({ title: 'Liste vidée', description: `${plural(count, 'article')} supprimé${count > 1 ? 's' : ''}.`, color: 'neutral', icon: 'i-lucide-check' })
+      return true
+    }
+    catch (error) {
+      fail('La liste n\'a pas pu être vidée')(error)
+      return false
+    }
+  }
 
   return reactive({
     mode,
-    scenario,
+    isLoading,
+    isLoadingMeals: computed(() => meals.pending.value),
     dateRange,
     range,
     mealRows,
     selectableMealRows,
     excludedMealKeys,
     areAllMealsIncluded,
-    skipped: computed(() => generated.value.skipped),
+    fromMenus,
+    isSelectionAdded,
+    isAddingFromMenus,
+    skipped: computed(() => fromMenus.value.skipped),
+    aisleOptions,
     lines,
     toBuy,
     atHomeLines,
@@ -193,17 +235,16 @@ export function useGroceryList() {
     doneCount,
     isComplete,
     completionDismissed,
-    inCart,
-    loadScenario,
     setMealIncluded,
     toggleAllMeals,
+    addFromMenus,
     toggleAtHome,
     toggleInCart,
+    isAddItemOpen,
     addManual,
-    removeManual,
-    clearCart,
-    regenerate,
-    copyForTodoist,
+    setQuantity,
+    finishShopping,
+    clearAll,
   })
 }
 

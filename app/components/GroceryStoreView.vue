@@ -2,7 +2,18 @@
 /**
  * Mode « En magasin » : une main sur le téléphone, l'autre sur le panier. Toute la ligne se touche,
  * les articles cochés glissent dans « Dans le panier » en bas de leur rayon, un rayon fini se replie.
+ * Pas de recettes sous les articles : en rayon, seuls le nom et la quantité comptent.
  */
+defineProps<{
+  /** Fin des courses en cours d'enregistrement. */
+  finishing?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** « Terminer les courses » : la page supprime les articles du panier et ceux déjà à la maison. */
+  finish: []
+}>()
+
 const list = useInjectedGroceryList()
 
 const openCarts = ref(new Set<string>())
@@ -13,9 +24,8 @@ function toggleCart(aisleId: string) {
   openCarts.value = next
 }
 
-const newLabel = ref('')
-function onAdd() {
-  if (list.addManual(newLabel.value)) newLabel.value = ''
+function openAddItem() {
+  list.isAddItemOpen = true
 }
 
 const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy.length : 0))
@@ -23,13 +33,17 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
 
 <template>
   <div class="mx-auto flex w-full max-w-2xl flex-col gap-5">
-    <div v-if="!list.toBuy.length" class="flex flex-col items-center gap-3 rounded-xl border border-dashed border-default px-6 py-12 text-center">
+    <p v-if="list.isLoading" class="py-12 text-center text-sm text-muted">
+      Chargement de la liste…
+    </p>
+
+    <div v-else-if="!list.toBuy.length" class="flex flex-col items-center gap-3 rounded-xl border border-dashed border-default px-6 py-12 text-center">
       <UIcon name="i-lucide-shopping-cart" class="size-8 text-dimmed" aria-hidden="true" />
       <p class="text-base font-semibold text-highlighted">
         Rien à acheter
       </p>
       <p class="max-w-xs text-sm text-muted">
-        Préparez d'abord la liste à partir de vos menus, ou ajoutez un article en bas de page.
+        Préparez d'abord la liste à partir de vos menus, ou ajoutez un article ci-dessous.
       </p>
       <UButton label="Préparer la liste" color="neutral" variant="outline" icon="i-lucide-list-checks" @click="list.mode = 'prepare'" />
     </div>
@@ -77,9 +91,9 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
               {{ list.toBuy.length }} articles dans le panier.
             </p>
           </div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <UButton label="Garder la liste" color="neutral" variant="ghost" @click="list.completionDismissed = true" />
-            <UButton label="Vider les articles cochés" icon="i-lucide-trash-2" @click="list.clearCart()" />
+            <UButton label="Terminer les courses" icon="i-lucide-check-check" :loading="finishing" @click="emit('finish')" />
           </div>
         </div>
       </Transition>
@@ -112,22 +126,17 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
           class="divide-y divide-default"
           :class="group.pending.length && 'border-t border-default'"
         >
-          <li v-for="line in group.pending" :key="line.id">
+          <li v-for="line in group.pending" :key="line.id" class="flex items-center pe-2 transition-colors hover:bg-elevated/50 has-[>button:first-child:active]:bg-elevated">
             <button
               type="button"
-              class="flex min-h-14 w-full cursor-pointer items-center gap-4 px-4 py-2.5 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary active:bg-elevated"
+              class="flex min-h-14 min-w-0 flex-1 cursor-pointer items-center gap-4 py-2.5 ps-4 text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
               :aria-label="`${line.label}${line.quantityLabel ? `, ${line.quantityLabel}` : ''} : mettre dans le panier`"
-              @click="list.toggleInCart(line.id)"
+              @click="list.toggleInCart(line)"
             >
               <span class="size-6 shrink-0 rounded-full border-2 border-accented" aria-hidden="true" />
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-base font-medium text-highlighted">{{ line.label }}</span>
-                <span v-if="line.sources.length" class="block truncate text-xs text-dimmed">{{ line.sources.join(', ') }}</span>
-              </span>
-              <span v-if="line.quantityLabel" class="shrink-0 text-end text-sm font-semibold tabular-nums text-highlighted">
-                {{ line.quantityLabel }}
-              </span>
+              <span class="min-w-0 flex-1 truncate text-base font-medium text-highlighted">{{ line.label }}</span>
             </button>
+            <GroceryQuantityEditor :line="line" variant="store" @tap="list.toggleInCart(line)" />
           </li>
         </TransitionGroup>
 
@@ -151,7 +160,7 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
                 type="button"
                 class="flex min-h-12 w-full cursor-pointer items-center gap-4 px-4 py-2 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
                 :aria-label="`${line.label} : retirer du panier`"
-                @click="list.toggleInCart(line.id)"
+                @click="list.toggleInCart(line)"
               >
                 <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary" aria-hidden="true">
                   <UIcon name="i-lucide-check" class="size-4 text-inverted" />
@@ -165,18 +174,15 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
       </section>
     </template>
 
-    <form class="flex gap-2" @submit.prevent="onAdd">
-      <UInput
-        v-model="newLabel"
-        size="lg"
-        placeholder="Oublié quelque chose ?"
-        icon="i-lucide-plus"
-        aria-label="Ajouter un article oublié"
-        enterkeyhint="done"
-        class="min-w-0 flex-1"
-      />
-      <UButton type="submit" size="lg" label="Ajouter" color="neutral" variant="outline" :disabled="!newLabel.trim()" />
-    </form>
+    <UButton
+      label="Oublié quelque chose ?"
+      icon="i-lucide-plus"
+      color="neutral"
+      variant="outline"
+      size="lg"
+      block
+      @click="openAddItem"
+    />
   </div>
 </template>
 

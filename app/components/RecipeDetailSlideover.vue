@@ -84,15 +84,47 @@ const printRecipe = async () => {
 
   window.print()
 }
+
+/**
+ * Édition depuis la fiche, quelle que soit la page qui l'a ouverte : la fiche se ferme et le formulaire s'ouvre à sa
+ * place, comme « Modifier » sur la page Recettes. Le formulaire n'est monté qu'à la première édition.
+ */
+const editedRecipe = ref<Recipe | null>(null)
+const formOpen = ref(false)
+
+const editRecipe = async () => {
+  if (!props.recipe) return
+  editedRecipe.value = props.recipe
+  open.value = false
+  // Le formulaire se remplit en passant de fermé à ouvert : il doit être monté fermé avant de s'ouvrir.
+  await nextTick()
+  formOpen.value = true
+}
 </script>
 
 <template>
   <USlideover
     v-model:open="open"
     :title="recipe?.title"
-    :ui="{ content: 'sm:max-w-xl' }"
+    :ui="{
+      content: 'sm:max-w-xl',
+      // Croix dans le flux (et non en absolu) : un titre long passe à la ligne au lieu de pousser l'export sous la croix.
+      wrapper: 'min-w-0 flex-1',
+      title: 'line-clamp-2',
+      close: 'static shrink-0',
+    }"
   >
     <template #actions>
+      <UButton
+        v-if="recipe"
+        icon="i-lucide-pencil"
+        color="neutral"
+        variant="ghost"
+        aria-label="Modifier la recette"
+        title="Modifier la recette"
+        class="shrink-0"
+        @click="editRecipe"
+      />
       <UButton
         v-if="recipe"
         icon="i-lucide-file-down"
@@ -100,6 +132,7 @@ const printRecipe = async () => {
         variant="ghost"
         aria-label="Exporter en PDF"
         title="Exporter en PDF"
+        class="shrink-0"
         @click="printRecipe"
       />
     </template>
@@ -241,4 +274,6 @@ const printRecipe = async () => {
       </div>
     </template>
   </USlideover>
+
+  <RecipeFormSlideover v-if="editedRecipe" v-model:open="formOpen" :recipe="editedRecipe" />
 </template>

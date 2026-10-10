@@ -108,7 +108,8 @@ const ringLength = computed(() =>
           @click="isOpenable(entry) && emit('open', entry)"
         >
           <div class="min-w-0">
-            <p class="truncate text-sm font-medium text-highlighted">
+            <!-- Sur mobile, même taille que le nom du repas ; plus petit à partir de sm. -->
+            <p class="truncate text-base font-medium text-highlighted sm:text-sm">
               {{ entry.label }}
             </p>
             <!-- « 1 part · 153 kcal · G20 P5 L3 » (sans quantité pour des macros saisies à la main). -->

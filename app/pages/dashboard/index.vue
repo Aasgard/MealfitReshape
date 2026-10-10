@@ -493,8 +493,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </template>
 
     <template #body>
+      <!--
+        `shrink-0` : `min-h-full` remplace le `min-height: auto` d'un élément flex ; sans lui, le bloc se réduirait à la
+        hauteur du panneau, le contenu déborderait et la marge du bas ne serait plus en bas.
+      -->
       <div
-        class="flex min-h-full flex-col gap-6 overflow-x-clip p-4 sm:p-6"
+        class="flex min-h-full shrink-0 flex-col gap-6 overflow-x-clip p-4 sm:p-6"
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >

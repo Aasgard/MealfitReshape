@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase/firestore'
+import type { ShoppingNeed } from '~/utils/shoppingList'
 
 /**
  * Où en est un article :
@@ -28,6 +29,8 @@ export interface ShoppingItem {
   grams?: number
   milliliters?: number
   pieces?: number
+  /** Poids d'une pièce, pour compter les pièces de chaque jour de besoin. */
+  gramsPerPiece?: number
   /**
    * Quantité saisie à la main (ex. "3 pièces", "2 paquets") : remplace celle calculée depuis `grams` / `milliliters` /
    * `pieces`, qui restent pour y revenir. Un article ainsi modifié n'est plus complété par un ajout depuis les menus.
@@ -35,6 +38,10 @@ export interface ShoppingItem {
   quantity?: string
   /** Recettes qui demandent l'ingrédient, puis « Hors recette ». */
   sources?: string[]
+  /** Besoins jour par jour (par date croissante) ; absents pour un ajout manuel ou un article ajouté avant leur suivi. */
+  needs?: ShoppingNeed[]
+  /** Marqué urgent à la main (plus de stock, indispensable...), en plus de l'urgence calculée depuis `needs`. */
+  urgent?: boolean
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

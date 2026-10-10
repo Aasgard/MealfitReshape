@@ -4,10 +4,10 @@
  * Vider le champ, ou « Revenir au calcul », rétablit la quantité calculée depuis les menus.
  * - Souris : un clic ouvre l'édition dans un popover.
  * - Toucher : un appui long ouvre l'édition dans un panneau en bas d'écran (stable quand le clavier s'ouvre) ;
- *   un appui court émet `tap` (en magasin : mettre dans le panier, comme le reste de la ligne).
+ *   un appui court ne fait rien (en magasin, seul le rond coche l'article).
  * - Clavier : Entrée ouvre le popover.
  */
-import { createReusableTemplate, onLongPress } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 import type { GroceryLine } from '~/utils/groceryList'
 
 const props = withDefaults(defineProps<{
@@ -15,11 +15,6 @@ const props = withDefaults(defineProps<{
   /** `store` : cible plus grande et quantité en gras, pour le mode magasin. */
   variant?: 'prepare' | 'store'
 }>(), { variant: 'prepare' })
-
-const emit = defineEmits<{
-  /** Appui court au doigt sur la quantité. */
-  tap: []
-}>()
 
 const list = useInjectedGroceryList()
 const [DefineForm, ReuseForm] = createReusableTemplate()
@@ -31,45 +26,12 @@ const draft = ref('')
 
 function edit(byTouch: boolean) {
   draft.value = props.line.quantityLabel
-  if (byTouch) {
-    navigator.vibrate?.(10)
-    drawerOpen.value = true
-  }
-  else {
-    popoverOpen.value = true
-  }
+  if (byTouch) drawerOpen.value = true
+  else popoverOpen.value = true
 }
 
-/**
- * Relâcher le doigt après l'appui long envoie un clic à ce qui se trouve dessous : le panneau qui vient de s'ouvrir
- * (son fond le refermerait). Ce clic-là est ignoré.
- */
-function swallowNextClick() {
-  const swallow = (event: Event) => {
-    event.preventDefault()
-    event.stopPropagation()
-  }
-  window.addEventListener('click', swallow, { capture: true, once: true })
-  setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 600)
-}
-
-let pointerType = ''
 const trigger = useTemplateRef('trigger')
-onLongPress(trigger, (event) => {
-  if (event.pointerType === 'mouse') return
-  swallowNextClick()
-  edit(true)
-}, { delay: 450, distanceThreshold: 10 })
-
-function onPointerDown(event: PointerEvent) {
-  pointerType = event.pointerType
-}
-
-function onClick(event: MouseEvent) {
-  // `detail` à 0 : clic déclenché au clavier.
-  if (event.detail === 0 || pointerType === 'mouse') edit(false)
-  else emit('tap')
-}
+const { onPointerDown, onClick } = usePressToEdit(trigger, edit)
 
 /** Remonte le panneau du bas au-dessus du clavier (iOS). */
 useKeyboardInset(drawerOpen)

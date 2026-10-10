@@ -2,10 +2,26 @@ import { collection, deleteField, doc, query, serverTimestamp, updateDoc, where,
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Ingredient } from '~/types/ingredient'
 import type { ShoppingItem, ShoppingItemStatus } from '~/types/shoppingList'
-import { compareShoppingSources, gramsPerPiece, type ShoppingListItem } from '~/utils/shoppingList'
+import { compareShoppingSources, gramsPerPiece, piecesFor, type ShoppingListItem, type ShoppingNeed } from '~/utils/shoppingList'
 
 /** Limite d'écritures d'un batch Firestore. */
 const BATCH_LIMIT = 500
+
+/** Additionne des besoins jour par jour : quantités cumulées et recettes réunies pour un même jour. */
+function mergeNeeds(current: ShoppingNeed[], added: ShoppingNeed[]): ShoppingNeed[] {
+  const byDate = new Map(current.map(need => [need.date, { ...need, sources: [...need.sources] }]))
+  for (const need of added) {
+    const merged = byDate.get(need.date)
+    if (!merged) {
+      byDate.set(need.date, { ...need, sources: [...need.sources] })
+      continue
+    }
+    merged.grams += need.grams
+    merged.milliliters += need.milliliters
+    merged.sources = [...new Set([...merged.sources, ...need.sources])].sort(compareShoppingSources)
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
+}
 
 /**
  * Liste de courses de l'utilisateur connecté (collection Firestore `shoppingList`, un document par article) et écritures
@@ -78,15 +94,17 @@ export const useShoppingList = () => {
       const grams = (existing?.grams ?? 0) + added.grams
       const milliliters = (existing?.milliliters ?? 0) + added.milliliters
       const ingredient = ingredientsById.get(added.ingredientId)
-      const pieceGrams = ingredient ? gramsPerPiece(ingredient) : null
+      const pieceGrams = (ingredient ? gramsPerPiece(ingredient) : null) ?? added.gramsPerPiece ?? existing?.gramsPerPiece
       // Pièces recalculées sur le total : deux fois 0,5 pièce font 1 pièce, pas 2.
-      const pieces = pieceGrams && grams > 0 ? Math.ceil(grams / pieceGrams - 1e-6) : undefined
+      const pieces = pieceGrams && grams > 0 ? piecesFor(grams, pieceGrams) : undefined
       const sources = [...new Set([...(existing?.sources ?? []), ...added.sources])].sort(compareShoppingSources)
       const quantities = {
         ...(grams > 0 ? { grams } : {}),
         ...(milliliters > 0 ? { milliliters } : {}),
         ...(pieces ? { pieces } : {}),
+        ...(pieceGrams ? { gramsPerPiece: pieceGrams } : {}),
         sources,
+        needs: mergeNeeds(existing?.needs ?? [], added.needs),
         updatedAt: serverTimestamp(),
       }
 
@@ -113,6 +131,10 @@ export const useShoppingList = () => {
   const setStatus = (item: ShoppingItem, status: ShoppingItemStatus) =>
     updateDoc(doc(shoppingListRef, item.id), { status, updatedAt: serverTimestamp() })
 
+  /** Marquage urgent à la main ; `false` retire le champ (l'urgence calculée depuis les besoins reste). */
+  const setUrgent = (item: ShoppingItem, urgent: boolean) =>
+    updateDoc(doc(shoppingListRef, item.id), { urgent: urgent || deleteField(), updatedAt: serverTimestamp() })
+
   /** Quantité saisie à la main ; `null` revient à la quantité calculée depuis les menus (ou à aucune, pour un ajout manuel). */
   const setQuantity = (item: ShoppingItem, quantity: string | null) =>
     updateDoc(doc(shoppingListRef, item.id), { quantity: quantity ?? deleteField(), updatedAt: serverTimestamp() })
@@ -131,5 +153,5 @@ export const useShoppingList = () => {
     return all.length
   }
 
-  return { items, addManual, addFromMenus, setStatus, setQuantity, finishShopping, clearAll }
+  return { items, addManual, addFromMenus, setStatus, setUrgent, setQuantity, finishShopping, clearAll }
 }

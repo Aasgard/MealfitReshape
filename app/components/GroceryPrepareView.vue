@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Mode « Préparer » : à gauche les repas planifiés dont on ajoute les ingrédients à la liste, à droite la liste par rayon.
+ * Mode « Lister » : à gauche les repas planifiés dont on ajoute les ingrédients à la liste, à droite la liste par rayon.
  * Ici pas de case à cocher sur les articles : « J'en ai déjà » les range dans un groupe à part,
  * pour ne jamais confondre avec la case « dans le panier » du mode magasin.
  */
@@ -113,8 +113,8 @@ const addLabel = computed(() => {
               />
             </div>
             <ul class="divide-y divide-default">
-              <li v-for="row in list.mealRows" :key="row.key">
-                <label class="flex items-center gap-3 py-2" :class="row.isSelectable ? 'cursor-pointer' : 'cursor-not-allowed'">
+              <li v-for="row in list.mealRows" :key="row.key" class="flex items-center gap-3">
+                <label class="flex min-w-0 flex-1 items-center gap-3 py-2" :class="row.isSelectable ? 'cursor-pointer' : 'cursor-not-allowed'">
                   <UCheckbox
                     :model-value="row.isSelectable && !list.excludedMealKeys.has(row.key)"
                     :disabled="!row.isSelectable"
@@ -124,8 +124,10 @@ const addLabel = computed(() => {
                     class="min-w-0 flex-1 truncate text-sm"
                     :class="row.isSelectable && !list.excludedMealKeys.has(row.key) ? 'text-highlighted' : 'text-dimmed'"
                   >{{ row.label }}</span>
-                  <span v-if="row.quantityLabel" class="shrink-0 text-xs tabular-nums text-dimmed">{{ row.quantityLabel }}</span>
                 </label>
+                <!-- Les parts d'une recette se modifient (appui long ou clic) ; hors du label pour ne pas cocher la ligne. -->
+                <GroceryPartsEditor v-if="row.parts" :row="row" />
+                <span v-else-if="row.quantityLabel" class="shrink-0 text-xs tabular-nums text-dimmed">{{ row.quantityLabel }}</span>
               </li>
             </ul>
           </div>
@@ -205,13 +207,8 @@ const addLabel = computed(() => {
         </h3>
         <TransitionGroup tag="ul" name="line" class="divide-y divide-default">
           <li v-for="line in group.lines" :key="line.id" class="flex items-center gap-3 px-4 py-2.5 sm:px-5">
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-medium text-highlighted">
-                {{ line.label }}
-              </p>
-              <p class="truncate text-xs text-dimmed">
-                {{ line.manual ? 'Ajout manuel' : line.sources.join(', ') }}
-              </p>
+            <div class="flex min-w-0 flex-1">
+              <GroceryLineName :line="line" />
             </div>
             <GroceryQuantityEditor :line="line" />
             <UTooltip text="J'en ai déjà">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Mode « En magasin » : une main sur le téléphone, l'autre sur le panier. Toute la ligne se touche,
+ * Mode « Acheter » : une main sur le téléphone, l'autre sur le panier. Le rond coche l'article, le nom ouvre ses besoins,
  * les articles cochés glissent dans « Dans le panier » en bas de leur rayon, un rayon fini se replie.
  * Pas de recettes sous les articles : en rayon, seuls le nom et la quantité comptent.
  */
@@ -24,6 +24,10 @@ function toggleCart(aisleId: string) {
   openCarts.value = next
 }
 
+function backToList() {
+  list.mode = 'prepare'
+}
+
 function openAddItem() {
   list.isAddItemOpen = true
 }
@@ -43,9 +47,9 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
         Rien à acheter
       </p>
       <p class="max-w-xs text-sm text-muted">
-        Préparez d'abord la liste à partir de vos menus, ou ajoutez un article ci-dessous.
+        Faites d'abord la liste à partir de vos menus, ou ajoutez un article ci-dessous.
       </p>
-      <UButton label="Préparer la liste" color="neutral" variant="outline" icon="i-lucide-list-checks" @click="list.mode = 'prepare'" />
+      <UButton label="Faire la liste" color="neutral" variant="outline" icon="i-lucide-list-checks" @click="backToList" />
     </div>
 
     <template v-else>
@@ -126,17 +130,20 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
           class="divide-y divide-default"
           :class="group.pending.length && 'border-t border-default'"
         >
-          <li v-for="line in group.pending" :key="line.id" class="flex items-center pe-2 transition-colors hover:bg-elevated/50 has-[>button:first-child:active]:bg-elevated">
+          <!-- Seul le rond coche : le nom ouvre le détail des besoins, la quantité se modifie. -->
+          <li v-for="line in group.pending" :key="line.id" class="flex items-center pe-2">
             <button
               type="button"
-              class="flex min-h-14 min-w-0 flex-1 cursor-pointer items-center gap-4 py-2.5 ps-4 text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
-              :aria-label="`${line.label}${line.quantityLabel ? `, ${line.quantityLabel}` : ''} : mettre dans le panier`"
+              class="group/check flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-primary"
+              :aria-label="`Mettre ${line.label} dans le panier`"
               @click="list.toggleInCart(line)"
             >
-              <span class="size-6 shrink-0 rounded-full border-2 border-accented" aria-hidden="true" />
-              <span class="min-w-0 flex-1 truncate text-base font-medium text-highlighted">{{ line.label }}</span>
+              <span class="size-6 rounded-full border-2 border-accented transition-colors group-hover/check:border-primary group-active/check:bg-primary/15" aria-hidden="true" />
             </button>
-            <GroceryQuantityEditor :line="line" variant="store" @tap="list.toggleInCart(line)" />
+            <div class="flex min-w-0 flex-1">
+              <GroceryLineName :line="line" variant="store" />
+            </div>
+            <GroceryQuantityEditor :line="line" variant="store" />
           </li>
         </TransitionGroup>
 
@@ -155,19 +162,21 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
             />
           </button>
           <ul v-if="openCarts.has(group.aisle.id)" class="divide-y divide-default border-t border-default">
-            <li v-for="line in group.done" :key="line.id">
+            <li v-for="line in group.done" :key="line.id" class="flex items-center pe-4">
               <button
                 type="button"
-                class="flex min-h-12 w-full cursor-pointer items-center gap-4 px-4 py-2 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
-                :aria-label="`${line.label} : retirer du panier`"
+                class="flex size-14 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-primary"
+                :aria-label="`Retirer ${line.label} du panier`"
                 @click="list.toggleInCart(line)"
               >
-                <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary" aria-hidden="true">
+                <span class="flex size-6 items-center justify-center rounded-full bg-primary" aria-hidden="true">
                   <UIcon name="i-lucide-check" class="size-4 text-inverted" />
                 </span>
-                <span class="min-w-0 flex-1 truncate text-sm text-dimmed line-through">{{ line.label }}</span>
-                <span v-if="line.quantityLabel" class="shrink-0 text-sm tabular-nums text-dimmed line-through">{{ line.quantityLabel }}</span>
               </button>
+              <div class="flex min-w-0 flex-1">
+                <GroceryLineName :line="line" variant="store" done />
+              </div>
+              <span v-if="line.quantityLabel" class="shrink-0 text-sm tabular-nums text-dimmed line-through">{{ line.quantityLabel }}</span>
             </li>
           </ul>
         </div>

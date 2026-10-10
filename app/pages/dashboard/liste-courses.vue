@@ -21,24 +21,20 @@ const list = useGroceryList()
 provide(GROCERY_LIST_KEY, list)
 
 const modeItems = computed<TabsItem[]>(() => [
-  { label: 'Préparer', value: 'prepare', icon: 'i-lucide-list-checks' },
+  { label: 'Lister', value: 'prepare', icon: 'i-lucide-list-checks' },
   {
-    label: 'En magasin',
+    label: 'Acheter',
     value: 'store',
     icon: 'i-lucide-shopping-cart',
     badge: list.toBuy.length ? { label: `${list.doneCount}/${list.toBuy.length}`, color: 'neutral' as const, variant: 'subtle' as const } : undefined,
   },
 ])
 
-function startShopping() {
-  list.mode = 'store'
-}
-
-/** Les vues glissent vers la gauche en allant vers « En magasin », vers la droite en revenant à « Préparer ». */
+/** Les vues glissent vers la gauche en allant vers « Acheter », vers la droite en revenant à « Lister ». */
 const slideName = computed(() => (list.mode === 'store' ? 'to-store' : 'to-prepare'))
 
 /**
- * Balayage horizontal au doigt pour changer de mode : vers la gauche « En magasin », vers la droite « Préparer ».
+ * Balayage horizontal au doigt pour changer de mode : vers la gauche « Acheter », vers la droite « Lister ».
  * Ignoré s'il part d'un champ de saisie (sélection de texte) ; un geste plutôt vertical reste un défilement.
  */
 const swipeArea = useTemplateRef('swipeArea')
@@ -101,28 +97,18 @@ async function onFinish() {
           />
         </template>
         <template #right>
-          <template v-if="list.mode === 'prepare'">
-            <UButton
-              icon="i-lucide-trash-2"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :disabled="!list.lines.length"
-              aria-label="Vider la liste"
-              @click="openClear"
-            >
-              <span class="hidden sm:inline">Vider la liste</span>
-            </UButton>
-            <UButton
-              icon="i-lucide-shopping-cart"
-              size="sm"
-              :disabled="!list.toBuy.length"
-              aria-label="Faire les courses"
-              @click="startShopping"
-            >
-              <span class="hidden sm:inline">Faire les courses</span>
-            </UButton>
-          </template>
+          <UButton
+            v-if="list.mode === 'prepare'"
+            icon="i-lucide-trash-2"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :disabled="!list.lines.length"
+            aria-label="Vider la liste"
+            @click="openClear"
+          >
+            <span class="hidden sm:inline">Vider la liste</span>
+          </UButton>
           <UButton
             v-else-if="list.doneCount > 0"
             icon="i-lucide-check-check"

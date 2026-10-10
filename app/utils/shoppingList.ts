@@ -1,8 +1,19 @@
+import { format } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
 import type { IngredientCategory } from '~/types/ingredientCategory'
 import type { Meal } from '~/types/meal'
 import type { Recipe } from '~/types/recipe'
 import { gramsForUnit } from './ingredientNutrition'
+
+/** Besoin d'un ingrédient un jour donné : le jour où il est cuisiné (recette) ou mangé (aliment seul). */
+export interface ShoppingNeed {
+  /** Jour au format `yyyy-MM-dd`. */
+  date: string
+  grams: number
+  milliliters: number
+  /** Recettes (ou « Hors recette ») qui le demandent ce jour-là. */
+  sources: string[]
+}
 
 /** Un ingrédient à acheter : toutes ses occurrences (recettes et aliments seuls) cumulées. */
 export interface ShoppingListItem {
@@ -14,8 +25,12 @@ export interface ShoppingListItem {
   milliliters: number
   /** Nombre de pièces correspondant à `grams` (arrondi au supérieur), si l'ingrédient a une unité « Pièce ». */
   pieces?: number
+  /** Poids d'une pièce, si l'ingrédient a une unité « Pièce » : sert à compter les pièces de chaque jour. */
+  gramsPerPiece?: number
   /** Recettes qui demandent l'ingrédient (par ordre alphabétique), puis « Hors recette » s'il est aussi mangé seul. */
   sources: string[]
+  /** Besoins jour par jour, par date croissante ; leurs quantités font `grams` et `milliliters`. */
+  needs: ShoppingNeed[]
 }
 
 /** Source d'un ingrédient mangé seul, hors de toute recette. */
@@ -40,10 +55,39 @@ export function gramsPerPiece(ingredient: Ingredient): number | null {
   return pieceUnitId ? gramsForUnit(ingredient, pieceUnitId) : null
 }
 
+/** Pièces à acheter pour `grams` ; la marge évite qu'un reste d'arrondi fasse acheter une pièce de plus. */
+export const piecesFor = (grams: number, pieceGrams: number) => Math.ceil(grams / pieceGrams - 1e-6)
+
+/** Jour d'un repas, au format `yyyy-MM-dd` (heure locale). */
+const mealDay = (meal: Meal) => format(meal.date.toDate(), 'yyyy-MM-dd')
+
+/**
+ * Jours de cuisson d'une recette : elle se prépare en entier, le jour du premier repas qu'une fournée doit couvrir.
+ * Recette pour 4, 2 parts mardi, mercredi, samedi et dimanche : une fournée mardi (mardi + mercredi), une samedi.
+ * Autant de fournées que `ceil(parts cumulées / persons)`.
+ */
+export function recipeCookDays(portions: { date: string, parts: number }[], persons: number): string[] {
+  const days: string[] = []
+  let left = 0
+  for (const { date, parts } of [...portions].sort((a, b) => a.date.localeCompare(b.date))) {
+    let toCover = parts
+    while (toCover > 1e-9) {
+      if (left <= 1e-9) {
+        days.push(date)
+        left = persons
+      }
+      const taken = Math.min(toCover, left)
+      left -= taken
+      toCover -= taken
+    }
+  }
+  return days
+}
+
 /**
  * Liste de courses des repas `meals` : chaque ligne de recette (autant de recettes entières qu'il en faut pour
- * couvrir les parts cumulées) et chaque aliment seul est converti en grammes (une unité en ml passe par la densité
- * de l'ingrédient), puis cumulé par ingrédient.
+ * couvrir les parts cumulées, chacune due le jour où elle se cuisine) et chaque aliment seul (dû le jour du repas)
+ * est converti en grammes (une unité en ml passe par la densité de l'ingrédient), puis cumulé par ingrédient et par jour.
  */
 export function buildShoppingList(
   meals: Meal[],
@@ -53,8 +97,8 @@ export function buildShoppingList(
   const itemsById = new Map<string, ShoppingListItem>()
   const skipped = new Set<string>()
 
-  /** Ajoute `quantity` grammes de l'ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités, demandés par `source`. */
-  const add = (ingredientId: string, unitId: string | null, quantity: number, source: string) => {
+  /** Ajoute `quantity` grammes de l'ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités, demandés par `source` le jour `date`. */
+  const add = (ingredientId: string, unitId: string | null, quantity: number, source: string, date: string) => {
     if (quantity <= 0) return
 
     const ingredient = ingredientsById.get(ingredientId)
@@ -70,34 +114,52 @@ export function buildShoppingList(
       grams: 0,
       milliliters: 0,
       sources: [],
+      needs: [],
     }
 
+    let grams = 0
+    let milliliters = 0
     if (unitId == null) {
-      item.grams += quantity
+      grams = quantity
     } else {
       const unit = ingredient.units?.[unitId]
       const unitGrams = gramsForUnit(ingredient, unitId)
-      if (unitGrams != null) item.grams += unitGrams * quantity
-      else if (unit?.unit === 'ml' && unit.value > 0) item.milliliters += unit.value * quantity
+      if (unitGrams != null) grams = unitGrams * quantity
+      else if (unit?.unit === 'ml' && unit.value > 0) milliliters = unit.value * quantity
       else {
         skipped.add(`${ingredient.label} (unité introuvable)`)
         return
       }
     }
+    item.grams += grams
+    item.milliliters += milliliters
     if (!item.sources.includes(source)) item.sources.push(source)
+
+    let need = item.needs.find(n => n.date === date)
+    if (!need) {
+      need = { date, grams: 0, milliliters: 0, sources: [] }
+      item.needs.push(need)
+    }
+    need.grams += grams
+    need.milliliters += milliliters
+    if (!need.sources.includes(source)) need.sources.push(source)
+
     itemsById.set(ingredientId, item)
   }
 
-  /** Parts cumulées de chaque recette, sur tous les repas. */
-  const partsByRecipeId = new Map<string, number>()
+  /** Parts de chaque recette, jour par jour. */
+  const portionsByRecipeId = new Map<string, { date: string, parts: number }[]>()
 
   for (const meal of meals) {
     switch (meal.category) {
-      case 'RECIPE':
-        partsByRecipeId.set(meal.recipeId, (partsByRecipeId.get(meal.recipeId) ?? 0) + meal.value)
+      case 'RECIPE': {
+        const portions = portionsByRecipeId.get(meal.recipeId) ?? []
+        portions.push({ date: mealDay(meal), parts: meal.value })
+        portionsByRecipeId.set(meal.recipeId, portions)
         break
+      }
       case 'INGREDIENT':
-        add(meal.ingredientId, meal.unitId ?? null, meal.quantity, OUTSIDE_RECIPE_SOURCE)
+        add(meal.ingredientId, meal.unitId ?? null, meal.quantity, OUTSIDE_RECIPE_SOURCE, mealDay(meal))
         break
       case 'RAW':
         skipped.add(`${meal.label} (macros saisies à la main)`)
@@ -105,26 +167,30 @@ export function buildShoppingList(
     }
   }
 
-  // Une recette se prépare en entier : 6 parts planifiées d'une recette de 4 = 2 recettes complètes.
-  for (const [recipeId, parts] of partsByRecipeId) {
+  // Une recette se prépare en entier : 6 parts planifiées d'une recette de 4 = 2 recettes complètes, chacune due
+  // le jour où elle se cuisine.
+  for (const [recipeId, portions] of portionsByRecipeId) {
     const recipe = recipesById.get(recipeId)
     if (!recipe) {
       skipped.add('Recette introuvable')
       continue
     }
     const persons = recipe.persons && recipe.persons > 0 ? recipe.persons : 1
-    const factor = Math.ceil(parts / persons)
-    for (const line of recipe.ingredients ?? []) {
-      if (line.ingredientRef) add(line.ingredientRef.id, line.unit ?? null, line.quantity * factor, recipe.title)
+    for (const day of recipeCookDays(portions, persons)) {
+      for (const line of recipe.ingredients ?? []) {
+        if (line.ingredientRef) add(line.ingredientRef.id, line.unit ?? null, line.quantity, recipe.title, day)
+      }
     }
   }
 
   for (const item of itemsById.values()) {
     const ingredient = ingredientsById.get(item.ingredientId)
     const pieceGrams = ingredient ? gramsPerPiece(ingredient) : null
-    // La marge évite qu'un reste d'arrondi (600,0000001 g pour des pièces de 150 g) ne fasse acheter une pièce de plus.
-    if (pieceGrams && item.grams > 0) item.pieces = Math.ceil(item.grams / pieceGrams - 1e-6)
+    if (pieceGrams && item.grams > 0) item.pieces = piecesFor(item.grams, pieceGrams)
+    if (pieceGrams) item.gramsPerPiece = pieceGrams
     item.sources.sort(compareShoppingSources)
+    item.needs.sort((a, b) => a.date.localeCompare(b.date))
+    for (const need of item.needs) need.sources.sort(compareShoppingSources)
   }
 
   const categoryOrder = (item: ShoppingListItem) => item.category?.order ?? Number.POSITIVE_INFINITY

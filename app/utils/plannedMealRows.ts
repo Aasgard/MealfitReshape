@@ -8,6 +8,8 @@ export interface PlannedMealRow {
   key: string
   label: string
   quantityLabel?: string
+  /** Parts cumulées, pour une recette. */
+  parts?: number
   /** Les macros saisies à la main n'ont pas d'ingrédients : affichées, mais pas sélectionnables. */
   isSelectable: boolean
 }
@@ -48,6 +50,7 @@ export function groupPlannedMeals(
         key,
         label: total.category === 'RAW' ? total.label : entry.label,
         quantityLabel: total.category === 'RAW' ? 'Macros seules' : entry.quantityLabel,
+        ...(total.category === 'RECIPE' ? { parts: total.value } : {}),
         isSelectable: mealHasIngredients(total),
         rank: CATEGORY_RANK[total.category],
       }

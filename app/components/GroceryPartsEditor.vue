@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Nombre de parts d'une recette dans « Ajouter depuis les menus », modifiable sans toucher aux menus (invités, restes
+ * Nombre de parts d'une recette dans le panneau « Menu », modifiable sans toucher aux menus (invités, restes
  * à prévoir...). Même geste que la quantité d'un article : appui long au doigt (panneau du bas), clic à la souris ou
  * Entrée au clavier (popover). Enregistrer inclut la recette dans la liste avec ces parts ; les menus ne changent pas.
  */

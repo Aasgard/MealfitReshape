@@ -23,7 +23,7 @@ const isWide = useMediaQuery('(min-width: 1024px)')
 
 /**
  * En-têtes collés en haut de l'écran quand la page défile (mobile) ; les en-têtes de rayon se calent sous celui de
- * « À acheter », dont la hauteur est mesurée. Sur grand écran, chaque panneau défile sous son en-tête fixe.
+ * « Produits », dont la hauteur est mesurée. Sur grand écran, chaque panneau défile sous son en-tête fixe.
  */
 const listHeader = useTemplateRef('listHeader')
 const { height: listHeaderHeight } = useElementSize(listHeader, undefined, { box: 'border-box' })
@@ -111,7 +111,10 @@ function rowAriaLabel(row: GroceryMealRow) {
         ]"
       >
         <span class="flex-1">
-          <span class="block text-lg font-bold tracking-tight text-highlighted">Ajouter depuis les menus</span>
+          <span class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+            <UIcon name="i-lucide-calendar-days" class="size-5 shrink-0 text-primary" aria-hidden="true" />
+            Menu
+          </span>
           <span class="block text-xs tabular-nums text-dimmed">{{ sourceSummary }}</span>
         </span>
         <UIcon
@@ -241,8 +244,9 @@ function rowAriaLabel(row: GroceryMealRow) {
         :class="isListStuck ? 'rounded-none' : 'rounded-t-xl'"
       >
         <div class="min-w-0">
-          <h2 id="to-buy-title" class="text-lg font-bold tracking-tight text-highlighted">
-            À acheter
+          <h2 id="to-buy-title" class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+            <UIcon name="i-lucide-shopping-basket" class="size-5 shrink-0 text-primary" aria-hidden="true" />
+            Produits
           </h2>
           <p class="text-xs tabular-nums text-dimmed">
             {{ plural(list.toBuy.length, 'article') }} · {{ plural(groups.length, 'rayon') }}

@@ -16,6 +16,11 @@ const props = withDefaults(defineProps<{
   macros: MenuWeekMacroBalance
   /** Suivi du poids au jour affiché (rythme, part de l'objectif) ; absent sans pesée. */
   weightProgress?: WeightProgress | null
+  /**
+   * Kcal dépensées en séance le jour affiché, montrées à côté des kcal mangées sans jamais modifier l'objectif.
+   * `undefined` : aucune séance ce jour-là (rien n'est affiché) ; `null` : séance sans kcal renseignées (tiret).
+   */
+  burnedKcal?: number | null
   title?: string
   /** Clé de l'état replié / ouvert, partagé par les cartes qui l'utilisent (ex. tous les jours de l'accueil). */
   stateKey?: string
@@ -25,6 +30,7 @@ const props = withDefaults(defineProps<{
   completeDays?: number | null
 }>(), {
   weightProgress: null,
+  burnedKcal: undefined,
   title: 'Résumé',
   stateKey: 'today-calorie-summary-open',
   defaultOpen: true,
@@ -46,10 +52,21 @@ const trendClass = computed(() => (props.weightProgress?.againstGoal ? 'text-war
 /** Partagé par `stateKey` : sur l'accueil, le panneau garde son état quand on change de jour. */
 const open = useState(props.stateKey, () => props.defaultOpen)
 
-const remainingKcal = computed(() => props.targets.calories - props.eatenKcal)
+const hasWorkout = computed(() => props.burnedKcal !== undefined)
+/** Kcal dépensées en séance, 0 sans séance ou sans kcal renseignées. */
+const burned = computed(() => typeof props.burnedKcal === 'number' ? props.burnedKcal : 0)
+/** Bilan net (mangé − dépensé) : c'est lui que la jauge compare à l'objectif, qui ne change pas. */
+const netKcal = computed(() => props.eatenKcal - burned.value)
+const burnedTitle = computed(() => typeof props.burnedKcal === 'number'
+  ? `${props.burnedKcal} kcal dépensées en séance, retirées des ${props.eatenKcal} kcal mangées`
+  : 'Séance sans kcal renseignées')
+
+const remainingKcal = computed(() => props.targets.calories - netKcal.value)
 const isOver = computed(() => remainingKcal.value < 0)
-/** Bleu tant que l'objectif n'est pas atteint, vert à ± 5 %, orange au-delà. */
-const kcalStatus = computed(() => targetStatus(props.eatenKcal, props.targets.calories, DAILY_TARGET_TOLERANCE))
+/** Bleu tant que l'objectif n'est pas atteint, vert à ± 5 %, orange au-delà ; sur le bilan net. */
+const kcalStatus = computed(() => targetStatus(netKcal.value, props.targets.calories, DAILY_TARGET_TOLERANCE))
+/** Seuil qu'aurait atteint le mangé sans la séance : couleur de la part que la séance retire de l'arc. */
+const grossKcalStatus = computed(() => targetStatus(props.eatenKcal, props.targets.calories, DAILY_TARGET_TOLERANCE))
 
 // Jauge : arc de 270° (ouvert vers le bas) tracé avec un cercle dont on ne garde que 75 % du pourtour.
 const GAUGE_RADIUS = 80
@@ -62,6 +79,14 @@ const plannedShare = computed(() => shareOfTarget(props.eatenKcal - props.extraK
 const extraShare = computed(() => Math.min(shareOfTarget(props.extraKcal), 1 - plannedShare.value))
 const plannedLength = computed(() => plannedShare.value * GAUGE_ARC)
 const extraLength = computed(() => extraShare.value * GAUGE_ARC)
+/**
+ * La séance retire sa dépense du bout de l'arc : plein jusqu'au net, estompé du net jusqu'au mangé. Le plein du plan
+ * et du "En plus" est donc rogné à la longueur du net.
+ */
+const netLength = computed(() => shareOfTarget(netKcal.value) * GAUGE_ARC)
+const solidPlannedLength = computed(() => Math.min(plannedLength.value, netLength.value))
+const solidExtraLength = computed(() => Math.max(0, Math.min(plannedLength.value + extraLength.value, netLength.value) - plannedLength.value))
+const hasBurnedTail = computed(() => burned.value > 0 && netLength.value < plannedLength.value + extraLength.value)
 
 const macroRows = computed(() => ([
   { key: 'carbohydrates', label: 'Glucides', colorClass: 'bg-green-500' },
@@ -130,24 +155,48 @@ const macroRows = computed(() => ([
                 :stroke-dasharray="`${GAUGE_ARC} ${GAUGE_CIRCUMFERENCE}`"
                 style="stroke: var(--ui-bg-accented)"
               />
+              <!-- Part retirée par la séance : tout le mangé, estompé, sous l'arc plein du net, dans la couleur du seuil atteint sans la séance. -->
+              <g v-if="hasBurnedTail" opacity="0.3">
+                <circle
+                  v-if="plannedLength > 0"
+                  class="transition-[stroke-dasharray] duration-500"
+                  cx="100"
+                  cy="100"
+                  :r="GAUGE_RADIUS"
+                  transform="rotate(135 100 100)"
+                  :stroke-dasharray="`${plannedLength} ${GAUGE_CIRCUMFERENCE}`"
+                  :style="{ stroke: TARGET_STATUS_COLOR[grossKcalStatus] }"
+                />
+                <circle
+                  v-if="extraLength > 0"
+                  class="transition-[stroke-dasharray] duration-500"
+                  cx="100"
+                  cy="100"
+                  :r="GAUGE_RADIUS"
+                  transform="rotate(135 100 100)"
+                  :stroke-dasharray="`${extraLength} ${GAUGE_CIRCUMFERENCE}`"
+                  :stroke-dashoffset="-plannedLength"
+                  style="stroke: var(--ui-warning)"
+                />
+              </g>
               <circle
-                v-if="plannedLength > 0"
+                v-if="solidPlannedLength > 0"
                 class="transition-[stroke-dasharray] duration-500"
                 cx="100"
                 cy="100"
                 :r="GAUGE_RADIUS"
                 transform="rotate(135 100 100)"
-                :stroke-dasharray="`${plannedLength} ${GAUGE_CIRCUMFERENCE}`"
+                :stroke-dasharray="`${solidPlannedLength} ${GAUGE_CIRCUMFERENCE}`"
                 :style="{ stroke: TARGET_STATUS_COLOR[kcalStatus] }"
               />
               <circle
-                v-if="extraLength > 0"
+                v-if="solidExtraLength > 0"
                 class="transition-[stroke-dasharray] duration-500"
                 cx="100"
                 cy="100"
                 :r="GAUGE_RADIUS"
                 transform="rotate(135 100 100)"
-                :stroke-dasharray="`${extraLength} ${GAUGE_CIRCUMFERENCE}`"
+                :stroke-dasharray="`${solidExtraLength} ${GAUGE_CIRCUMFERENCE}`"
                 :stroke-dashoffset="-plannedLength"
                 style="stroke: var(--ui-warning)"
               />
@@ -171,11 +220,19 @@ const macroRows = computed(() => ([
               <span class="font-semibold text-highlighted">{{ eatenKcal }}</span>
               <span class="text-dimmed"> / {{ targets.calories }}</span>
             </p>
+            <template v-if="hasWorkout">
+              <p class="truncate text-xs text-dimmed" :title="burnedTitle">
+                Séance
+              </p>
+              <p class="text-xs tabular-nums">
+                <span class="font-semibold" :class="burned ? 'text-highlighted' : 'text-dimmed'">{{ burned ? `−${burned}` : '—' }}</span>
+              </p>
+            </template>
           </div>
         </div>
 
         <!-- lg+ : kcal mangées / objectif et « En plus », au format des chiffres de la dernière colonne. -->
-        <div class="hidden flex-col justify-center gap-y-4 whitespace-nowrap lg:flex">
+        <div class="hidden flex-col justify-center whitespace-nowrap lg:flex" :class="hasWorkout ? 'gap-y-3' : 'gap-y-4'">
           <p class="flex items-baseline gap-1" :title="`${eatenKcal} kcal mangées sur un objectif de ${targets.calories} kcal`">
             <UIcon name="i-lucide-flame" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Mangées :</span>
@@ -188,6 +245,13 @@ const macroRows = computed(() => ([
             <span class="text-xl font-bold tabular-nums" :class="extraKcal > 0 ? 'text-warning' : 'text-highlighted'">
               {{ extraKcal > 0 ? '+' : '' }}{{ extraKcal }}
             </span>
+            <span class="text-sm text-muted">kcal</span>
+          </p>
+          <!-- Dépense des séances du jour, retirée du mangé dans la jauge (partie estompée de l'arc). -->
+          <p v-if="hasWorkout" class="flex items-baseline gap-1" :title="burnedTitle">
+            <UIcon name="i-lucide-dumbbell" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
+            <span class="sr-only">Dépensées en séance :</span>
+            <span class="text-xl font-bold tabular-nums" :class="burned ? 'text-highlighted' : 'text-dimmed'">{{ burned ? `−${burned}` : '—' }}</span>
             <span class="text-sm text-muted">kcal</span>
           </p>
         </div>

@@ -20,6 +20,19 @@ let pendingOwnBacks = 0
 let pushesAfterBacks: (() => void)[] = []
 let listening = false
 
+/** Attentes de `afterOverlayBacks`, résolues quand le dernier `history.back()` d'une fermeture a abouti. */
+let backWaiters: (() => void)[] = []
+
+/**
+ * Résout une fois consommées les entrées d'historique des overlays refermés depuis l'UI. À attendre avant de naviguer
+ * juste après une fermeture (ex. suppression confirmée puis retour à la liste) : sinon le `history.back()` en cours
+ * passerait après la navigation et ramènerait à la page quittée.
+ */
+export function afterOverlayBacks(): Promise<void> {
+  if (import.meta.server || pendingOwnBacks === 0) return Promise.resolve()
+  return new Promise(resolve => backWaiters.push(resolve))
+}
+
 function onPopState() {
   if (pendingOwnBacks > 0) {
     pendingOwnBacks--
@@ -27,6 +40,9 @@ function onPopState() {
       const pushes = pushesAfterBacks
       pushesAfterBacks = []
       for (const push of pushes) push()
+      const waiters = backWaiters
+      backWaiters = []
+      for (const resolve of waiters) resolve()
     }
     return
   }

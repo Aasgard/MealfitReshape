@@ -38,10 +38,23 @@ const links = [{
     icon: 'i-lucide-cooking-pot',
     to: '/dashboard/recipients',
   }]
-// Masqué en attendant que la section soit prête.
-// }, {
-//   label: 'Activité physique',
-//   icon: 'i-lucide-heart',
+}, {
+  label: 'Activité physique',
+  icon: 'i-lucide-heart-pulse',
+  defaultOpen: true,
+  children: [{
+    label: 'Séances',
+    icon: 'i-lucide-dumbbell',
+    to: '/dashboard/seances',
+  }, {
+    label: 'Programmes',
+    icon: 'i-lucide-list-checks',
+    to: '/dashboard/programmes',
+  }, {
+    label: 'Exercices',
+    icon: 'i-lucide-library',
+    to: '/dashboard/exercices',
+  }]
 }, {
   label: 'Suivi de mesures',
   icon: 'i-lucide-ruler',

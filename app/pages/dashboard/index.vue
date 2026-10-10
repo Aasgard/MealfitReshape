@@ -93,6 +93,12 @@ watch(weighInsError, (error) => {
   toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
 })
 
+const { workouts, error: workoutsError, promise: workoutsLoaded } = useWorkouts()
+watch(workoutsError, (error) => {
+  if (!error) return
+  toast.add({ title: 'Erreur', description: `Impossible de charger les séances : ${error.message}`, color: 'error' })
+})
+
 const shoppingList = useShoppingList()
 watch(shoppingList.items.error, (error) => {
   if (!error) return
@@ -107,9 +113,17 @@ await Promise.all([
   meals.promise.value.catch(() => undefined),
   upcomingMeals.promise.value.catch(() => undefined),
   weighInsLoaded.value.catch(() => undefined),
+  workoutsLoaded.value.catch(() => undefined),
   shoppingList.items.promise.value.catch(() => undefined),
   profile.ready,
 ])
+
+/** Séances du jour affiché, la séance en cours en tête. */
+const dayWorkouts = computed(() => workouts.value
+  .filter(w => differenceInCalendarDays(w.date.toDate(), selectedDay.value) === 0)
+  .sort((a, b) => Number(b.status === 'IN_PROGRESS') - Number(a.status === 'IN_PROGRESS')))
+/** Kcal dépensées le jour affiché ; `undefined` sans séance, `null` si aucune ne les renseigne. */
+const burnedKcal = computed(() => dayWorkouts.value.length ? kcalBurnedOn(dayWorkouts.value, selectedDay.value) : undefined)
 
 /** Objectif du profil : seule la part atteinte sert ici, la projection n'est pas utilisée. */
 const weightGoal = computed(() => trackingGoal(profile.goal, profile.body, profile.age))
@@ -529,6 +543,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :extra-kcal="daySummary.extraKcal"
               :macros="daySummary.macros"
               :weight-progress="weightProgress"
+              :burned-kcal="burnedKcal"
             />
 
             <template v-if="shoppingLines.length">
@@ -568,6 +583,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             </div>
 
             <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" @edit="openEditModal" @delete="deleteEntry" />
+
+            <template v-if="dayWorkouts.length">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+                  <UIcon name="i-lucide-dumbbell" class="size-5 text-primary" aria-hidden="true" />
+                  S'entraîner
+                </h2>
+                <NuxtLink to="/dashboard/seances" class="text-sm font-medium text-primary hover:underline">
+                  Plus
+                </NuxtLink>
+              </div>
+
+              <TodayWorkouts :workouts="dayWorkouts" />
+            </template>
           </div>
         </Transition>
       </div>

@@ -257,13 +257,20 @@ export function formatSeconds(totalSeconds: number): string {
 
 /**
  * Ligne de détail d'une séance (journal, accueil) : distance et allure pour une sortie cardio, exercices, séries et
- * volume pour la muscu, puis chaque circuit.
+ * volume pour la muscu, puis chaque circuit. Avec `load: false`, volume et distance sont laissés à `workoutLoad`.
  */
-export function workoutMeta(workout: Workout): string {
+export function workoutMeta(workout: Workout, { load = true }: { load?: boolean } = {}): string {
   const parts: string[] = []
   if (isCardioWorkout(workout)) {
     const cardio = workout.exercises[0]!
-    parts.push(...[formatCardio(cardio), formatPace(cardio)].filter((p): p is string => !!p))
+    const c = cardio.cardio
+    const summary = load
+      ? formatCardio(cardio)
+      : [
+          c?.durationMin ? formatMinutes(c.durationMin) : null,
+          c?.elevationM && hasElevation(cardio.group) ? `${formatDecimal(c.elevationM, 0)} m D+` : null,
+        ].filter(Boolean).join(' · ')
+    parts.push(...[summary, formatPace(cardio)].filter((p): p is string => !!p))
   }
   else if (workout.exercises.length) {
     const stats = workoutStats(workout)
@@ -271,11 +278,25 @@ export function workoutMeta(workout: Workout): string {
     const n = workout.exercises.length
     parts.push(`${n} exercice${n > 1 ? 's' : ''}`)
     if (stats.sets) parts.push(`${stats.sets} séries`)
-    if (volume) parts.push(`${volume.value} ${volume.unit}`)
-    if (stats.distanceKm) parts.push(`${formatDecimal(stats.distanceKm, 2)} km`)
+    if (load && volume) parts.push(`${volume.value} ${volume.unit}`)
+    if (load && stats.distanceKm) parts.push(`${formatDecimal(stats.distanceKm, 2)} km`)
   }
   for (const circuit of workout.circuits ?? []) parts.push(circuitSummary(circuit))
   return parts.join(' · ') || '—'
+}
+
+/** Volume soulevé et distance parcourue d'une séance, chacun `null` s'il n'y en a pas. */
+export function workoutLoad(workout: Workout): { volume: string | null, distance: string | null } {
+  if (isCardioWorkout(workout)) {
+    const km = workout.exercises[0]!.cardio?.distanceKm
+    return { volume: null, distance: km ? `${formatDecimal(km, 2)} km` : null }
+  }
+  const stats = workoutStats(workout)
+  const volume = stats.volumeKg ? formatVolume(stats.volumeKg) : null
+  return {
+    volume: volume ? `${volume.value} ${volume.unit}` : null,
+    distance: stats.distanceKm ? `${formatDecimal(stats.distanceKm, 2)} km` : null,
+  }
 }
 
 /** Une ligne pour un circuit : « HIIT · 5 exos · 4 tours » (tours faits sur prévus dans une séance). */

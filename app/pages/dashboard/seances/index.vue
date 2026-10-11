@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
-import { format, startOfWeek } from 'date-fns'
+import { format, getISOWeek, startOfWeek, subWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { Workout } from '~/types/workout'
 import { isWorkoutEmpty } from '~/utils/workouts'
@@ -148,25 +148,39 @@ type WeekGroup = {
   count: number
   minutes: number
   kcal: number | null
+  isCurrent: boolean
 }
 
+function emptyWeek(start: Date, thisWeek: string): WeekGroup {
+  const key = format(start, 'yyyy-MM-dd')
+  return {
+    key,
+    label: key === thisWeek ? 'Cette semaine' : `Semaine ${getISOWeek(start)}`,
+    workouts: [],
+    count: 0,
+    minutes: 0,
+    kcal: null,
+    isCurrent: key === thisWeek,
+  }
+}
+
+/** Toutes les semaines, de la plus récente à celle de la plus ancienne séance, vides comprises. */
 const weeks = computed<WeekGroup[]>(() => {
   const groups = new Map<string, WeekGroup>()
-  const thisWeek = format(startOfWeek(today, { weekStartsOn: WEEK_STARTS_ON }), 'yyyy-MM-dd')
+  const thisWeekStart = startOfWeek(today, { weekStartsOn: WEEK_STARTS_ON })
+  const thisWeek = format(thisWeekStart, 'yyyy-MM-dd')
+  let oldest: Date | null = null
+  let newest = thisWeekStart
   for (const workout of workouts.value) {
     if (workout.status !== 'DONE' || isWorkoutEmpty(workout)) continue
-    const start = startOfWeek(workout.date.toDate(), { weekStartsOn: WEEK_STARTS_ON })
+    const date = workout.date.toDate()
+    const start = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON })
+    if (!oldest || start < oldest) oldest = start
+    if (start > newest) newest = start
     const key = format(start, 'yyyy-MM-dd')
     let group = groups.get(key)
     if (!group) {
-      group = {
-        key,
-        label: key === thisWeek ? 'Cette semaine' : `Semaine du ${format(start, 'd MMMM', { locale: fr })}`,
-        workouts: [],
-        count: 0,
-        minutes: 0,
-        kcal: null,
-      }
+      group = emptyWeek(start, thisWeek)
       groups.set(key, group)
     }
     group.workouts.push(workout)
@@ -174,7 +188,12 @@ const weeks = computed<WeekGroup[]>(() => {
     group.minutes += workoutDuration(workout) ?? 0
     if (workout.kcal !== null) group.kcal = (group.kcal ?? 0) + workout.kcal
   }
-  return [...groups.values()]
+  if (!oldest) return []
+  const list: WeekGroup[] = []
+  for (let start = newest; start >= oldest; start = subWeeks(start, 1)) {
+    list.push(groups.get(format(start, 'yyyy-MM-dd')) ?? emptyWeek(start, thisWeek))
+  }
+  return list
 })
 
 const shownWeeks = computed(() => weeks.value.slice(0, visibleWeeks.value))
@@ -182,7 +201,7 @@ const doneCount = computed(() => workouts.value.filter(w => w.status === 'DONE' 
 
 const dayLabel = (workout: Workout) => {
   const date = workout.date.toDate()
-  return { weekday: format(date, 'EEE', { locale: fr }).replace('.', ''), day: format(date, 'd') }
+  return { weekday: format(date, 'EEE', { locale: fr }).replace('.', ''), day: format(date, 'd'), month: format(date, 'MM') }
 }
 </script>
 
@@ -271,20 +290,38 @@ const dayLabel = (workout: Workout) => {
               <section
                 v-for="week in shownWeeks"
                 :key="week.key"
-                class="overflow-hidden rounded-xl border border-default bg-default"
+                class="overflow-hidden rounded-xl border"
+                :class="week.count ? 'border-default bg-default' : 'border-dashed border-default bg-transparent'"
                 :aria-label="week.label"
               >
-                <header class="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-default px-4 py-2.5 sm:px-5">
+                <!-- Bilan : libellé à gauche, séances, durée et kcal de la semaine en bout de ligne. -->
+                <header
+                  class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 sm:px-5"
+                  :class="week.count && 'border-b border-default'"
+                >
                   <h3 class="me-auto text-xs font-semibold uppercase tracking-wide text-dimmed">
                     {{ week.label }}
                   </h3>
-                  <p class="flex items-baseline gap-3 text-xs text-dimmed tabular-nums">
-                    <span><span class="font-semibold text-highlighted">{{ week.count }}</span> séance{{ week.count > 1 ? 's' : '' }}</span>
-                    <span v-if="week.minutes"><span class="font-semibold text-highlighted">{{ formatMinutes(week.minutes) }}</span></span>
-                    <span><span class="font-semibold" :class="week.kcal !== null ? 'text-highlighted' : 'text-dimmed'">{{ week.kcal !== null ? formatDecimal(week.kcal, 0) : '—' }}</span> kcal</span>
+                  <p v-if="week.count" class="flex items-center gap-3 text-sm text-dimmed tabular-nums">
+                    <span class="flex items-center gap-1" :title="`${week.count} séance${week.count > 1 ? 's' : ''}`">
+                      <UIcon name="i-lucide-dumbbell" class="size-4" aria-hidden="true" />
+                      <span class="font-semibold text-highlighted">{{ week.count }}</span>
+                      <span class="sr-only">séance{{ week.count > 1 ? 's' : '' }}</span>
+                    </span>
+                    <span v-if="week.minutes" class="flex items-center gap-1" title="Durée">
+                      <UIcon name="i-lucide-clock" class="size-4" aria-hidden="true" />
+                      <span class="font-semibold text-highlighted">{{ formatMinutes(week.minutes) }}</span>
+                    </span>
+                    <span class="flex items-center gap-1" title="Kcal dépensées">
+                      <UIcon name="i-lucide-flame" class="size-4" aria-hidden="true" />
+                      <span><span class="font-semibold" :class="week.kcal !== null ? 'text-highlighted' : 'text-dimmed'">{{ week.kcal !== null ? formatDecimal(week.kcal, 0) : '—' }}</span> kcal</span>
+                    </span>
+                  </p>
+                  <p v-else class="text-xs text-dimmed">
+                    {{ week.isCurrent ? 'Aucune séance pour l\'instant' : 'Aucune séance' }}
                   </p>
                 </header>
-                <ul class="divide-y divide-default">
+                <ul v-if="week.workouts.length" class="divide-y divide-default">
                   <li v-for="workout in week.workouts" :key="workout.id" class="flex items-center transition-colors hover:bg-elevated/50">
                     <button
                       type="button"
@@ -293,7 +330,8 @@ const dayLabel = (workout: Workout) => {
                     >
                       <div class="flex w-9 shrink-0 flex-col items-center leading-tight" aria-hidden="true">
                         <span class="text-[10px] font-semibold uppercase tracking-wide text-dimmed">{{ dayLabel(workout).weekday }}</span>
-                        <span class="text-lg font-bold tabular-nums text-highlighted">{{ dayLabel(workout).day }}</span>
+                        <span class="text-lg font-bold tabular-nums text-muted">{{ dayLabel(workout).day }}</span>
+                        <span class="text-[10px] font-normal tabular-nums text-dimmed">{{ dayLabel(workout).month }}</span>
                       </div>
                       <div class="min-w-0 flex-1">
                         <p class="truncate font-semibold text-highlighted">
@@ -301,7 +339,21 @@ const dayLabel = (workout: Workout) => {
                           {{ workoutTitle(workout) }}
                         </p>
                         <p class="truncate text-xs tabular-nums text-dimmed">
-                          {{ workoutMeta(workout) }}
+                          {{ workoutMeta(workout, { load: false }) }}
+                        </p>
+                        <!-- Volume et distance à part, chacun avec son icône. -->
+                        <p
+                          v-if="workoutLoad(workout).volume || workoutLoad(workout).distance"
+                          class="mt-0.5 flex items-center gap-3 text-xs tabular-nums text-dimmed"
+                        >
+                          <span v-if="workoutLoad(workout).volume" class="flex items-center gap-1" title="Volume soulevé">
+                            <UIcon name="i-lucide-weight" class="size-3.5" aria-hidden="true" />
+                            {{ workoutLoad(workout).volume }}
+                          </span>
+                          <span v-if="workoutLoad(workout).distance" class="flex items-center gap-1" title="Distance">
+                            <UIcon name="i-lucide-route" class="size-3.5" aria-hidden="true" />
+                            {{ workoutLoad(workout).distance }}
+                          </span>
                         </p>
                       </div>
                       <div class="shrink-0 text-end tabular-nums">

@@ -78,6 +78,9 @@ export function useOverlayBackClose(open: Ref<boolean>) {
     openOverlays.push(entry)
   }
 
+  // `immediate` : un overlay créé déjà ouvert (`v-if` qui le monte en même temps qu'on l'ouvre, ex. le minuteur d'un
+  // circuit) doit aussi avoir son entrée d'historique, sinon « retour » quitterait la page. Fermé à la création :
+  // `release` ne fait rien (il n'est pas dans la pile).
   watch(open, (isOpen) => {
     if (isOpen) {
       if (pendingOwnBacks > 0) pushesAfterBacks.push(push)
@@ -86,7 +89,7 @@ export function useOverlayBackClose(open: Ref<boolean>) {
       // Fermé par "retour" : l'entrée a déjà été retirée de la pile par onPopState, rien à consommer.
       release()
     }
-  })
+  }, { immediate: true })
 
   onUnmounted(release)
 }

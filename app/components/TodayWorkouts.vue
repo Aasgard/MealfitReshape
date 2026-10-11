@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import type { Workout } from '~/types/workout'
 
-/** Séances du jour affiché sur l'accueil : une ligne par séance, la séance en cours en tête avec son chrono. */
+/**
+ * Séances du jour affiché sur l'accueil : une ligne par séance, la séance en cours en tête avec son chrono. Un clic
+ * émet `open` : l'accueil reprend une séance en cours dans l'éditeur, ouvre une séance terminée en consultation.
+ */
 const props = defineProps<{
   workouts: Workout[]
+}>()
+
+const emit = defineEmits<{
+  open: [workout: Workout]
 }>()
 
 const now = ref(Date.now())
@@ -19,9 +26,10 @@ onBeforeUnmount(() => clearInterval(ticker))
 <template>
   <ul class="divide-y divide-default overflow-hidden rounded-xl border border-default bg-default">
     <li v-for="workout in workouts" :key="workout.id">
-      <NuxtLink
-        :to="`/dashboard/seances/${workout.id}`"
-        class="flex w-full items-center gap-3 p-4 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+      <button
+        type="button"
+        class="flex w-full cursor-pointer items-center gap-3 p-4 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+        @click="emit('open', workout)"
         :class="workout.status === 'IN_PROGRESS' && 'bg-primary/5'"
       >
         <div
@@ -51,7 +59,7 @@ onBeforeUnmount(() => clearInterval(ticker))
           <span class="font-semibold" :class="workout.kcal !== null ? 'text-highlighted' : 'text-dimmed'">{{ workout.kcal !== null ? formatDecimal(workout.kcal, 0) : '—' }}</span>
           <span class="text-xs text-dimmed"> kcal</span>
         </p>
-      </NuxtLink>
+      </button>
     </li>
   </ul>
 </template>

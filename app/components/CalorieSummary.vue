@@ -21,6 +21,11 @@ const props = withDefaults(defineProps<{
    * `undefined` : aucune séance ce jour-là (rien n'est affiché) ; `null` : séance sans kcal renseignées (tiret).
    */
   burnedKcal?: number | null
+  /**
+   * Accueil : les kcal dépensées en séance prennent la place de « En plus » dans les chiffres. Menus (moyenne de la
+   * semaine, sans séances) garde « En plus ».
+   */
+  showBurned?: boolean
   title?: string
   /** Clé de l'état replié / ouvert, partagé par les cartes qui l'utilisent (ex. tous les jours de l'accueil). */
   stateKey?: string
@@ -31,6 +36,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   weightProgress: null,
   burnedKcal: undefined,
+  showBurned: false,
   title: 'Résumé',
   stateKey: 'today-calorie-summary-open',
   defaultOpen: true,
@@ -46,20 +52,21 @@ const trendIcon = computed(() =>
   roundedRate.value < 0 ? 'i-lucide-trending-down' : roundedRate.value > 0 ? 'i-lucide-trending-up' : 'i-lucide-move-right',
 )
 
-/** Orange à l'inverse de l'objectif (hausse pour une perte, baisse pour une prise) ; sinon gris sur mobile, noir sur PC. */
-const trendClass = computed(() => (props.weightProgress?.againstGoal ? 'text-warning' : 'text-muted lg:text-highlighted'))
+/** Mobile : le même gris que les autres chiffres ; lg+ : orange à l'inverse de l'objectif, noir sinon. */
+const trendClass = computed(() => (props.weightProgress?.againstGoal ? 'text-muted lg:text-warning' : 'text-muted lg:text-highlighted'))
 
 /** Partagé par `stateKey` : sur l'accueil, le panneau garde son état quand on change de jour. */
 const open = useState(props.stateKey, () => props.defaultOpen)
 
-const hasWorkout = computed(() => props.burnedKcal !== undefined)
 /** Kcal dépensées en séance, 0 sans séance ou sans kcal renseignées. */
 const burned = computed(() => typeof props.burnedKcal === 'number' ? props.burnedKcal : 0)
 /** Bilan net (mangé − dépensé) : c'est lui que la jauge compare à l'objectif, qui ne change pas. */
 const netKcal = computed(() => props.eatenKcal - burned.value)
-const burnedTitle = computed(() => typeof props.burnedKcal === 'number'
-  ? `${props.burnedKcal} kcal dépensées en séance, retirées des ${props.eatenKcal} kcal mangées`
-  : 'Séance sans kcal renseignées')
+/** Toujours affichée sur l'accueil : 0 un jour sans séance. */
+const burnedTitle = computed(() => {
+  if (typeof props.burnedKcal === 'number') return `${props.burnedKcal} kcal dépensées en séance, retirées des ${props.eatenKcal} kcal mangées`
+  return props.burnedKcal === null ? 'Séance sans kcal renseignées' : 'Aucune séance ce jour-là : 0 kcal dépensée'
+})
 
 const remainingKcal = computed(() => props.targets.calories - netKcal.value)
 const isOver = computed(() => remainingKcal.value < 0)
@@ -87,6 +94,19 @@ const netLength = computed(() => shareOfTarget(netKcal.value) * GAUGE_ARC)
 const solidPlannedLength = computed(() => Math.min(plannedLength.value, netLength.value))
 const solidExtraLength = computed(() => Math.max(0, Math.min(plannedLength.value + extraLength.value, netLength.value) - plannedLength.value))
 const hasBurnedTail = computed(() => burned.value > 0 && netLength.value < plannedLength.value + extraLength.value)
+
+/**
+ * Dépassement de l'objectif (bilan net) : un « deuxième tour » fin et plus foncé, au milieu de la bande de l'arc
+ * principal (plein), en part de l'objectif (+20 % = un cinquième de l'arc, plein à +100 % et au-delà). Il reste dans la
+ * bande : rien ne passe sous le chiffre central.
+ */
+const overflowShare = computed(() => Math.min(1, Math.max(0, netKcal.value - props.targets.calories) / props.targets.calories))
+const overflowLength = computed(() => overflowShare.value * GAUGE_ARC)
+const overflowStroke = computed(() => `color-mix(in oklch, ${TARGET_STATUS_COLOR[kcalStatus.value]} 60%, black)`)
+
+/** Chiffre central : plus petit au-delà de 4 caractères (« +1127 ») pour tenir dans l'arc. */
+const centerText = computed(() => `${isOver.value ? '+' : ''}${Math.abs(remainingKcal.value)}`)
+const centerSizeClass = computed(() => (centerText.value.length > 4 ? 'text-2xl' : 'text-3xl'))
 
 const macroRows = computed(() => ([
   { key: 'carbohydrates', label: 'Glucides', colorClass: 'bg-green-500' },
@@ -176,7 +196,7 @@ const macroRows = computed(() => ([
                   transform="rotate(135 100 100)"
                   :stroke-dasharray="`${extraLength} ${GAUGE_CIRCUMFERENCE}`"
                   :stroke-dashoffset="-plannedLength"
-                  style="stroke: var(--ui-warning)"
+                  style="stroke: var(--color-purple-500)"
                 />
               </g>
               <circle
@@ -198,12 +218,24 @@ const macroRows = computed(() => ([
                 transform="rotate(135 100 100)"
                 :stroke-dasharray="`${solidExtraLength} ${GAUGE_CIRCUMFERENCE}`"
                 :stroke-dashoffset="-plannedLength"
-                style="stroke: var(--ui-warning)"
+                style="stroke: var(--color-purple-500)"
+              />
+              <!-- Dépassement de l'objectif : « deuxième tour » fin et foncé dans la bande de l'arc plein, au-delà de 100 %. -->
+              <circle
+                v-if="overflowLength > 0"
+                class="transition-[stroke-dasharray] duration-500"
+                cx="100"
+                cy="100"
+                :r="GAUGE_RADIUS"
+                stroke-width="6"
+                transform="rotate(135 100 100)"
+                :stroke-dasharray="`${overflowLength} ${GAUGE_CIRCUMFERENCE}`"
+                :style="{ stroke: overflowStroke }"
               />
             </svg>
             <div class="absolute inset-x-0 flex -translate-y-1/2 flex-col items-center" style="top: 57%">
-              <p class="text-3xl font-bold tabular-nums" :class="TARGET_STATUS_TEXT_CLASS[kcalStatus]">
-                {{ isOver ? '+' : '' }}{{ Math.abs(remainingKcal) }}
+              <p class="font-bold tabular-nums" :class="[centerSizeClass, TARGET_STATUS_TEXT_CLASS[kcalStatus]]">
+                {{ centerText }}
               </p>
               <p class="text-xs text-dimmed">
                 {{ isOver ? 'kcal en trop' : 'kcal restantes' }}
@@ -220,19 +252,11 @@ const macroRows = computed(() => ([
               <span class="font-semibold text-highlighted">{{ eatenKcal }}</span>
               <span class="text-dimmed"> / {{ targets.calories }}</span>
             </p>
-            <template v-if="hasWorkout">
-              <p class="truncate text-xs text-dimmed" :title="burnedTitle">
-                Séance
-              </p>
-              <p class="text-xs tabular-nums">
-                <span class="font-semibold" :class="burned ? 'text-highlighted' : 'text-dimmed'">{{ burned ? `−${burned}` : '—' }}</span>
-              </p>
-            </template>
           </div>
         </div>
 
-        <!-- lg+ : kcal mangées / objectif et « En plus », au format des chiffres de la dernière colonne. -->
-        <div class="hidden flex-col justify-center whitespace-nowrap lg:flex" :class="hasWorkout ? 'gap-y-3' : 'gap-y-4'">
+        <!-- lg+ : kcal mangées / objectif, « En plus », puis la dépense en séance (accueil), au format des chiffres de la dernière colonne. -->
+        <div class="hidden flex-col justify-center whitespace-nowrap lg:flex" :class="showBurned ? 'gap-y-3' : 'gap-y-4'">
           <p class="flex items-baseline gap-1" :title="`${eatenKcal} kcal mangées sur un objectif de ${targets.calories} kcal`">
             <UIcon name="i-lucide-flame" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Mangées :</span>
@@ -242,16 +266,16 @@ const macroRows = computed(() => ([
           <p class="flex items-baseline gap-1" :title="`${extraKcal} kcal en plus (hors plan)`">
             <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">En plus :</span>
-            <span class="text-xl font-bold tabular-nums" :class="extraKcal > 0 ? 'text-warning' : 'text-highlighted'">
+            <span class="text-xl font-bold tabular-nums" :class="extraKcal > 0 ? 'text-purple-500' : 'text-highlighted'">
               {{ extraKcal > 0 ? '+' : '' }}{{ extraKcal }}
             </span>
             <span class="text-sm text-muted">kcal</span>
           </p>
-          <!-- Dépense des séances du jour, retirée du mangé dans la jauge (partie estompée de l'arc). -->
-          <p v-if="hasWorkout" class="flex items-baseline gap-1" :title="burnedTitle">
+          <!-- Dépense des séances du jour (accueil), retirée du mangé dans la jauge (partie estompée de l'arc). -->
+          <p v-if="showBurned" class="flex items-baseline gap-1" :title="burnedTitle">
             <UIcon name="i-lucide-dumbbell" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Dépensées en séance :</span>
-            <span class="text-xl font-bold tabular-nums" :class="burned ? 'text-highlighted' : 'text-dimmed'">{{ burned ? `−${burned}` : '—' }}</span>
+            <span class="text-xl font-bold tabular-nums text-highlighted">{{ burned ? `−${burned}` : 0 }}</span>
             <span class="text-sm text-muted">kcal</span>
           </p>
         </div>
@@ -281,10 +305,18 @@ const macroRows = computed(() => ([
           class="col-span-2 flex flex-nowrap items-center justify-between gap-x-3 whitespace-nowrap border-t border-default pt-3 lg:col-span-1 lg:flex-col lg:items-start lg:justify-center lg:gap-y-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
           :class="!weightProgress && completeDays === null && 'lg:hidden'"
         >
-          <p class="flex items-baseline gap-1 lg:hidden" :title="`${extraKcal} kcal en plus (hors plan)`">
-            <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
+          <p v-if="showBurned" class="flex items-baseline gap-1 lg:hidden" :title="burnedTitle">
+            <UIcon name="i-lucide-dumbbell" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
+            <span class="sr-only">Dépensées en séance :</span>
+            <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl">
+              {{ burned ? `−${burned}` : 0 }}
+            </span>
+            <span class="text-xs text-muted lg:text-sm">kcal</span>
+          </p>
+          <p v-else class="flex items-baseline gap-1 lg:hidden" :title="`${extraKcal} kcal en plus (hors plan)`">
+            <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
             <span class="sr-only">En plus :</span>
-            <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="extraKcal > 0 ? 'text-warning' : 'text-muted'">
+            <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl">
               {{ extraKcal > 0 ? '+' : '' }}{{ extraKcal }}
             </span>
             <span class="text-xs text-muted lg:text-sm">kcal</span>
@@ -295,7 +327,7 @@ const macroRows = computed(() => ([
             class="flex items-baseline gap-1"
             title="Tendance du poids sur 4 semaines"
           >
-            <UIcon :name="trendIcon" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
+            <UIcon :name="trendIcon" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
             <span class="sr-only">Tendance du poids :</span>
             <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="trendClass">
               {{ formatSignedWeight(weightProgress.rateKgPerWeek, 2) }}
@@ -307,7 +339,7 @@ const macroRows = computed(() => ([
             class="flex items-baseline gap-1"
             :title="`${weightProgress.goalPercent} % de l'objectif de poids atteint`"
           >
-            <UIcon name="i-lucide-target" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
+            <UIcon name="i-lucide-target" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
             <span class="sr-only">Objectif de poids atteint :</span>
             <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl lg:text-highlighted">{{ weightProgress.goalPercent }}</span>
             <span class="text-xs text-muted lg:text-sm">%</span>
@@ -317,7 +349,7 @@ const macroRows = computed(() => ([
             class="flex items-baseline gap-1"
             :title="`Moyenne sur ${completeDays} jour${completeDays > 1 ? 's' : ''} complet${completeDays > 1 ? 's' : ''} (déjeuner et dîner remplis)`"
           >
-            <UIcon name="i-lucide-calendar-check" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
+            <UIcon name="i-lucide-calendar-check" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
             <span class="sr-only">Jours complets :</span>
             <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl lg:text-highlighted">{{ completeDays }}</span>
             <span class="text-xs text-muted lg:text-sm">j</span>

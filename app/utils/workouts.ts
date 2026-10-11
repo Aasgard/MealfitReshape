@@ -385,3 +385,27 @@ export function formatPace(exercise: WorkoutExercise): string | null {
  * le fait sur un champ texte malgré `autocomplete="off"`. On retire la croix d'effacement que Chrome y ajoute.
  */
 export const NAME_FIELD_BASE = '[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none'
+
+/**
+ * Programme tiré d'une séance (« Enregistrer comme programme ») : ses exercices avec leur nombre de séries et les
+ * répétitions (ou secondes) de la première, et ses circuits avec leurs réglages, sans ce qui a été fait.
+ */
+export function templateInputFromWorkout(workout: Pick<Workout, 'label' | 'exercises' | 'circuits'>) {
+  return {
+    label: workoutTitle(workout),
+    exercises: workout.exercises.map(e => ({
+      key: newKey(),
+      exerciseId: e.exerciseId,
+      label: e.label,
+      group: e.group,
+      metric: e.metric,
+      sets: e.metric === 'CARDIO' ? 1 : Math.max(1, e.sets.length),
+      target: e.metric === 'DURATION' ? e.sets[0]?.durationSec ?? null : e.metric === 'CARDIO' ? null : e.sets[0]?.reps ?? null,
+    })),
+    circuits: workout.circuits.map(({ roundsDone: _done, ...c }) => ({
+      ...c,
+      key: newKey(),
+      items: c.items.map(({ reps: _reps, ...item }) => ({ ...item, key: newKey() })),
+    })),
+  }
+}

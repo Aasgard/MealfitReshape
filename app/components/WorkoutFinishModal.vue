@@ -45,7 +45,7 @@ watch(open, (isOpen) => {
             <WorkoutNumberInput v-model="durationMin" unit="min" integer label="Durée de la séance en minutes" />
           </label>
           <label class="flex flex-col gap-1.5 bg-default p-3">
-            <span class="text-xs font-semibold uppercase tracking-wide text-dimmed">Dépensé</span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-dimmed">Calories</span>
             <WorkoutNumberInput v-model="kcal" unit="kcal" integer label="Kcal dépensées" />
           </label>
         </div>

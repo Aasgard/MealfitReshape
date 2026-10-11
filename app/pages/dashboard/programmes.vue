@@ -9,6 +9,7 @@ useSeoMeta({
   title: 'Dashboard - Programmes - Mealfit',
   description: 'Dashboard - Programmes - Mealfit',
 })
+useNoZoom()
 
 const toast = useToast()
 
@@ -16,7 +17,15 @@ const workoutsApi = useWorkouts()
 const { workouts, error, promise: workoutsLoaded } = workoutsApi
 const { templates, error: templatesError, promise: templatesLoaded, saveTemplate, deleteTemplate } = useWorkoutTemplates()
 const { exercises, isOwned, promise: exercisesLoaded } = useExercises()
-const { starting, launch } = useStartWorkout(workoutsApi)
+/** Séance lancée depuis un programme : elle s'ouvre dans l'éditeur en panneau, sans quitter la page. */
+const editorOpen = ref(false)
+const editorWorkoutId = ref<string | null>(null)
+function openEditor(workoutId: string) {
+  editorWorkoutId.value = workoutId
+  editorOpen.value = true
+}
+
+const { starting, launch } = useStartWorkout(workoutsApi, { open: openEditor })
 
 watch([error, templatesError], ([e1, e2]) => {
   const e = e1 ?? e2
@@ -63,6 +72,38 @@ const templateSummary = (template: WorkoutTemplate) =>
 const formOpen = ref(false)
 const editing = ref<WorkoutTemplate | null>(null)
 const saving = ref(false)
+
+// --- Consultation (panneau en lecture) ---
+
+const detailOpen = ref(false)
+const detailId = ref<string | null>(null)
+/** Suit le programme dans la liste : le panneau reste à jour, et se ferme s'il est supprimé. */
+const detailTemplate = computed(() => templates.value.find(t => t.id === detailId.value) ?? null)
+watch(detailTemplate, (template) => {
+  if (!template && detailOpen.value) detailOpen.value = false
+})
+
+function openDetail(template: WorkoutTemplate) {
+  detailId.value = template.id
+  detailOpen.value = true
+}
+
+/** Ferme le panneau (et son entrée d'historique) avant d'enchaîner sur l'éditeur ou la séance. */
+async function closeDetail() {
+  detailOpen.value = false
+  await nextTick()
+  await afterOverlayBacks()
+}
+
+async function editFromDetail(template: WorkoutTemplate) {
+  await closeDetail()
+  openForm(template)
+}
+
+async function launchFromDetail(template: WorkoutTemplate) {
+  await closeDetail()
+  await launch(template)
+}
 
 function openForm(template: WorkoutTemplate | null = null) {
   editing.value = template
@@ -145,11 +186,11 @@ async function confirmDelete() {
 
         <ul v-else class="divide-y divide-default overflow-hidden rounded-xl border border-default bg-default">
           <li v-for="template in templates" :key="template.id" class="flex items-center gap-1 transition-colors hover:bg-elevated/50">
-            <!-- La ligne ouvre l'éditeur ; « Lancer » démarre une séance en direct. -->
+            <!-- La ligne ouvre le programme en lecture ; le crayon, l'éditeur ; « Lancer » démarre une séance en direct. -->
             <button
               type="button"
               class="min-w-0 flex-1 cursor-pointer py-3 ps-4 pe-2 text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:ps-5"
-              @click="openForm(template)"
+              @click="openDetail(template)"
             >
               <p class="truncate font-semibold text-highlighted">
                 {{ template.label }}
@@ -200,6 +241,19 @@ async function confirmDelete() {
           </li>
         </ul>
       </div>
+
+      <WorkoutEditorSlideover v-model:open="editorOpen" :workout-id="editorWorkoutId" />
+
+      <TemplateDetailSlideover
+        v-model:open="detailOpen"
+        :template="detailTemplate"
+        :hints="hints"
+        :last-run="detailTemplate ? lastRun(detailTemplate) : null"
+        :starting="starting"
+        @edit="editFromDetail"
+        @delete="askDelete"
+        @launch="launchFromDetail"
+      />
 
       <WorkoutTemplateSlideover
         v-model:open="formOpen"

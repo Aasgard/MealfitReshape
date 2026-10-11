@@ -9,13 +9,26 @@ useSeoMeta({
   title: 'Dashboard - Séances - Mealfit',
   description: 'Dashboard - Séances - Mealfit',
 })
+useNoZoom()
 
-const router = useRouter()
 const toast = useToast()
 
 const workoutsApi = useWorkouts()
 const { workouts, inProgress, pending, error, promise: workoutsLoaded, deleteWorkout } = workoutsApi
-const { starting, start } = useStartWorkout(workoutsApi)
+// --- Éditeur de séance en panneau (démarrer, séance passée, reprendre, modifier) ---
+
+const editorOpen = ref(false)
+const editorWorkoutId = ref<string | null>(null)
+const editorEditing = ref(false)
+
+/** Ouvre l'éditeur sur une séance ; `editing` rend modifiable une séance terminée. */
+function openEditor(workoutId: string, editing = false) {
+  editorWorkoutId.value = workoutId
+  editorEditing.value = editing
+  editorOpen.value = true
+}
+
+const { starting, start } = useStartWorkout(workoutsApi, { open: openEditor })
 
 watch(error, (e) => {
   if (e) toast.add({ title: 'Erreur', description: `Impossible de charger les séances : ${e.message}`, color: 'error' })
@@ -38,7 +51,13 @@ const startItems = computed<DropdownMenuItem[][]>(() => [
     { label: 'Démarrer maintenant', description: 'Chrono, séries validées une à une', icon: 'i-lucide-play', onSelect: () => start({ live: true }) },
     { label: 'Saisir une séance passée', description: 'Tout remplir d\'un coup', icon: 'i-lucide-pencil-line', onSelect: () => start({ live: false }) },
   ],
+  [
+    { label: 'Minuteur HIIT', description: 'Sans séance, rien n\'est enregistré', icon: 'i-lucide-timer', onSelect: () => (quickHiitOpen.value = true) },
+  ],
 ])
+
+/** Minuteur HIIT rapide, sans séance ni enregistrement. */
+const quickHiitOpen = ref(false)
 
 // --- Séance en cours ---
 
@@ -75,10 +94,44 @@ async function confirmDeleteWorkout() {
   }
 }
 
-const editWorkout = (workout: Workout) => router.push({ path: `/dashboard/seances/${workout.id}`, query: { modifier: null } })
+const editWorkout = (workout: Workout) => openEditor(workout.id, true)
 const askDeleteWorkout = (workout: Workout) => {
   deletingWorkout.value = workout
   deleteWorkoutOpen.value = true
+}
+
+// --- Consultation d'une séance (panneau latéral) ---
+
+const { saveTemplate } = useWorkoutTemplates()
+const detailOpen = ref(false)
+const detailId = ref<string | null>(null)
+/** Suit la séance dans la liste : le panneau reste à jour, et se ferme si elle est supprimée. */
+const detailWorkout = computed(() => workouts.value.find(w => w.id === detailId.value) ?? null)
+watch(detailWorkout, (workout) => {
+  if (!workout && detailOpen.value) detailOpen.value = false
+})
+
+function openDetail(workout: Workout) {
+  detailId.value = workout.id
+  detailOpen.value = true
+}
+
+/** Modifier depuis la consultation : on la ferme (et son entrée d'historique) avant d'ouvrir l'éditeur. */
+async function editFromDetail(workout: Workout) {
+  detailOpen.value = false
+  await nextTick()
+  await afterOverlayBacks()
+  editWorkout(workout)
+}
+
+async function saveDetailAsTemplate(workout: Workout) {
+  try {
+    await saveTemplate(templateInputFromWorkout(workout))
+    toast.add({ title: 'Programme créé', description: `« ${workoutTitle(workout)} » se lance depuis Programmes.`, color: 'success', icon: 'i-lucide-check' })
+  }
+  catch (e) {
+    toast.add({ title: 'Programme non créé', description: (e as Error).message, color: 'error' })
+  }
 }
 
 // --- Journal ---
@@ -153,10 +206,11 @@ const dayLabel = (workout: Workout) => {
     <template #body>
       <div class="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <!-- Séance en cours : on la reprend d'ici, d'un autre appareil ou après avoir fermé l'appli. -->
-        <NuxtLink
+        <button
           v-if="inProgress"
-          :to="`/dashboard/seances/${inProgress.id}`"
-          class="group flex items-center gap-4 rounded-xl border border-primary/50 bg-primary/5 p-4 transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary sm:px-5"
+          type="button"
+          class="group flex w-full cursor-pointer items-center gap-4 rounded-xl border border-primary/50 bg-primary/5 p-4 text-start transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary sm:px-5"
+          @click="openEditor(inProgress.id)"
         >
           <span class="relative flex size-2.5 shrink-0" aria-hidden="true">
             <span class="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60 motion-reduce:hidden" />
@@ -177,7 +231,7 @@ const dayLabel = (workout: Workout) => {
             Reprendre
             <UIcon name="i-lucide-arrow-right" class="size-4 transition-transform group-hover:translate-x-0.5" />
           </span>
-        </NuxtLink>
+        </button>
 
         <!-- Journal -->
         <section aria-labelledby="journal-title" class="flex flex-col gap-3">
@@ -205,10 +259,11 @@ const dayLabel = (workout: Workout) => {
               <p class="max-w-sm text-sm text-muted">
                 Démarrez une séance à la salle pour valider vos séries en direct, ou notez une sortie déjà faite.
               </p>
-              <!-- Deux colonnes égales à partir de sm (empilées sur téléphone, pour ne pas couper les libellés), boutons hauts. -->
-              <div class="mt-1 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
+              <!-- Trois colonnes égales à partir de lg (empilées en dessous, pour ne pas couper les libellés), boutons hauts. -->
+              <div class="mt-1 grid w-full max-w-lg grid-cols-1 gap-2 lg:max-w-3xl lg:grid-cols-3">
                 <UButton label="Démarrer maintenant" icon="i-lucide-play" size="xl" block :loading="starting" @click="start({ live: true })" />
                 <UButton label="Saisir une séance passée" icon="i-lucide-pencil-line" color="neutral" variant="outline" size="xl" block @click="start({ live: false })" />
+                <UButton label="Minuteur HIIT" icon="i-lucide-timer" color="neutral" variant="outline" size="xl" block @click="quickHiitOpen = true" />
               </div>
             </div>
 
@@ -231,9 +286,10 @@ const dayLabel = (workout: Workout) => {
                 </header>
                 <ul class="divide-y divide-default">
                   <li v-for="workout in week.workouts" :key="workout.id" class="flex items-center transition-colors hover:bg-elevated/50">
-                    <NuxtLink
-                      :to="`/dashboard/seances/${workout.id}`"
-                      class="flex min-w-0 flex-1 items-center gap-4 py-3 ps-4 pe-2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:ps-5"
+                    <button
+                      type="button"
+                      class="flex min-w-0 flex-1 cursor-pointer items-center gap-4 py-3 ps-4 pe-2 text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:ps-5"
+                      @click="openDetail(workout)"
                     >
                       <div class="flex w-9 shrink-0 flex-col items-center leading-tight" aria-hidden="true">
                         <span class="text-[10px] font-semibold uppercase tracking-wide text-dimmed">{{ dayLabel(workout).weekday }}</span>
@@ -257,7 +313,7 @@ const dayLabel = (workout: Workout) => {
                           {{ workoutDuration(workout) ? formatMinutes(workoutDuration(workout)!) : '—' }}
                         </p>
                       </div>
-                    </NuxtLink>
+                    </button>
                     <!-- Actions en icônes, à portée directe (pas de menu). -->
                     <div class="flex shrink-0 items-center pe-2 sm:pe-3">
                       <UTooltip text="Modifier">
@@ -297,6 +353,23 @@ const dayLabel = (workout: Workout) => {
             </template>
           </section>
       </div>
+
+      <QuickHiitTimer v-model:open="quickHiitOpen" />
+
+      <WorkoutEditorSlideover
+        v-model:open="editorOpen"
+        :workout-id="editorWorkoutId"
+        :editing="editorEditing"
+      />
+
+      <WorkoutDetailSlideover
+        v-model:open="detailOpen"
+        :workout="detailWorkout"
+        :workouts="workouts"
+        @edit="editFromDetail"
+        @delete="askDeleteWorkout"
+        @save-as-template="saveDetailAsTemplate"
+      />
 
       <ConfirmDialog
         v-model:open="deleteWorkoutOpen"

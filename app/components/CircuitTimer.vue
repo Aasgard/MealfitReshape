@@ -10,6 +10,11 @@ import type { WorkoutCircuit } from '~/types/workout'
  */
 const props = defineProps<{
   circuit: WorkoutCircuit
+  /**
+   * Minuteur rapide (sans séance) : pas de saisie des répétitions, et « Quitter » ferme sans confirmation puisque rien
+   * n'est enregistré.
+   */
+  quick?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -64,7 +69,13 @@ const hasProgress = computed(() => phase.value !== 'idle')
 const discardOpen = ref(false)
 
 function requestDiscard() {
-  if (hasProgress.value) discardOpen.value = true
+  if (props.quick) {
+    stop()
+    phase.value = 'idle'
+    pausedRemaining.value = null
+    open.value = false
+  }
+  else if (hasProgress.value) discardOpen.value = true
   else open.value = false
 }
 
@@ -503,26 +514,28 @@ function setReps(itemIndex: number, round: number, value: number | null) {
             </template>
           </div>
 
-          <!-- 5. Répétitions de l'exercice qui vient de finir (repos, fin) ; place gardée le reste du temps. -->
-          <div v-if="finishedStep" class="flex w-full max-w-80 flex-col gap-1.5">
-            <p class="w-full truncate text-lg text-muted" aria-hidden="true">
-              Répétitions · <span class="font-medium text-highlighted">{{ items[finishedStep.itemIndex]?.label }}</span>
-            </p>
-            <NumberPadInput
-              :key="`${finishedStep.round}-${finishedStep.itemIndex}`"
-              :model-value="repsOf(finishedStep.itemIndex, finishedStep.round)"
-              size="lg"
-              placeholder="Toucher pour noter"
-              :label="`${items[finishedStep.itemIndex]?.label} · tour ${finishedStep.round + 1}`"
-              @update:model-value="setReps(finishedStep.itemIndex, finishedStep.round, $event)"
-            />
-          </div>
-          <div v-else class="invisible flex w-full max-w-80 flex-col gap-1.5" aria-hidden="true">
-            <p class="text-lg">
-              Répétitions
-            </p>
-            <div class="h-14" />
-          </div>
+          <!-- 5. Répétitions de l'exercice qui vient de finir (repos, fin) ; place gardée le reste du temps. Pas en minuteur rapide. -->
+          <template v-if="!quick">
+            <div v-if="finishedStep" class="flex w-full max-w-80 flex-col gap-1.5">
+              <p class="w-full truncate text-lg text-muted" aria-hidden="true">
+                Répétitions · <span class="font-medium text-highlighted">{{ items[finishedStep.itemIndex]?.label }}</span>
+              </p>
+              <NumberPadInput
+                :key="`${finishedStep.round}-${finishedStep.itemIndex}`"
+                :model-value="repsOf(finishedStep.itemIndex, finishedStep.round)"
+                size="lg"
+                placeholder="Toucher pour noter"
+                :label="`${items[finishedStep.itemIndex]?.label} · tour ${finishedStep.round + 1}`"
+                @update:model-value="setReps(finishedStep.itemIndex, finishedStep.round, $event)"
+              />
+            </div>
+            <div v-else class="invisible flex w-full max-w-80 flex-col gap-1.5" aria-hidden="true">
+              <p class="text-lg">
+                Répétitions
+              </p>
+              <div class="h-14" />
+            </div>
+          </template>
 
           <!--
             6. Ligne d'information : le circuit avant le départ, l'exercice suivant pendant un repos, les tours faits à la
@@ -577,9 +590,9 @@ function setReps(itemIndex: number, round: number, value: number | null) {
             Bip et vibration à chaque changement, trois bips avant la fin de l'effort.
           </p>
           <UButton
-            :label="inProgress ? 'Quitter sans enregistrer' : 'Quitter'"
+            :label="inProgress && !quick ? 'Quitter sans enregistrer' : 'Quitter'"
             icon="i-lucide-x"
-            :color="inProgress ? 'error' : 'neutral'"
+            :color="inProgress && !quick ? 'error' : 'neutral'"
             variant="ghost"
             @click="requestDiscard"
           />

@@ -5,6 +5,7 @@ import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
+import type { Workout } from '~/types/workout'
 import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow } from '~/types/today'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
@@ -93,7 +94,83 @@ watch(weighInsError, (error) => {
   toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
 })
 
-const { workouts, error: workoutsError, promise: workoutsLoaded } = useWorkouts()
+const { workouts, error: workoutsError, promise: workoutsLoaded, deleteWorkout } = useWorkouts()
+const { saveTemplate } = useWorkoutTemplates()
+
+// --- Éditeur de séance en panneau : séance en cours reprise, ou séance modifiée ---
+
+const workoutEditorOpen = ref(false)
+const workoutEditorId = ref<string | null>(null)
+const workoutEditorEditing = ref(false)
+
+function openWorkoutEditor(workoutId: string, editing = false) {
+  workoutEditorId.value = workoutId
+  workoutEditorEditing.value = editing
+  workoutEditorOpen.value = true
+}
+
+/** Ligne de « S'entraîner » : une séance en cours se reprend dans l'éditeur, une séance terminée s'ouvre en consultation. */
+function openTodayWorkout(workout: Workout) {
+  if (workout.status === 'IN_PROGRESS') openWorkoutEditor(workout.id)
+  else openWorkoutDetail(workout)
+}
+
+// --- Consultation d'une séance terminée (panneau latéral), depuis « S'entraîner » ---
+
+const workoutDetailOpen = ref(false)
+const workoutDetailId = ref<string | null>(null)
+const workoutDetail = computed(() => workouts.value.find(w => w.id === workoutDetailId.value) ?? null)
+watch(workoutDetail, (workout) => {
+  if (!workout && workoutDetailOpen.value) workoutDetailOpen.value = false
+})
+
+function openWorkoutDetail(workout: Workout) {
+  workoutDetailId.value = workout.id
+  workoutDetailOpen.value = true
+}
+
+/** Modifier : on ferme la consultation (et son entrée d'historique) avant d'ouvrir l'éditeur. */
+async function editWorkoutFromDetail(workout: Workout) {
+  workoutDetailOpen.value = false
+  await nextTick()
+  await afterOverlayBacks()
+  openWorkoutEditor(workout.id, true)
+}
+
+async function saveWorkoutAsTemplate(workout: Workout) {
+  try {
+    await saveTemplate(templateInputFromWorkout(workout))
+    toast.add({ title: 'Programme créé', description: `« ${workoutTitle(workout)} » se lance depuis Programmes.`, color: 'success', icon: 'i-lucide-check' })
+  }
+  catch (e) {
+    toast.add({ title: 'Programme non créé', description: (e as Error).message, color: 'error' })
+  }
+}
+
+const deletingWorkout = ref<Workout | null>(null)
+const deleteWorkoutOpen = ref(false)
+const deletingWorkoutBusy = ref(false)
+
+function askDeleteWorkout(workout: Workout) {
+  deletingWorkout.value = workout
+  deleteWorkoutOpen.value = true
+}
+
+async function confirmDeleteWorkout() {
+  if (!deletingWorkout.value) return
+  deletingWorkoutBusy.value = true
+  try {
+    await deleteWorkout(deletingWorkout.value.id)
+    deleteWorkoutOpen.value = false
+    toast.add({ title: 'Séance supprimée', color: 'neutral', icon: 'i-lucide-trash-2' })
+  }
+  catch (e) {
+    toast.add({ title: 'Séance non supprimée', description: (e as Error).message, color: 'error' })
+  }
+  finally {
+    deletingWorkoutBusy.value = false
+  }
+}
 watch(workoutsError, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les séances : ${error.message}`, color: 'error' })
@@ -544,6 +621,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :macros="daySummary.macros"
               :weight-progress="weightProgress"
               :burned-kcal="burnedKcal"
+              show-burned
             />
 
             <template v-if="shoppingLines.length">
@@ -595,7 +673,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
                 </NuxtLink>
               </div>
 
-              <TodayWorkouts :workouts="dayWorkouts" />
+              <TodayWorkouts :workouts="dayWorkouts" @open="openTodayWorkout" />
             </template>
           </div>
         </Transition>
@@ -622,4 +700,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   />
 
   <IngredientDetailSlideover v-model:open="ingredientDetailOpen" :ingredient="selectedIngredient" />
+
+  <WorkoutEditorSlideover
+    v-model:open="workoutEditorOpen"
+    :workout-id="workoutEditorId"
+    :editing="workoutEditorEditing"
+  />
+
+  <WorkoutDetailSlideover
+    v-model:open="workoutDetailOpen"
+    :workout="workoutDetail"
+    :workouts="workouts"
+    @edit="editWorkoutFromDetail"
+    @delete="askDeleteWorkout"
+    @save-as-template="saveWorkoutAsTemplate"
+  />
+
+  <ConfirmDialog
+    v-model:open="deleteWorkoutOpen"
+    :title="deletingWorkout ? `Supprimer « ${workoutTitle(deletingWorkout)} » ?` : 'Supprimer la séance ?'"
+    description="Ses exercices et ses séries seront supprimés définitivement."
+    confirm-label="Supprimer"
+    confirm-color="error"
+    confirm-icon="i-lucide-trash-2"
+    :loading="deletingWorkoutBusy"
+    @confirm="confirmDeleteWorkout"
+  />
 </template>

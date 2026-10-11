@@ -21,7 +21,25 @@ useScreenWakeLock(open)
 const { formatDate } = useDateFormat()
 
 const persons = computed(() => props.recipe?.persons ?? 1)
-const displayedParts = computed(() => props.parts || persons.value)
+/** Parts à l'ouverture : celles du repas (ou de la fournée), sinon celles de la recette. */
+const initialParts = computed(() => props.parts || persons.value)
+
+/**
+ * Variateur de parts de la fiche : ne fait que recalculer les quantités affichées (et imprimées). Il ne change ni le
+ * repas, ni la recette, ni le stock ; il revient aux parts d'origine à chaque ouverture.
+ */
+const PARTS_STEP = 0.5
+const displayedParts = ref(initialParts.value)
+watch([open, initialParts], ([isOpen]) => {
+  if (isOpen) displayedParts.value = initialParts.value
+})
+const stepParts = (direction: 1 | -1) => {
+  displayedParts.value = Math.max(PARTS_STEP, displayedParts.value + direction * PARTS_STEP)
+}
+const resetParts = () => {
+  displayedParts.value = initialParts.value
+}
+const isAdjusted = computed(() => Math.abs(displayedParts.value - initialParts.value) > 1e-6)
 const isScaled = computed(() => displayedParts.value !== persons.value)
 
 const formatParts = (parts: number) =>
@@ -211,9 +229,45 @@ const editRecipe = async () => {
 
         <!-- Ingrédients -->
         <div>
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
-            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients</p>
+          <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
+              <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients</p>
+            </div>
+            <!-- Recalcule seulement les quantités affichées : le repas, la recette et le stock ne changent pas. -->
+            <div class="flex items-center gap-2">
+              <UButton
+                v-if="isAdjusted"
+                :label="`Revenir à ${formatParts(initialParts)}`"
+                color="neutral"
+                variant="link"
+                size="xs"
+                class="tabular-nums"
+                @click="resetParts"
+              />
+              <div role="group" aria-label="Parts pour le calcul des quantités" class="flex items-center rounded-md ring ring-inset ring-accented">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="neutral"
+                  variant="link"
+                  size="sm"
+                  aria-label="Retirer une demi-part"
+                  :disabled="displayedParts <= PARTS_STEP"
+                  @click="stepParts(-1)"
+                />
+                <span class="min-w-16 text-center text-sm font-semibold text-highlighted tabular-nums" aria-live="polite">
+                  {{ formatParts(displayedParts) }}
+                </span>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="link"
+                  size="sm"
+                  aria-label="Ajouter une demi-part"
+                  @click="stepParts(1)"
+                />
+              </div>
+            </div>
           </div>
           <p v-if="scaledNote" class="mb-3 text-xs text-muted">{{ scaledNote }}</p>
           <ul v-if="lines.length" class="rounded-lg border border-default bg-elevated overflow-hidden">

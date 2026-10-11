@@ -1,5 +1,6 @@
 import type { MealType } from './meal'
 import type { MenuEntry } from './menu'
+import type { DishStorage } from './preparedDish'
 
 /** Un repas de la journée : sa ligne du calendrier des menus et son objectif éventuel. */
 export type MealSlot = {
@@ -36,11 +37,17 @@ export type TodayCookingDay = {
 /** Une recette de la liste "Cuisiner" de l'accueil, à préparer en une fois. */
 export type TodayCookingRecipe = {
   recipeId: string
+  /** Jour où elle se cuisine, `yyyy-MM-dd`. */
+  cookDay: string
   title: string
   /** Photo de la recette, affichée à la place de l'icône. */
   imageUrl?: string
   /** Répartition des parts par jour puis par repas, pour savoir comment la conditionner. */
   days: TodayCookingDay[]
-  /** Somme des parts de ces repas. */
+  /** Somme des parts de ces repas, surplus pour le stock compris. */
   parts: number
+  /** Parts que fait la recette : alerte quand `parts` n'en fait pas un nombre entier. */
+  persons?: number
+  /** Parts cuisinées en plus pour le stock, et où elles seront rangées. */
+  surplus?: { parts: number, storage: DishStorage }
 }

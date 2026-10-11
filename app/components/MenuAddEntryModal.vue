@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
-import type { MealSource, ScannedProduct } from '~/types/meal'
+import type { MealSource, ScannedProduct, StockMealSource } from '~/types/meal'
 import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
-import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, type MenuEntryDraft } from '~/utils/menuEntries'
+import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, buildStockDraft, type MenuEntryDraft } from '~/utils/menuEntries'
+import { compareDishes, dishStorageOf, formatDishDay, formatParts, isDishPlanned, isDishStale, PARTS_EPSILON } from '~/utils/preparedDishes'
 import { gramsForUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
@@ -14,8 +15,8 @@ import { isCompletePer100, readingsForQuantity, scannedProductLabel, type Scanne
 
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
- * une recette de la base (en nombre de parts), un ingrédient de la base (en grammes ou en unité),
- * ou des macros brutes avec un libellé, saisies ou tirées d'un produit scanné. Émet un `MealSource` ; le parent l'enregistre dans la case.
+ * des parts d'un plat du stock (déjà préparé), une recette de la base (en nombre de parts), un ingrédient de la base
+ * (en grammes ou en unité), ou des macros brutes avec un libellé, saisies ou tirées d'un produit scanné. Émet un `MealSource` ; le parent l'enregistre dans la case.
  * Avec `initialSource`, la modale sert à modifier ce repas : elle s'ouvre pré-remplie.
  */
 const props = defineProps<{
@@ -24,6 +25,8 @@ const props = defineProps<{
   ingredientsById: Map<string, Ingredient>
   /** Case visée, ex : "Lun. 14 · Petit déj". */
   contextLabel: string
+  /** Jour de la case, `yyyy-MM-dd` : un plat du stock prévu pour plus tard n'y est pas encore disponible. */
+  dayKey: string
   /** Repas à modifier ; absent = ajout d'un nouveau repas. */
   initialSource?: MealSource | null
   /**
@@ -44,9 +47,10 @@ useOverlayBackClose(open)
 
 const ingredientCategoriesStore = useIngredientCategoriesStore()
 
-type Mode = 'recipe' | 'ingredient' | 'macros'
+type Mode = 'stock' | 'recipe' | 'ingredient' | 'macros'
 
 const tabs = [
+  { value: 'stock', label: 'Stock', icon: 'i-lucide-archive' },
   { value: 'recipe', label: 'Recette', icon: 'i-lucide-chef-hat' },
   { value: 'ingredient', label: 'Aliment', icon: 'i-lucide-carrot' },
   { value: 'macros', label: 'Macros', icon: 'i-lucide-calculator' },
@@ -56,12 +60,14 @@ const tabs = [
 const GRAMS_UNIT = '__grams__'
 
 const mode = ref<Mode>('recipe')
+/** Onglets dont la liste défile seule, dans la hauteur laissée par les champs. */
+const hasOwnScroll = computed(() => mode.value === 'recipe' || mode.value === 'stock')
 
 /**
- * Balayage horizontal (mobile) : vers la gauche passe à l'onglet suivant (Recette → Aliment → Macros),
+ * Balayage horizontal (mobile) : vers la gauche passe à l'onglet suivant (Stock → Recette → Aliment → Macros),
  * vers la droite au précédent. Mêmes seuils que le changement de jour de l'accueil.
  */
-const MODE_ORDER: Mode[] = ['recipe', 'ingredient', 'macros']
+const MODE_ORDER: Mode[] = ['stock', 'recipe', 'ingredient', 'macros']
 const SWIPE_MIN_DISTANCE = 60
 let swipeStart: { x: number, y: number } | null = null
 
@@ -168,6 +174,72 @@ const stepParts = (direction: 1 | -1) => {
   parts.value = Math.max(PARTS_STEP, parts.value + direction * PARTS_STEP)
 }
 
+/**
+ * Onglet Stock : un plat déjà préparé et le nombre de parts qu'on y prend, sans dépasser ce qui reste. En modification,
+ * les parts du repas modifié comptent comme disponibles (elles sont rendues avant d'être reprises).
+ */
+const { dishes } = usePreparedDishes()
+const dishId = ref<string | undefined>(undefined)
+const stockParts = ref(1)
+
+const initialStock = computed(() => props.initialSource?.category === 'STOCK' ? props.initialSource : null)
+const availableParts = (dish: { id: string, parts: number }) =>
+  dish.parts + (initialStock.value?.dishId === dish.id ? initialStock.value.value : 0)
+
+/**
+ * Plats proposés, les plus anciens d'abord : disponibles au jour de la case, puis ceux prévus plus tard (grisés). Un plat
+ * épuisé n'est proposé que s'il sert le repas modifié.
+ */
+const stockOptions = computed(() => dishes.value
+  .filter(dish => availableParts(dish) > PARTS_EPSILON)
+  .sort(compareDishes)
+  .map((dish) => {
+    const storage = dishStorageOf(dish.storage)
+    const isPlanned = isDishPlanned(dish, props.dayKey)
+    return {
+      dish,
+      available: availableParts(dish),
+      storage,
+      isPlanned,
+      isStale: isDishStale(dish, props.dayKey),
+      kcal: Math.round(dish.perPart.calories),
+      macros: { carbohydrates: dish.perPart.carbohydrates, protein: dish.perPart.protein, fat: dish.perPart.fat },
+    }
+  })
+  .sort((a, b) => Number(a.isPlanned) - Number(b.isPlanned)))
+
+const selectedStock = computed(() => stockOptions.value.find(option => option.dish.id === dishId.value && !option.isPlanned))
+/** Plat du repas modifié retiré du stock depuis : le repas garde sa copie, qu'on peut seulement réenregistrer telle quelle. */
+const isInitialDishGone = computed(() => !!initialStock.value && dishId.value === initialStock.value.dishId && !dishes.value.some(d => d.id === dishId.value))
+
+const selectDish = (id: string) => {
+  dishId.value = id
+  const option = stockOptions.value.find(o => o.dish.id === id)
+  if (option) stockParts.value = Math.min(Math.max(stockParts.value, PARTS_STEP), option.available)
+}
+
+const stepStockParts = (direction: 1 | -1) => {
+  const max = selectedStock.value?.available ?? stockParts.value
+  stockParts.value = Math.min(max, Math.max(PARTS_STEP, stockParts.value + direction * PARTS_STEP))
+}
+
+const stockSource = computed<StockMealSource | null>(() => {
+  if (isInitialDishGone.value) return initialStock.value
+  const option = selectedStock.value
+  if (!option || stockParts.value < PARTS_EPSILON) return null
+  const { dish } = option
+  return {
+    category: 'STOCK',
+    dishId: dish.id,
+    value: Math.min(stockParts.value, option.available),
+    label: dish.label,
+    perPart: dish.perPart,
+    storage: dish.storage,
+    ...(dish.recipeId ? { recipeId: dish.recipeId } : {}),
+    ...(dish.comment ? { comment: dish.comment } : {}),
+  }
+})
+
 const INGREDIENT_CATEGORY_FILTER_ALL = 'ALL'
 const ingredientCategoryFilterOptions = computed(() => [
   { value: INGREDIENT_CATEGORY_FILTER_ALL, label: 'Toutes les catégories' },
@@ -202,6 +274,8 @@ watch(open, (isOpen) => {
   if (!isOpen) return
   mode.value = 'recipe'
   submitted.value = false
+  dishId.value = undefined
+  stockParts.value = 1
   recipeTypeFilter.value = []
   recipeIngredientFilter.value = []
   activeTargets.value = [...ALL_TARGET_KEYS]
@@ -223,7 +297,11 @@ watch(open, (isOpen) => {
   productQuantity.value = ''
 
   const source = props.initialSource
-  if (source?.category === 'RECIPE') {
+  if (source?.category === 'STOCK') {
+    mode.value = 'stock'
+    dishId.value = source.dishId
+    stockParts.value = source.value
+  } else if (source?.category === 'RECIPE') {
     recipeId.value = source.recipeId
     parts.value = source.value
   } else if (source?.category === 'INGREDIENT') {
@@ -514,6 +592,7 @@ const manualMacros = computed(() => {
 
 /** Ce qui est enregistré selon l'onglet actif, `null` tant que le formulaire est incomplet ou invalide. */
 const mealSource = computed<MealSource | null>(() => {
+  if (mode.value === 'stock') return stockSource.value
   if (mode.value === 'recipe') {
     if (!recipeId.value || !parts.value) return null
     return { category: 'RECIPE', recipeId: recipeId.value, value: parts.value }
@@ -539,6 +618,7 @@ const mealSource = computed<MealSource | null>(() => {
 
 /** Aperçu (kcal et macros) de ce qui sera ajouté ; `null` si le formulaire est incomplet ou si les macros ne sont pas calculables. */
 const draft = computed<MenuEntryDraft | null>(() => {
+  if (mode.value === 'stock') return stockSource.value ? buildStockDraft(stockSource.value, stockSource.value.value) : null
   if (mode.value === 'recipe') {
     if (!selectedRecipe.value || !parts.value) return null
     return buildRecipeDraft(selectedRecipe.value, parts.value, props.ingredientsById)
@@ -562,6 +642,7 @@ const numberError = (raw: string, parse: (v: string) => number | null, required:
 }
 
 const recipeError = computed(() => submitted.value && !recipeId.value ? 'Requis' : undefined)
+const dishError = computed(() => submitted.value && !dishId.value ? 'Choisissez un plat' : undefined)
 const ingredientError = computed(() => submitted.value && !ingredientId.value ? 'Requis' : undefined)
 const quantityError = computed(() => numberError(quantity.value, parsePositiveNumber, true))
 const productQuantityError = computed(() => numberError(productQuantity.value, parsePositiveNumber, true))
@@ -590,15 +671,15 @@ const onSubmit = () => {
     :description="contextLabel"
     :ui="{
       content: 'sm:max-w-md',
-      body: mode === 'recipe' ? 'flex flex-col overflow-hidden' : 'flex flex-col',
+      body: hasOwnScroll ? 'flex flex-col overflow-hidden' : 'flex flex-col',
     }"
   >
     <template #body>
-      <!-- En mode Recette, le corps ne défile pas : la liste des recettes prend la hauteur restante et défile seule. -->
+      <!-- En modes Stock et Recette, le corps ne défile pas : la liste prend la hauteur restante et défile seule. -->
       <!-- Toujours sur toute la hauteur du corps : le balayage entre onglets marche aussi dans la zone vide sous les champs. -->
       <div
         class="flex-1 flex flex-col gap-5"
-        :class="mode === 'recipe' && 'min-h-0'"
+        :class="hasOwnScroll && 'min-h-0'"
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >
@@ -611,7 +692,81 @@ const onSubmit = () => {
           class="w-full"
         />
 
-        <template v-if="mode === 'recipe'">
+        <UFormField
+          v-if="mode === 'stock'"
+          label="Plat du stock"
+          :error="isInitialDishGone ? undefined : dishError"
+          :hint="`${stockOptions.filter(o => !o.isPlanned).length} disponible${stockOptions.filter(o => !o.isPlanned).length > 1 ? 's' : ''}`"
+          help="Déjà préparé : il ne compte ni dans « Cuisiner », ni dans la liste de courses."
+          :ui="{ root: 'flex-1 min-h-0 flex flex-col', container: 'flex-1 min-h-0 flex flex-col' }"
+        >
+          <UAlert
+            v-if="isInitialDishGone"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-archive-x"
+            :title="`« ${initialStock?.label} » n'est plus dans le stock`"
+            description="Le repas garde ses valeurs ; choisissez un autre plat pour le remplacer."
+            class="mb-2"
+          />
+          <div
+            role="radiogroup"
+            aria-label="Plats du stock"
+            class="flex-1 min-h-32 overflow-y-auto overscroll-contain rounded-lg border border-default divide-y divide-default"
+          >
+            <button
+              v-for="option in stockOptions"
+              :key="option.dish.id"
+              type="button"
+              role="radio"
+              :aria-checked="dishId === option.dish.id"
+              :disabled="option.isPlanned"
+              class="w-full flex items-start gap-3 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:cursor-not-allowed"
+              :class="dishId === option.dish.id && !option.isPlanned ? 'bg-primary/10' : option.isPlanned ? 'opacity-60' : 'hover:bg-elevated/60'"
+              @click="selectDish(option.dish.id)"
+            >
+              <UIcon :name="option.storage.icon" class="mt-0.5 size-4 shrink-0" :class="dishId === option.dish.id && !option.isPlanned ? 'text-primary' : 'text-muted'" :title="option.storage.label" aria-hidden="true" />
+              <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span class="flex items-center gap-2 min-w-0">
+                  <span class="truncate text-sm font-medium" :class="dishId === option.dish.id && !option.isPlanned ? 'text-primary' : 'text-highlighted'">{{ option.dish.label }}</span>
+                  <span class="sr-only">, {{ option.storage.label }}</span>
+                  <span class="ml-auto flex items-center gap-1.5 shrink-0">
+                    <span class="text-sm font-semibold text-highlighted tabular-nums">{{ option.kcal }}</span>
+                    <span class="text-xs text-dimmed">kcal</span>
+                    <MacroPie v-bind="option.macros" size-class="size-4" />
+                  </span>
+                </span>
+                <span class="flex items-center gap-1.5 min-w-0 text-xs tabular-nums">
+                  <span v-if="option.isPlanned" class="flex items-center gap-1 text-info">
+                    <UIcon name="i-lucide-calendar-clock" class="size-3 shrink-0" aria-hidden="true" />
+                    Prêt le {{ formatDishDay(option.dish.preparedOn) }}
+                  </span>
+                  <template v-else>
+                    <span class="font-semibold text-muted">{{ formatParts(option.available) }}</span>
+                    <span aria-hidden="true" class="text-dimmed">·</span>
+                    <span class="text-dimmed">préparé le {{ formatDishDay(option.dish.preparedOn) }}</span>
+                    <span v-if="option.isStale" class="flex items-center gap-0.5 text-warning">
+                      <UIcon name="i-lucide-clock-alert" class="size-3 shrink-0" aria-hidden="true" />
+                      à consommer vite
+                    </span>
+                  </template>
+                </span>
+                <span v-if="option.dish.comment" class="truncate text-xs text-muted">{{ option.dish.comment }}</span>
+              </span>
+            </button>
+            <div v-if="!stockOptions.length" class="flex flex-col items-center gap-2 px-3 py-8 text-center">
+              <UIcon name="i-lucide-archive" class="size-6 text-dimmed" aria-hidden="true" />
+              <p class="text-sm text-muted">
+                Aucun plat en stock.
+              </p>
+              <ULink to="/dashboard/stock" class="text-sm font-medium text-primary hover:underline">
+                Ajouter un plat au stock
+              </ULink>
+            </div>
+          </div>
+        </UFormField>
+
+        <template v-else-if="mode === 'recipe'">
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between gap-3">
               <!-- En-tête cliquable : replie ou déplie le bloc des filtres (ouvert par défaut). -->
@@ -970,9 +1125,39 @@ const onSubmit = () => {
         :icon="isEditMode ? 'i-lucide-check' : 'i-lucide-plus'"
         @click="onSubmit"
       />
+      <!-- Parts prises dans le plat du stock, sans dépasser ce qui reste. -->
+      <div
+        v-if="mode === 'stock' && selectedStock"
+        role="group"
+        aria-label="Nombre de parts"
+        class="ml-auto flex items-center gap-1 rounded-md ring ring-inset ring-accented"
+        :title="`Reste ${formatParts(selectedStock.available)} en stock`"
+      >
+        <UButton
+          icon="i-lucide-minus"
+          color="neutral"
+          variant="link"
+          size="md"
+          aria-label="Retirer une demi-part"
+          :disabled="stockParts <= PARTS_STEP"
+          @click="stepStockParts(-1)"
+        />
+        <span class="min-w-14 text-center text-sm font-medium text-highlighted tabular-nums whitespace-nowrap" aria-live="polite">
+          {{ formatParts(stockParts) }}
+        </span>
+        <UButton
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="link"
+          size="md"
+          aria-label="Ajouter une demi-part"
+          :disabled="stockParts >= selectedStock.available - PARTS_EPSILON"
+          @click="stepStockParts(1)"
+        />
+      </div>
       <!-- Nombre de parts (mode Recette), aligné à droite de la barre d'ajout ; sans champ de saisie, aucun clavier ne s'ouvre sur mobile. -->
       <div
-        v-if="mode === 'recipe'"
+        v-else-if="mode === 'recipe'"
         role="group"
         aria-label="Nombre de parts"
         class="ml-auto flex items-center gap-1 rounded-md ring ring-inset ring-accented"

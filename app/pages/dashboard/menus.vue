@@ -188,6 +188,9 @@ const submitAddedEntry = (source: MealSource) => {
   saveMeal(addTarget.value.dayKey, addTarget.value.mealTypeKey, source)
 }
 
+/** « Mettre au stock » (panneau d'actions) : le repas quitte le menu, ses parts rejoignent le surplus de sa fournée. */
+const sendToStock = useSendToStock(() => meals.value)
+
 const deleteEntry = (entryId: string) => {
   const meal = findMeal(entryId)
   if (!meal) return
@@ -204,7 +207,7 @@ const calendarKey = ref(0)
 const moveEntry = async (entryId: string, dayKey: string, mealType: MealType) => {
   const meal = findMeal(entryId)
   const isMoved = !!meal && await runWrite(
-    () => moveMeal(meal.id, { date: dateOfDay(dayKey), mealType }),
+    () => moveMeal(meal, { date: dateOfDay(dayKey), mealType }),
     'Le repas n\'a pas pu être déplacé'
   )
   if (!isMoved) calendarKey.value++
@@ -222,12 +225,13 @@ const copyWeekOpen = ref(false)
 
 /**
  * Recopie les repas d'une autre semaine (lundi `sourceWeekStart`) jour pour jour dans la semaine affichée, dont les
- * repas actuels sont remplacés.
+ * repas actuels sont remplacés. Les repas pris dans le stock ne sont pas recopiés : leurs parts ont déjà été mangées.
  */
 const copyWeek = async (sourceWeekStart: Date, sourceMeals: Meal[]) => {
   copiedMeal.value = null
   const shift = differenceInCalendarWeeks(selectedWeekStart.value, sourceWeekStart, { weekStartsOn: WEEK_STARTS_ON })
-  const copies = sourceMeals.map(meal => ({
+  const stockCount = sourceMeals.filter(meal => meal.category === 'STOCK').length
+  const copies = sourceMeals.filter(meal => meal.category !== 'STOCK').map(meal => ({
     date: addWeeks(meal.date.toDate(), shift),
     mealType: meal.mealType,
     source: mealSourceOf(meal),
@@ -235,7 +239,16 @@ const copyWeek = async (sourceWeekStart: Date, sourceMeals: Meal[]) => {
   const isCopied = await runWrite(() => replaceMeals(weekMeals.value, copies), 'La semaine n\'a pas pu être copiée')
   if (isCopied) {
     const label = formatWeekLabel(sourceWeekStart, addDays(sourceWeekStart, DAYS_PER_WEEK - 1))
-    toast.add({ title: 'Semaine copiée', description: `Les repas de la semaine du ${label} ont été recopiés.`, color: 'success' })
+    const skipped = stockCount > 1
+      ? ` Les ${stockCount} repas pris dans le stock n'ont pas été recopiés.`
+      : stockCount ? ' Le repas pris dans le stock n\'a pas été recopié.' : ''
+    toast.add({
+      title: 'Semaine copiée',
+      description: `Les repas de la semaine du ${label} ont été recopiés.${skipped}`,
+      // Orange quand des repas du stock ont été écartés : la copie n'est pas complète.
+      color: stockCount ? 'warning' : 'success',
+      ...(stockCount ? { icon: 'i-lucide-archive-x' } : {}),
+    })
   }
 }
 
@@ -298,7 +311,7 @@ const runEntryAction = (action: (entryId: string) => void) => {
 /** Flèches ← / → du clavier : semaine précédente / suivante, sauf pendant une saisie ou quand une fenêtre est ouverte. */
 const isOverlayOpen = computed(() =>
   addModalOpen.value || clearDialogOpen.value || copyWeekOpen.value || shoppingListOpen.value
-  || slideoverOpen.value || actionsOpen.value
+  || slideoverOpen.value || actionsOpen.value || sendToStock.isOpen.value
 )
 
 const onKeydown = (event: KeyboardEvent) => {
@@ -399,6 +412,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :ingredients="ingredients"
     :ingredients-by-id="ingredientsById"
     :context-label="addContextLabel"
+    :day-key="addTarget?.dayKey ?? ''"
     :initial-source="editingSource"
     :day-budget="addDayBudget"
     @submit="submitAddedEntry"
@@ -427,6 +441,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :description="[actionsEntry?.quantityLabel, actionsEntry ? `${actionsEntry.kcal} kcal` : null].filter(Boolean).join(' · ')"
   >
     <template #body>
+      <p v-if="actionsEntry?.comment" class="mb-3 flex items-start gap-1.5 rounded-md bg-elevated px-3 py-2 text-sm text-muted">
+        <UIcon name="i-lucide-message-square-text" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {{ actionsEntry.comment }}
+      </p>
       <div class="flex flex-col gap-1">
         <UButton
           v-if="actionsEntry?.recipeId"
@@ -448,6 +466,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           block
           class="justify-start"
           @click="runEntryAction(editEntry)"
+        />
+        <UButton
+          v-if="actionsEntry?.recipeId && !actionsEntry.storage"
+          label="Mettre au stock"
+          icon="i-lucide-archive"
+          color="neutral"
+          variant="ghost"
+          size="lg"
+          block
+          class="justify-start"
+          @click="runEntryAction(id => sendToStock.open(findMeal(id)))"
         />
         <!-- `data-copy-control` : sans lui, ce clic annulerait aussitôt la copie (voir cancelCopyOnOutsideClick). -->
         <UButton
@@ -474,6 +503,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </template>
   </UDrawer>
+
+  <SendToStockModal
+    v-model:open="sendToStock.isOpen.value"
+    :label="sendToStock.label.value"
+    :parts="sendToStock.meal.value?.value ?? 0"
+    :cook-day="sendToStock.cookDay.value"
+    :is-cooked="sendToStock.isCooked.value"
+    :existing-storage="sendToStock.surplus.value?.storage"
+    :saving="sendToStock.isSaving.value"
+    @confirm="sendToStock.confirm"
+  />
 
   <ShoppingListSlideover
     v-model:open="shoppingListOpen"

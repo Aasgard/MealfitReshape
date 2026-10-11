@@ -14,19 +14,23 @@ export interface PlannedMealRow {
   isSelectable: boolean
 }
 
-/** Les macros saisies à la main n'ont pas d'ingrédients à acheter. */
-export const mealHasIngredients = (meal: Meal) => meal.category !== 'RAW'
+/** Les macros saisies à la main n'ont pas d'ingrédients à acheter ; un plat du stock est déjà prêt. */
+export const mealHasIngredients = (meal: Meal) => meal.category !== 'RAW' && meal.category !== 'STOCK'
 
-/** Clé de regroupement : une ligne par recette, par aliment dans une même unité, par libellé de macros saisies. */
+/** Repas qui demandent des courses ou de la cuisine : tous, sauf ceux pris dans le stock. */
+export const isPlannedMeal = (meal: Meal) => meal.category !== 'STOCK'
+
+/** Clé de regroupement : une ligne par recette, par aliment dans une même unité, par libellé de macros saisies, par plat du stock. */
 export const plannedMealKey = (meal: Meal) => {
   switch (meal.category) {
     case 'RECIPE': return `recipe:${meal.recipeId}`
     case 'INGREDIENT': return `ingredient:${meal.ingredientId}:${meal.unitId ?? 'g'}`
     case 'RAW': return `raw:${meal.label}`
+    case 'STOCK': return `stock:${meal.dishId}`
   }
 }
 
-const CATEGORY_RANK = { RECIPE: 0, INGREDIENT: 1, RAW: 2 } as const
+const CATEGORY_RANK = { RECIPE: 0, INGREDIENT: 1, RAW: 2, STOCK: 3 } as const
 
 /** Repas regroupés (parts ou quantités cumulées), recettes puis aliments puis macros, par ordre alphabétique. */
 export function groupPlannedMeals(

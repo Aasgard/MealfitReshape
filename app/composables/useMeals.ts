@@ -1,8 +1,11 @@
 import { addDays, addWeeks, startOfDay, subWeeks } from 'date-fns'
-import { collection, doc, query, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { collection, doc, query, Timestamp, where, writeBatch } from 'firebase/firestore'
 import type { MaybeRefOrGetter, Ref } from 'vue'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Meal, MealSource, MealType } from '~/types/meal'
+import { mealSourceOf } from '~/utils/menuEntries'
+import { dayKeyOf } from '~/utils/menuWeek'
+import { formatDishDay, isDishPlanned } from '~/utils/preparedDishes'
 
 /** Repas à créer : le jour (minuit, heure locale), la ligne du calendrier et ce qui a été mangé. */
 export type NewMeal = {
@@ -21,6 +24,7 @@ export type NewMeal = {
 export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
   const db = useFirestore()
   const user = useCurrentUser()
+  const { dishesById, stageStockChanges, stageStockMove } = usePreparedDishes()
 
   const meals = useCollection<Meal>(() => {
     const uid = user.value?.uid
@@ -34,12 +38,20 @@ export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
     )
   })
 
-  /** Supprime `toDelete` et crée `toCreate` en une seule écriture atomique. */
+  /**
+   * Supprime `toDelete` et crée `toCreate` en une seule écriture atomique, parts du stock comprises : prises aux plats
+   * pour les repas créés, rendues pour les repas supprimés. Lève une erreur si le stock ne peut pas servir un repas créé.
+   */
   const replaceMeals = async (toDelete: Meal[], toCreate: NewMeal[]) => {
     const uid = user.value?.uid
     if (!uid) throw new Error('Vous devez être connecté.')
 
     const batch = writeBatch(db)
+    await stageStockChanges(
+      batch,
+      toDelete.map(meal => ({ source: mealSourceOf(meal), day: dayKeyOf(meal.date.toDate()) })),
+      toCreate.map(meal => ({ source: meal.source, day: dayKeyOf(meal.date) })),
+    )
     for (const meal of toDelete) batch.delete(doc(db, 'meals', meal.id))
 
     const now = Date.now()
@@ -58,22 +70,40 @@ export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
 
   const addMeal = (meal: NewMeal) => replaceMeals([], [meal])
 
-  /** Déplace un repas vers un autre jour et/ou une autre ligne du calendrier ; ce qu'il contient (recette, quantité...) ne change pas. */
-  const moveMeal = (mealId: string, target: Pick<NewMeal, 'date' | 'mealType'>) =>
-    updateDoc(doc(db, 'meals', mealId), { date: Timestamp.fromDate(target.date), mealType: target.mealType })
+  /**
+   * Déplace un repas vers un autre jour et/ou une autre ligne du calendrier ; ce qu'il contient (recette, quantité...) ne
+   * change pas. Un plat du stock ne se mange pas avant d'être prêt.
+   */
+  const moveMeal = async (meal: Meal, target: Pick<NewMeal, 'date' | 'mealType'>) => {
+    const source = mealSourceOf(meal)
+    const day = dayKeyOf(target.date)
+    const dish = source.category === 'STOCK' ? dishesById.value.get(source.dishId) : undefined
+    if (dish && isDishPlanned(dish, day)) throw new Error(`« ${dish.label} » ne sera prêt qu'à partir du ${formatDishDay(dish.preparedOn)}`)
+
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'meals', meal.id), { date: Timestamp.fromDate(target.date), mealType: target.mealType })
+    stageStockMove(batch, source, day)
+    await batch.commit()
+  }
 
   /**
-   * Remplace ce qu'un repas contient (recette, aliment ou macros), sans changer son jour, sa ligne ni son ordre dans la case.
-   * Le document est réécrit en entier : passer d'une recette à un aliment ne doit pas laisser traîner `recipeId` / `value`.
+   * Remplace ce qu'un repas contient (recette, aliment, macros ou plat du stock), sans changer son jour, sa ligne ni son
+   * ordre dans la case. Le document est réécrit en entier : passer d'une recette à un aliment ne doit pas laisser traîner
+   * `recipeId` / `value`. Les parts du stock suivent : celles de l'ancien contenu sont rendues, celles du nouveau prises.
    */
-  const updateMealSource = (meal: Meal, source: MealSource) =>
-    setDoc(doc(db, 'meals', meal.id), {
+  const updateMealSource = async (meal: Meal, source: MealSource) => {
+    const day = dayKeyOf(meal.date.toDate())
+    const batch = writeBatch(db)
+    await stageStockChanges(batch, [{ source: mealSourceOf(meal), day }], [{ source, day }])
+    batch.set(doc(db, 'meals', meal.id), {
       ...source,
       user: meal.user,
       date: meal.date,
       mealType: meal.mealType,
       ...(meal.createdAt ? { createdAt: meal.createdAt } : {}),
     })
+    await batch.commit()
+  }
 
   return { meals, addMeal, moveMeal, updateMealSource, replaceMeals }
 }

@@ -16,6 +16,8 @@ const emit = defineEmits<{
   open: [entry: MenuEntry]
   edit: [entry: MenuEntry]
   delete: [entry: MenuEntry]
+  /** Repas d'une recette : le retirer du menu et envoyer ses parts au stock. */
+  stock: [entry: MenuEntry]
 }>()
 
 /** "Collation · En plus · Non compté" */
@@ -33,6 +35,7 @@ const secondaryCount = computed(() => props.secondaryRows.reduce((total, row) =>
       @open="emit('open', $event)"
       @edit="emit('edit', $event)"
       @delete="emit('delete', $event)"
+      @stock="emit('stock', $event)"
     />
 
     <UCollapsible v-if="secondaryRows.length" :ui="{ content: 'divide-y divide-default border-t border-default' }">
@@ -71,6 +74,7 @@ const secondaryCount = computed(() => props.secondaryRows.reduce((total, row) =>
           @open="emit('open', $event)"
           @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
+          @stock="emit('stock', $event)"
         />
       </template>
     </UCollapsible>

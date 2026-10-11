@@ -5,6 +5,7 @@ import type { MenuEntry } from '~/types/menu'
 import type { TodayMealRow } from '~/types/today'
 import { MEAL_TARGET_TOLERANCE, TARGET_STATUS_COLOR, targetStatus } from '~/utils/dailyTargets'
 import { MENU_MEAL_TYPES } from '~/utils/menuEntries'
+import { dishStorageOf } from '~/utils/preparedDishes'
 
 /** Un repas de la liste "Manger" : anneau d'objectif et icône, total, bouton d'ajout et ce qui a été enregistré (modifiable, supprimable). */
 const props = defineProps<{
@@ -17,13 +18,19 @@ const emit = defineEmits<{
   open: [entry: MenuEntry]
   edit: [entry: MenuEntry]
   delete: [entry: MenuEntry]
+  /** Repas d'une recette : le retirer du menu et envoyer ses parts au stock. */
+  stock: [entry: MenuEntry]
 }>()
 
 const isOpenable = (entry: MenuEntry) => !!(entry.recipeId || entry.ingredientId)
 
 /** Menu « ⋮ » d'un repas enregistré. */
 const entryActions = (entry: MenuEntry): DropdownMenuItem[][] => [
-  [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit', entry) }],
+  [
+    { label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit', entry) },
+    // Une recette (pas un plat déjà pris dans le stock) peut partir au stock au lieu d'être mangée.
+    ...(entry.recipeId && !entry.storage ? [{ label: 'Mettre au stock', icon: 'i-lucide-archive', onSelect: () => emit('stock', entry) }] : []),
+  ],
   [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => emit('delete', entry) }],
 ]
 
@@ -109,8 +116,11 @@ const ringLength = computed(() =>
         >
           <div class="min-w-0">
             <!-- Sur mobile, même taille que le nom du repas ; plus petit à partir de sm. -->
-            <p class="truncate text-base font-medium text-highlighted sm:text-sm">
-              {{ entry.label }}
+            <p class="flex items-center gap-1.5 text-base font-medium text-highlighted sm:text-sm">
+              <!-- Pris dans le stock : déjà préparé, ni à cuisiner ni à acheter. -->
+              <UIcon v-if="entry.storage" :name="dishStorageOf(entry.storage).icon" class="size-4 shrink-0 text-primary sm:size-3.5" :title="`Stock · ${dishStorageOf(entry.storage).label}`" aria-hidden="true" />
+              <span v-if="entry.storage" class="sr-only">Du stock :</span>
+              <span class="truncate">{{ entry.label }}</span>
             </p>
             <!-- « 1 part · 153 kcal · G20 P5 L3 » (sans quantité pour des macros saisies à la main). -->
             <p class="truncate text-xs tabular-nums text-dimmed">
@@ -122,6 +132,22 @@ const ringLength = computed(() =>
             </p>
           </div>
         </component>
+        <!-- Commentaire du plat du stock (ex. « ajouter la crème au réchauffage »), en bulle au clic. -->
+        <UPopover v-if="entry.comment" :content="{ align: 'end', side: 'top' }">
+          <UButton
+            icon="i-lucide-message-square-text"
+            color="primary"
+            variant="ghost"
+            size="sm"
+            class="shrink-0"
+            :aria-label="`Commentaire de ${entry.label}`"
+          />
+          <template #content>
+            <p class="max-w-64 px-3 py-2 text-sm whitespace-pre-line text-default">
+              {{ entry.comment }}
+            </p>
+          </template>
+        </UPopover>
         <UDropdownMenu :items="entryActions(entry)" :content="{ align: 'end' }" :ui="{ content: 'w-40' }">
           <UButton
             icon="i-lucide-ellipsis-vertical"

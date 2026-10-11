@@ -2,6 +2,9 @@ import { differenceInCalendarDays } from 'date-fns'
 import type { Meal, MealType, RecipeMealSource } from '~/types/meal'
 import { MENU_MEAL_TYPES } from './menuEntries'
 
+/** Une recette cuisinée couvre ses repas du jour même et des 6 jours suivants. */
+export const COOKING_DAYS = 7
+
 /** Un récipient d'une fournée : les parts d'un repas (jour + ligne du calendrier). */
 export type RecipeToCookPortion = {
   /** Jour du repas (minuit, heure locale). */

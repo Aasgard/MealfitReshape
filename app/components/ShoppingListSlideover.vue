@@ -5,7 +5,8 @@ import type { Ingredient } from '~/types/ingredient'
 import type { Recipe } from '~/types/recipe'
 import type { DayRange } from '~/composables/useMeals'
 import { categoryIconName } from '~/utils/categoryIcon'
-import { groupPlannedMeals, mealHasIngredients, plannedMealKey } from '~/utils/plannedMealRows'
+import { groupPlannedMeals, isPlannedMeal, mealHasIngredients, plannedMealKey } from '~/utils/plannedMealRows'
+import { surplusMeals } from '~/utils/preparedDishes'
 import { buildShoppingList, formatShoppingListText, formatShoppingQuantity, type ShoppingListItem } from '~/utils/shoppingList'
 
 /**
@@ -60,7 +61,13 @@ watch(meals.error, (error) => {
 
 const isLoading = computed(() => meals.pending.value)
 
-const rangeMeals = computed(() => (range.value ? meals.value : []))
+/** Repas de la période, sans ceux pris dans le stock (rien à acheter), avec les surplus prévus des fournées. */
+const { dishes } = usePreparedDishes()
+const rangeMeals = computed(() => {
+  if (!range.value) return []
+  const days = { start: format(range.value.start, 'yyyy-MM-dd'), end: format(range.value.end, 'yyyy-MM-dd') }
+  return [...meals.value.filter(isPlannedMeal), ...surplusMeals(dishes.value, days)]
+})
 
 const mealRows = computed(() => groupPlannedMeals(rangeMeals.value, props.recipesById, props.ingredientsById))
 

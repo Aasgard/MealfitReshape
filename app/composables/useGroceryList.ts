@@ -9,7 +9,8 @@ import type { InclusionDraft } from '~/composables/useShoppingList'
 import type { Meal } from '~/types/meal'
 import type { ShoppingMealInclusion } from '~/types/shoppingList'
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
-import { groupPlannedMeals, plannedMealKey, type PlannedMealRow } from '~/utils/plannedMealRows'
+import { groupPlannedMeals, isPlannedMeal, plannedMealKey, type PlannedMealRow } from '~/utils/plannedMealRows'
+import { surplusMeals } from '~/utils/preparedDishes'
 import { mealDay } from '~/utils/shoppingList'
 import type { ShoppingCatalog } from '~/utils/shoppingPlan'
 
@@ -110,7 +111,11 @@ export function useGroceryList() {
     if (error) fail('Impossible de charger les repas')(error)
   })
 
-  const rangeMeals = computed(() => (range.value ? meals.value : []))
+  /** Repas de la période, sans ceux pris dans le stock (rien à acheter), avec les surplus prévus des fournées. */
+  const { dishes } = usePreparedDishes()
+  const rangeMeals = computed(() => (range.value
+    ? [...meals.value.filter(isPlannedMeal), ...surplusMeals(dishes.value, rangeDays.value)]
+    : []))
   const inclusionByMealId = computed(() => new Map(shoppingList.inclusions.value.map(inclusion => [inclusion.mealId, inclusion])))
 
   /** Sans recettes ni ingrédients chargés, un recalcul viderait la liste : les gestes attendent le catalogue. */
@@ -180,7 +185,8 @@ export function useGroceryList() {
     switch (meal.category) {
       case 'RECIPE': return { ...base, recipeId: meal.recipeId, parts: parts ?? meal.value }
       case 'INGREDIENT': return { ...base, ingredientId: meal.ingredientId, quantity: meal.quantity, unitId: meal.unitId ?? null }
-      case 'RAW': return null
+      case 'RAW':
+      case 'STOCK': return null
     }
   }
 

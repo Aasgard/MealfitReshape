@@ -182,6 +182,8 @@ export function buildShoppingList(
       case 'RAW':
         skipped.add(`${meal.label} (macros saisies à la main)`)
         break
+      case 'STOCK':
+        break
     }
   }
 

@@ -30,6 +30,10 @@ const links = [{
     icon: 'i-lucide-calendar-days',
     to: '/dashboard/menus',
   }, {
+    label: 'Stock',
+    icon: 'i-lucide-archive',
+    to: '/dashboard/stock',
+  }, {
     label: 'Courses',
     icon: 'i-lucide-shopping-cart',
     to: '/dashboard/liste-courses',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from 'vue-draggable-plus'
 import type { MenuEntry } from '~/types/menu'
+import { dishStorageOf } from '~/utils/preparedDishes'
 
 /**
  * Une case du calendrier (un jour × une ligne de repas) : ses cartes, glissables vers les autres cases,
@@ -75,8 +76,11 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
         @keydown.enter.self="emit('select-entry', entry.id)"
         @keydown.space.self.prevent="emit('select-entry', entry.id)"
       >
-        <p class="text-xs font-medium text-highlighted truncate">
-          {{ entry.label }}
+        <p class="flex items-center gap-1 text-xs font-medium text-highlighted">
+          <!-- Pris dans le stock : déjà préparé, ni à cuisiner ni à acheter. -->
+          <UIcon v-if="entry.storage" :name="dishStorageOf(entry.storage).icon" class="size-3 shrink-0 text-primary" :title="`Stock · ${dishStorageOf(entry.storage).label}`" aria-hidden="true" />
+          <span v-if="entry.storage" class="sr-only">Du stock :</span>
+          <span class="truncate">{{ entry.label }}</span>
         </p>
         <!--
           Mobile : « 100 g · 45 kcal » puis les macros.

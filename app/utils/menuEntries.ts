@@ -1,10 +1,11 @@
 import { differenceInCalendarDays } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
-import type { Meal, MealSource, MealType, ScannedProduct } from '~/types/meal'
+import type { Meal, MealSource, MealType, ScannedProduct, StockMealSource } from '~/types/meal'
 import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
-import { macrosForQuantity, type IngredientMacros } from './ingredientNutrition'
+import { macrosForQuantity, scaleMacros, type IngredientMacros } from './ingredientNutrition'
 import { dayKeyOf, DAYS_PER_WEEK } from './menuWeek'
+import { formatParts } from './preparedDishes'
 import { macrosForRecipe } from './recipeNutrition'
 
 /** Ligne "Hors plan" du calendrier : repas hors objectif, comptés comme dérapages. */
@@ -99,9 +100,34 @@ export function buildManualDraft(label: string, macros: IngredientMacros, produc
   return draftFromMacros(label, macros, product ? { quantityLabel: `${formatQuantity(product.quantity)} ${product.unit}` } : {})
 }
 
+/** Repas pour `parts` parts d'un plat du stock, aux macros figées à son entrée au stock. */
+export function buildStockDraft(
+  dish: Pick<StockMealSource, 'label' | 'perPart' | 'storage' | 'recipeId' | 'comment'>,
+  parts: number
+): MenuEntryDraft {
+  return draftFromMacros(dish.label, scaleMacros(dish.perPart, parts), {
+    parts,
+    quantityLabel: formatParts(parts),
+    storage: dish.storage,
+    ...(dish.recipeId ? { recipeId: dish.recipeId } : {}),
+    ...(dish.comment ? { comment: dish.comment } : {}),
+  })
+}
+
 /** Ce qui a été mangé, sans le contexte du repas : de quoi en créer un autre exemplaire (copier / coller). */
 export function mealSourceOf(meal: Meal): MealSource {
   switch (meal.category) {
+    case 'STOCK':
+      return {
+        category: 'STOCK',
+        dishId: meal.dishId,
+        value: meal.value,
+        label: meal.label,
+        perPart: meal.perPart,
+        storage: meal.storage,
+        ...(meal.recipeId ? { recipeId: meal.recipeId } : {}),
+        ...(meal.comment ? { comment: meal.comment } : {}),
+      }
     case 'RECIPE':
       return { category: 'RECIPE', recipeId: meal.recipeId, value: meal.value }
     case 'INGREDIENT':
@@ -132,6 +158,8 @@ function draftFromMeal(meal: Meal, recipesById: Map<string, Recipe>, ingredients
     }
     case 'RAW':
       return buildManualDraft(meal.label, meal, meal.product)
+    case 'STOCK':
+      return buildStockDraft(meal, meal.value)
   }
 }
 

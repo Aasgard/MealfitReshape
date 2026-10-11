@@ -1,4 +1,5 @@
 import type { MealType } from './meal'
+import type { DishStorage } from './preparedDish'
 
 /** Macros en grammes : d'un jour, ou moyenne par jour d'une semaine. */
 export interface MenuWeekMacroBalance {
@@ -45,8 +46,12 @@ export interface MenuEntry {
   label: string
   /** Quantité affichée sur la carte : "2 parts" pour une recette, "150 g" / "2 × tranche" pour un aliment. Absent pour des macros saisies à la main. */
   quantityLabel?: string
-  /** Parts de la recette mangées dans ce repas ; absent pour un aliment ou des macros saisies à la main. */
+  /** Parts de la recette (ou du plat du stock) mangées dans ce repas ; absent pour un aliment ou des macros saisies à la main. */
   parts?: number
+  /** Repas pris dans le stock : où le plat était rangé (icône sur la carte). */
+  storage?: DishStorage
+  /** Commentaire du plat du stock. Ex : "Ajouter la crème au réchauffage". */
+  comment?: string
   kcal: number
   /** Macros d'une part, en grammes arrondis (affichées "G62 P41 L15" : glucides, protéines, lipides). */
   carbohydrates: number

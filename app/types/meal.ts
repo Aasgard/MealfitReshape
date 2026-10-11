@@ -1,11 +1,12 @@
 import type { Timestamp } from 'firebase/firestore'
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
+import type { DishStorage } from './preparedDish'
 
 /** Ligne du calendrier à laquelle appartient un repas, stockée telle quelle côté Firestore (`meals.mealType`). */
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINER' | 'SNACK' | 'EXCESS' | 'NOTCOUNT'
 
 /** Nature de ce qui a été mangé, stockée telle quelle côté Firestore (`meals.category`). */
-export type MealCategory = 'RECIPE' | 'INGREDIENT' | 'RAW'
+export type MealCategory = 'RECIPE' | 'INGREDIENT' | 'RAW' | 'STOCK'
 
 /** Une recette de la base, en nombre de parts. */
 export type RecipeMealSource = {
@@ -51,8 +52,26 @@ export type RawMealSource = IngredientMacros & {
   product?: ScannedProduct
 }
 
+/**
+ * Des parts d'un plat du stock (Firestore `preparedDishes`) : ni à cuisiner, ni à acheter. Libellé, macros par part et
+ * commentaire sont recopiés du plat au moment du choix : le repas s'affiche même si le plat est retiré du stock.
+ */
+export type StockMealSource = {
+  category: 'STOCK'
+  dishId: string
+  /** Nombre de parts mangées, décomptées du plat. */
+  value: number
+  label: string
+  /** Macros d'une part. */
+  perPart: IngredientMacros
+  storage: DishStorage
+  /** Recette d'origine du plat, pour ouvrir sa fiche. */
+  recipeId?: string
+  comment?: string
+}
+
 /** Ce qui a été mangé, sans son contexte (jour, ligne du calendrier, utilisateur). */
-export type MealSource = RecipeMealSource | IngredientMealSource | RawMealSource
+export type MealSource = RecipeMealSource | IngredientMealSource | RawMealSource | StockMealSource
 
 /**
  * Un repas de la collection Firestore `meals`.

@@ -11,7 +11,10 @@ import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
 import { buildDayEntries, consumedOfDay, mealSourceOf, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
-import { recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
+import { COOKING_DAYS, recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
+import type { DishStorage } from '~/types/preparedDish'
+import { findBatchSurplus, formatParts, PARTS_EPSILON, SURPLUS_MEAL_PREFIX } from '~/utils/preparedDishes'
+import { macrosForRecipe } from '~/utils/recipeNutrition'
 import { WEEK_STARTS_ON } from '~/utils/menuWeek'
 
 useSeoMeta({
@@ -71,8 +74,6 @@ watch(meals.error, (error) => {
   toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
 })
 
-/** Une recette cuisinée couvre ses repas du jour même et des 6 jours suivants. */
-const COOKING_DAYS = 7
 /** Historique chargé avant la semaine affichée pour retrouver les fournées en cours (voir `recipesToCook`). */
 const COOKING_HISTORY_DAYS = 21
 
@@ -177,6 +178,7 @@ watch(workoutsError, (error) => {
 })
 
 const shoppingList = useShoppingList()
+const { dishes, saveBatchSurplus } = usePreparedDishes()
 watch(shoppingList.items.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger la liste de courses : ${error.message}`, color: 'error' })
@@ -257,9 +259,23 @@ const submitWeighIn = (weightKg: number) => {
 const pendingDeleteIds = ref(new Set<string>())
 const isNotPendingDelete = (meal: Meal) => !pendingDeleteIds.value.has(meal.id)
 
-const dayEntries = computed(() =>
-  buildDayEntries(meals.value.filter(isNotPendingDelete), selectedDay.value, recipesById.value, ingredientsById.value)
-)
+/**
+ * Repas du jour affiché. Un repas pris dans le stock montre le commentaire actuel de son plat (modifiable depuis le
+ * Stock), à défaut celui recopié au moment du choix.
+ */
+const dayEntries = computed(() => {
+  const dayMeals = meals.value.filter(isNotPendingDelete)
+  const entries = buildDayEntries(dayMeals, selectedDay.value, recipesById.value, ingredientsById.value)
+  const commentsById = new Map(dishes.value.map(dish => [dish.id, dish.comment]))
+  for (const list of Object.values(entries)) {
+    for (const entry of list) {
+      const meal = entry.storage ? dayMeals.find(m => m.id === entry.id) : undefined
+      if (meal?.category !== 'STOCK' || !commentsById.has(meal.dishId)) continue
+      entry.comment = commentsById.get(meal.dishId)
+    }
+  }
+  return entries
+})
 const daySummary = computed(() => summarizeDay(dayEntries.value))
 
 const ALL_MEAL_SLOTS = [...PLANNED_MEALS, ...OUT_OF_PLAN_MEALS]
@@ -315,19 +331,122 @@ const cookingDays = (portions: RecipeToCookPortion[]): TodayCookingDay[] => {
  * Recettes à cuisiner le jour affiché, en une fois pour leurs repas des 7 jours (parts cumulées). Une recette déjà cuisinée
  * dans les 6 jours précédents, même la semaine d'avant, est un reste ; les recettes supprimées depuis sont ignorées.
  */
-const cookingRecipes = computed<TodayCookingRecipe[]>(() =>
-  recipesToCook(upcomingMeals.value.filter(isNotPendingDelete), COOKING_DAYS).flatMap((item) => {
+const cookingRecipes = computed<TodayCookingRecipe[]>(() => {
+  const cookDay = selectedDayKey.value
+  /** Parts prévues en plus pour le stock : cuisinées avec la fournée, comptées dans ses parts. */
+  const withSurplus = (recipeId: string) => {
+    const dish = findBatchSurplus(dishes.value, recipeId, cookDay)
+    const parts = dish?.batch?.surplusParts ?? 0
+    return parts > PARTS_EPSILON && dish ? { parts, storage: dish.storage } : undefined
+  }
+
+  const batches = recipesToCook(upcomingMeals.value.filter(isNotPendingDelete), COOKING_DAYS).flatMap((item) => {
     const recipe = recipesById.value.get(item.recipeId)
     if (!recipe || differenceInCalendarDays(item.days[0]!, selectedDay.value) !== 0) return []
+    const surplus = withSurplus(recipe.id)
     return [{
       recipeId: recipe.id,
+      cookDay,
       title: recipe.title,
+      persons: recipe.persons,
       imageUrl: recipe.imageUrl,
       days: cookingDays(item.portions),
-      parts: item.parts,
+      parts: item.parts + (surplus?.parts ?? 0),
+      surplus,
     }]
   })
-)
+
+  // Surplus dont les repas des menus ont été retirés depuis : il reste à cuisiner pour le stock.
+  const surplusOnly = dishes.value.flatMap((dish) => {
+    const recipe = dish.recipeId ? recipesById.value.get(dish.recipeId) : undefined
+    if (!recipe || dish.batch?.cookDay !== cookDay || batches.some(b => b.recipeId === recipe.id)) return []
+    const surplus = withSurplus(recipe.id)
+    if (!surplus) return []
+    return [{ recipeId: recipe.id, cookDay, title: recipe.title, persons: recipe.persons, imageUrl: recipe.imageUrl, days: [], parts: surplus.parts, surplus }]
+  })
+
+  return [...batches, ...surplusOnly]
+})
+
+// --- Surplus pour le stock, depuis « Cuisiner » ---
+
+const surplusOpen = ref(false)
+const surplusTarget = ref<TodayCookingRecipe | null>(null)
+const surplusSaving = ref(false)
+const surplusDish = computed(() => {
+  const target = surplusTarget.value
+  return target ? findBatchSurplus(dishes.value, target.recipeId, target.cookDay) ?? null : null
+})
+
+const openSurplus = (recipe: TodayCookingRecipe) => {
+  surplusTarget.value = recipe
+  surplusOpen.value = true
+}
+
+/**
+ * Reporte le surplus dans la liste de courses : mis à jour s'il y est déjà, ajouté si les repas de sa fournée y sont et
+ * ne sont pas encore achetés, retiré s'il est annulé. Une fois acheté, il ne bouge plus.
+ */
+const syncSurplusInclusion = async (dishId: string, recipeId: string, cookDay: string, surplusParts: number) => {
+  await shoppingList.inclusions.promise.value
+  const mealId = `${SURPLUS_MEAL_PREFIX}${dishId}`
+  const key = `recipe:${recipeId}`
+  const inclusions = shoppingList.inclusions.value
+  const own = inclusions.find(inclusion => inclusion.mealId === mealId)
+  if (own?.state === 'bought') return
+
+  const catalog = { recipesById: recipesById.value, ingredientsById: ingredientsById.value }
+  if (surplusParts < PARTS_EPSILON) {
+    if (own) await shoppingList.applyInclusions([], [own], catalog)
+    return
+  }
+  const batchEnd = format(addDays(parseISO(cookDay), COOKING_DAYS - 1), 'yyyy-MM-dd')
+  const batchInclusions = inclusions.filter(inclusion =>
+    inclusion.key === key && inclusion.mealId !== mealId && inclusion.date >= cookDay && inclusion.date <= batchEnd)
+  if (!own && (!batchInclusions.length || batchInclusions.some(inclusion => inclusion.state === 'bought'))) return
+
+  await shoppingList.applyInclusions(
+    [{ mealId, date: cookDay, key, recipeId, parts: surplusParts, state: 'listed' }],
+    [],
+    catalog,
+  )
+}
+
+const saveSurplus = async ({ surplusParts, storage, comment }: { surplusParts: number, storage: DishStorage, comment: string }) => {
+  const target = surplusTarget.value
+  const recipe = target ? recipesById.value.get(target.recipeId) : undefined
+  if (!target || !recipe) return
+  const existing = surplusDish.value
+  const persons = recipe.persons && recipe.persons > 0 ? recipe.persons : 1
+
+  surplusSaving.value = true
+  try {
+    const dishId = await saveBatchSurplus({
+      recipeId: recipe.id,
+      label: recipe.title,
+      // Figées à la déclaration : modifier la recette ensuite ne change pas les parts rangées.
+      perPart: existing?.perPart ?? macrosForRecipe(recipe.ingredients, ingredientsById.value, persons),
+      storage,
+      comment,
+      cookDay: target.cookDay,
+      surplusParts,
+    }, existing)
+    surplusOpen.value = false
+    const syncedId = dishId ?? existing?.id
+    if (syncedId) {
+      await syncSurplusInclusion(syncedId, recipe.id, target.cookDay, dishId ? surplusParts : 0).catch((error: any) => {
+        toast.add({ title: 'Liste de courses non mise à jour', description: error.message || 'Une erreur est survenue.', color: 'warning' })
+      })
+    }
+    toast.add(dishId
+      ? { title: 'Surplus prévu', description: `${formatParts(surplusParts)} de « ${recipe.title} » rejoindront le stock.`, color: 'success', icon: 'i-lucide-archive' }
+      : { title: 'Surplus retiré', description: `« ${recipe.title} »`, color: 'neutral', icon: 'i-lucide-archive-x' })
+  } catch (error: any) {
+    toast.add({ title: 'Erreur', description: `Le surplus n'a pas pu être enregistré : ${error.message || 'une erreur est survenue'}.`, color: 'error' })
+  } finally {
+    surplusSaving.value = false
+  }
+}
 
 /** Liste de courses ouverte directement en mode « Acheter ». */
 const SHOPPING_LIST_LINK = '/dashboard/liste-courses?mode=acheter'
@@ -443,6 +562,11 @@ const submitAddedMeal = async (source: MealSource) => {
   }
 }
 
+// --- Mettre au stock un repas d'une recette ---
+
+const sendToStock = useSendToStock(() => upcomingMeals.value)
+const openSendToStock = (entry: MenuEntry) => sendToStock.open(meals.value.find(m => m.id === entry.id))
+
 const DELETE_GRACE_PERIOD_MS = 6000
 /** Handles des suppressions programmées mais pas encore exécutées (délai d'annulation en cours), par id de repas. */
 const pendingDeleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
@@ -518,7 +642,7 @@ const onTouchEnd = (event: TouchEvent) => {
 }
 
 /** Flèches ← / → du clavier (desktop), sauf pendant une saisie ou quand une fenêtre est ouverte. */
-const isOverlayOpen = computed(() => addModalOpen.value || recipeDetailOpen.value || ingredientDetailOpen.value)
+const isOverlayOpen = computed(() => addModalOpen.value || recipeDetailOpen.value || ingredientDetailOpen.value || surplusOpen.value || sendToStock.isOpen.value)
 
 const onKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
@@ -648,7 +772,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </NuxtLink>
             </div>
 
-            <TodayCooking :recipes="cookingRecipes" :is-today="isTodaySelected" @open="openRecipeDetail" />
+            <TodayCooking :recipes="cookingRecipes" :is-today="isTodaySelected" @open="openRecipeDetail" @surplus="openSurplus" />
 
             <div class="flex items-center justify-between gap-3">
               <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
@@ -660,7 +784,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </NuxtLink>
             </div>
 
-            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" @edit="openEditModal" @delete="deleteEntry" />
+            <TodayMeals :rows="mealRows" :secondary-rows="secondaryMealRows" @add="openAddModal" @open="openEntryDetail" @edit="openEditModal" @delete="deleteEntry" @stock="openSendToStock" />
 
             <template v-if="dayWorkouts.length">
               <div class="flex items-center justify-between gap-3">
@@ -687,9 +811,32 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :ingredients="ingredients"
     :ingredients-by-id="ingredientsById"
     :context-label="addContextLabel"
+    :day-key="selectedDayKey"
     :initial-source="editingSource"
     :day-budget="addDayBudget"
     @submit="submitAddedMeal"
+  />
+
+  <BatchSurplusModal
+    v-model:open="surplusOpen"
+    :title="surplusTarget?.title ?? ''"
+    :cook-day="surplusTarget?.cookDay ?? selectedDayKey"
+    :planned-parts="surplusTarget ? surplusTarget.parts - (surplusTarget.surplus?.parts ?? 0) : 0"
+    :recipe-persons="surplusTarget ? recipesById.get(surplusTarget.recipeId)?.persons : undefined"
+    :dish="surplusDish"
+    :saving="surplusSaving"
+    @save="saveSurplus"
+  />
+
+  <SendToStockModal
+    v-model:open="sendToStock.isOpen.value"
+    :label="sendToStock.label.value"
+    :parts="sendToStock.meal.value?.value ?? 0"
+    :cook-day="sendToStock.cookDay.value"
+    :is-cooked="sendToStock.isCooked.value"
+    :existing-storage="sendToStock.surplus.value?.storage"
+    :saving="sendToStock.isSaving.value"
+    @confirm="sendToStock.confirm"
   />
 
   <RecipeDetailSlideover

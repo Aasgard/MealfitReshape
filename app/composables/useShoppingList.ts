@@ -160,10 +160,33 @@ export const useShoppingList = () => {
     return commit(old.map(inclusion => (batch: WriteBatch) => batch.delete(doc(shoppingMealsRef, inclusion.id))))
   }
 
+  /**
+   * Un repas d'une recette mis au stock : sa présence dans la liste passe au surplus de sa fournée (repas fictif
+   * `toMealId`, au jour de cuisine `cookDay`), parts ajoutées à celles du surplus. Les ingrédients restent comptés, ou
+   * achetés. Rien ne bouge si les deux ne sont pas au même stade (l'un acheté, l'autre non).
+   */
+  async function moveInclusion(fromMealId: string, toMealId: string, cookDay: string, catalog: ShoppingCatalog) {
+    await inclusions.promise.value
+    const from = inclusions.value.find(inclusion => inclusion.mealId === fromMealId)
+    if (!from) return
+    const to = inclusions.value.find(inclusion => inclusion.mealId === toMealId)
+    if (to && to.state !== from.state) return
+    const merged: InclusionDraft = {
+      mealId: toMealId,
+      date: to?.date ?? cookDay,
+      key: from.key,
+      ...(from.recipeId ? { recipeId: from.recipeId } : {}),
+      parts: (to?.parts ?? 0) + (from.parts ?? 0),
+      state: from.state,
+    }
+    await applyInclusions([merged], [from], catalog)
+  }
+
   return {
     items,
     inclusions,
     applyInclusions,
+    moveInclusion,
     addManual,
     setStatus,
     setUrgent,

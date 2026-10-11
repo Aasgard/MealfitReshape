@@ -99,6 +99,9 @@ const links = [{
 //   to: 'https://github.com/nuxt-ui-templates/dashboard',
 //   target: '_blank'
 // }] satisfies NavigationMenuItem[]
+
+/** Titres de groupe (entrées avec sous-menu) en gras ; leurs sous-entrées gardent la graisse normale. */
+const navItems = links.map(item => ('children' in item ? { ...item, ui: { linkLabel: 'font-semibold' } } : item))
 </script>
 
 <template>
@@ -121,11 +124,11 @@ const links = [{
       <template #default="{ collapsed }">
         <UNavigationMenu
           :collapsed="collapsed"
-          :items="links"
+          :items="navItems"
           orientation="vertical"
           tooltip
           popover
-          :ui="{ link: 'max-lg:text-lg' }"
+          :ui="{ link: 'max-lg:text-[15px]' }"
         />
 
         <!-- <UNavigationMenu

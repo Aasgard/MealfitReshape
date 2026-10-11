@@ -100,6 +100,11 @@ const askDeleteWorkout = (workout: Workout) => {
   deleteWorkoutOpen.value = true
 }
 
+const workoutActions = (workout: Workout): DropdownMenuItem[][] => [
+  [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => editWorkout(workout) }],
+  [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDeleteWorkout(workout) }],
+]
+
 // --- Consultation d'une séance (panneau latéral) ---
 
 const { saveTemplate } = useWorkoutTemplates()
@@ -366,28 +371,16 @@ const dayLabel = (workout: Workout) => {
                         </p>
                       </div>
                     </button>
-                    <!-- Actions en icônes, à portée directe (pas de menu). -->
                     <div class="flex shrink-0 items-center pe-2 sm:pe-3">
-                      <UTooltip text="Modifier">
+                      <UDropdownMenu :items="workoutActions(workout)" :content="{ align: 'end' }" :ui="{ content: 'w-40' }">
                         <UButton
-                          icon="i-lucide-pencil"
+                          icon="i-lucide-ellipsis-vertical"
                           color="neutral"
                           variant="ghost"
                           size="sm"
-                          :aria-label="`Modifier ${workoutTitle(workout)}`"
-                          @click="editWorkout(workout)"
+                          :aria-label="`Actions pour ${workoutTitle(workout)}`"
                         />
-                      </UTooltip>
-                      <UTooltip text="Supprimer">
-                        <UButton
-                          icon="i-lucide-trash-2"
-                          color="error"
-                          variant="ghost"
-                          size="sm"
-                          :aria-label="`Supprimer ${workoutTitle(workout)}`"
-                          @click="askDeleteWorkout(workout)"
-                        />
-                      </UTooltip>
+                      </UDropdownMenu>
                     </div>
                   </li>
                 </ul>

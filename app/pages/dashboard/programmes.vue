@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { differenceInCalendarDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { WorkoutTemplate } from '~/types/workout'
 import type { WorkoutTemplateInput } from '~/composables/useWorkoutTemplates'
 
@@ -136,6 +137,11 @@ function askDelete(template: WorkoutTemplate) {
   deleteOpen.value = true
 }
 
+const templateActions = (template: WorkoutTemplate): DropdownMenuItem[][] => [
+  [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => openForm(template) }],
+  [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => askDelete(template) }],
+]
+
 async function confirmDelete() {
   if (!deleting.value) return
   deleteBusy.value = true
@@ -186,7 +192,7 @@ async function confirmDelete() {
 
         <ul v-else class="divide-y divide-default overflow-hidden rounded-xl border border-default bg-default">
           <li v-for="template in templates" :key="template.id" class="flex items-center gap-1 transition-colors hover:bg-elevated/50">
-            <!-- La ligne ouvre le programme en lecture ; le crayon, l'éditeur ; « Lancer » démarre une séance en direct. -->
+            <!-- La ligne ouvre le programme en lecture (d'où on le lance) ; le menu, l'éditeur et la suppression. -->
             <button
               type="button"
               class="min-w-0 flex-1 cursor-pointer py-3 ps-4 pe-2 text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:ps-5"
@@ -208,35 +214,16 @@ async function confirmDelete() {
                 {{ templateSummary(template) }}
               </p>
             </button>
-            <div class="flex shrink-0 items-center gap-1 pe-2 sm:pe-3">
-              <UButton
-                label="Lancer"
-                icon="i-lucide-play"
-                size="sm"
-                variant="soft"
-                :disabled="starting"
-                @click="launch(template)"
-              />
-              <UTooltip text="Modifier">
+            <div class="flex shrink-0 items-center pe-2 sm:pe-3">
+              <UDropdownMenu :items="templateActions(template)" :content="{ align: 'end' }" :ui="{ content: 'w-40' }">
                 <UButton
-                  icon="i-lucide-pencil"
+                  icon="i-lucide-ellipsis-vertical"
                   color="neutral"
                   variant="ghost"
                   size="sm"
-                  :aria-label="`Modifier ${template.label}`"
-                  @click="openForm(template)"
+                  :aria-label="`Actions pour ${template.label}`"
                 />
-              </UTooltip>
-              <UTooltip text="Supprimer">
-                <UButton
-                  icon="i-lucide-trash-2"
-                  color="error"
-                  variant="ghost"
-                  size="sm"
-                  :aria-label="`Supprimer ${template.label}`"
-                  @click="askDelete(template)"
-                />
-              </UTooltip>
+              </UDropdownMenu>
             </div>
           </li>
         </ul>

@@ -3,13 +3,16 @@
  * Courbe de poids : pesées brutes (points), tendance 7 jours (ligne), projection du calculateur
  * (pointillés) et objectif (ligne horizontale). Dessinée en pixels réels à partir de la largeur
  * mesurée du conteneur, pour que les libellés gardent leur taille sur mobile.
+ *
+ * La tendance n'existe que pour l'affichage : les indicateurs (rythme, perte, objectif) partent des pesées brutes.
  */
 import { differenceInCalendarDays, format, parseISO, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { TrendPoint, WeightGoal } from '~/utils/weightTrend'
+import type { WeighIn, WeightGoal } from '~/utils/weightTrend'
 
 const props = defineProps<{
-  points: TrendPoint[]
+  /** Pesées triées par date. */
+  points: WeighIn[]
   goal: WeightGoal | null
   /** Bornes de la période affichée, au format `yyyy-MM-dd`. */
   from: string
@@ -31,7 +34,29 @@ onMounted(() => {
 })
 onBeforeUnmount(() => observer?.disconnect())
 
-const visible = computed(() => props.points.filter(p => p.date >= props.from && p.date <= props.to))
+/** Fenêtre de la moyenne glissante : gomme les variations d'eau et de sel d'un jour à l'autre. */
+const TREND_WINDOW_DAYS = 7
+
+/**
+ * Moyenne des pesées des 7 derniers jours calendaires, jour inclus ; les jours sans pesée ne comptent pas.
+ * Calculée sur tout l'historique, pour que le début de la période affichée tienne compte des jours d'avant.
+ */
+const withTrend = computed(() => props.points.map((weighIn, i) => {
+  const day = parseISO(weighIn.date)
+  let sum = 0
+  let count = 0
+  for (let j = i; j >= 0; j--) {
+    const previous = props.points[j]!
+    if (differenceInCalendarDays(day, parseISO(previous.date)) >= TREND_WINDOW_DAYS) break
+    sum += previous.weightKg
+    count++
+  }
+  return { ...weighIn, trendKg: sum / count }
+}))
+
+type ChartPoint = (typeof withTrend.value)[number]
+
+const visible = computed(() => withTrend.value.filter(p => p.date >= props.from && p.date <= props.to))
 
 const fromDate = computed(() => parseISO(props.from))
 const totalDays = computed(() => Math.max(differenceInCalendarDays(parseISO(props.to), fromDate.value), 1))
@@ -91,10 +116,10 @@ const xTicks = computed(() => {
 const trendSegments = computed(() => {
   const segments: string[] = []
   let current = ''
-  let previous: TrendPoint | null = null
+  let previous: ChartPoint | null = null
   for (const p of visible.value) {
     const gap = previous ? differenceInCalendarDays(parseISO(p.date), parseISO(previous.date)) : 0
-    const command = !previous || gap > TREND_GAP_BREAK_DAYS ? 'M' : 'L'
+    const command = !previous || gap > CHART_GAP_BREAK_DAYS ? 'M' : 'L'
     if (command === 'M' && current) {
       segments.push(current)
       current = ''
@@ -169,7 +194,7 @@ const ariaLabel = computed(() => {
   const first = visible.value[0]
   const last = lastPoint.value
   if (!first || !last) return 'Aucune pesée sur la période'
-  return `Tendance du poids du ${format(parseISO(first.date), 'd MMMM', { locale: fr })} au ${format(parseISO(last.date), 'd MMMM', { locale: fr })} : de ${formatWeight(first.trendKg)} à ${formatWeight(last.trendKg)} kg. Flèches gauche et droite pour parcourir les pesées.`
+  return `Pesées du ${format(parseISO(first.date), 'd MMMM', { locale: fr })} au ${format(parseISO(last.date), 'd MMMM', { locale: fr })} : de ${formatWeight(first.weightKg)} à ${formatWeight(last.weightKg)} kg. Flèches gauche et droite pour parcourir les pesées.`
 })
 </script>
 
@@ -271,22 +296,23 @@ const ariaLabel = computed(() => {
         />
       </g>
 
+      <!-- La dernière pesée brute, comme dans le relevé au-dessus du graphique. -->
       <g v-if="lastPoint && !active">
         <circle
           :cx="x(lastPoint.date)"
-          :cy="y(lastPoint.trendKg)"
-          r="4.5"
-          fill="var(--ui-primary)"
+          :cy="y(lastPoint.weightKg)"
+          r="4"
+          fill="var(--ui-text-muted)"
           stroke="var(--ui-bg)"
           stroke-width="2"
         />
         <text
           :x="x(lastPoint.date) - 8"
-          :y="y(lastPoint.trendKg) - 10"
+          :y="y(lastPoint.weightKg) - 10"
           text-anchor="end"
           class="text-xs font-semibold tabular-nums"
           fill="var(--ui-text-highlighted)"
-        >{{ formatWeight(lastPoint.trendKg) }} kg</text>
+        >{{ formatWeight(lastPoint.weightKg) }} kg</text>
       </g>
 
       <g v-if="active">

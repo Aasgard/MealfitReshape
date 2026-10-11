@@ -162,7 +162,7 @@ The one place the product admits the joke is the 404/500 page, which renders the
 Near-grayscale ink on white, with three small, strictly separated color codes; every hue on screen answers a question.
 
 ### Primary
-- **Signal Indigo** (`primary`, indigo-500; `primary-dark`, indigo-400 in dark mode): the interaction and selection color. Solid primary buttons and the round "+" add buttons, the active option of segmented toggles (cards/list view, recipe type filters), the active sortable column header, the active settings-section icon, text links ("Plus", "Voir le dashboard"), the in-season leaf, the copied-meal state in the calendar, the weight trend line and its endpoint, goal-progress fills, and the card hover border (`border-primary/50`). Faint tints mark "current" without shouting: `bg-primary/5` on today's calendar column, `bg-primary/10` behind the leaf and copy icons. The home page's section-heading icons ("Cuisiner", "Manger") are the only wayfinding use.
+- **Signal Indigo** (`primary`, indigo-500; `primary-dark`, indigo-400 in dark mode): the interaction and selection color. Solid primary buttons and the round "+" add buttons, the active option of segmented toggles (cards/list view, recipe type filters), the active sortable column header, the active settings-section icon, text links ("Plus", "Voir le dashboard"), the in-season leaf, the copied-meal state in the calendar, the weight trend line, goal-progress fills, and the card hover border (`border-primary/50`). Faint tints mark "current" without shouting: `bg-primary/5` on today's calendar column, `bg-primary/10` behind the leaf and copy icons. The home page's section-heading icons ("Cuisiner", "Manger") are the only wayfinding use.
 - **Indigo Soft** (`primary-soft`, ≈ the `bg-primary/10` tint): background of subtle badges and icon halos. Never a surface fill.
 
 ### Macronutrient code
@@ -175,7 +175,7 @@ A fixed identity per nutrient, used for dots, bar segments and pie slices, never
 Applied only where a value is compared with a target: the calorie gauge, meal rings, macro values in the daily summary. Tolerance is ±5% for a day and ±10% for a meal.
 - **Under-Target Blue** (`status-under`, Nuxt UI `info`, blue-500): not reached yet.
 - **On-Target Green** (`status-reached`, Nuxt UI `success`, green-500): within tolerance.
-- **Over-Target Yellow** (`status-over`, Nuxt UI `warning`, yellow-500): exceeded. Also marks "En plus" (off-plan) kcal and a weight trend running against the goal. Recipe difficulty reuses success / warning / error as an easy-to-hard scale.
+- **Over-Target Yellow** (`status-over`, Nuxt UI `warning`, yellow-500): exceeded. Also marks "En plus" (off-plan) kcal and a weight rate running against the goal. Recipe difficulty reuses success / warning / error as an easy-to-hard scale.
 
 ### Semantic
 - **Delete Red** (`error`, red-500): destructive actions, validation messages, error toasts. Success toasts use On-Target Green.
@@ -208,14 +208,14 @@ Applied only where a value is compared with a target: the calorie gauge, meal ri
 **Character:** One workhorse sans. The nutrition-label voice comes from case, weight, tracking and tabular figures, not from a second face.
 
 ### Hierarchy
-- **Stat Display** (700, 2.25rem, tight tracking, tabular): the single headline figure of a readout (the 7-day weight trend in the "Relevé").
+- **Stat Display** (700, 2.25rem, tight tracking, tabular): the single headline figure of a readout (the change since the first weigh-in in the "Relevé").
 - **Headline** (700, 1.5rem, tight tracking): the page's day/period title in the sticky header ("Aujourd'hui"), the error-page headline.
 - **Stat** (700, 1.5rem, tabular): secondary readout figures; the calorie gauge's centre figure steps up to 1.875rem.
 - **Title** (700, 1.125rem, tight tracking): section headings inside a page ("Cuisiner", "Évolution", "Journal", "Repas & objectifs").
 - **Card Title** (600, 1rem): ingredient, recipe and meal names on cards and rows.
 - **Body** (400, 0.875rem): row labels, descriptions, table cells, form copy. Settings labels step up to 500.
 - **Meta** (400, 0.75rem): quantities, kcal-and-macro lines ("100 g · 45 kcal · G5 P3 L0"), hints, axis ticks.
-- **Label** (600, 0.75rem, 0.025em tracking, uppercase): section eyebrows ("Tendance 7 jours", "Résumé"), table column headers, the fact-sheet title.
+- **Label** (600, 0.75rem, 0.025em tracking, uppercase): section eyebrows ("Perte totale", "Résumé"), table column headers, the fact-sheet title.
 
 ### Named Rules
 **The Value-Needs-a-Unit Rule.** A figure is never shown alone: its unit or label sits directly beside it, smaller and muted (`142` + `kcal`, `-0,35` + `kg/sem`, `20` + `g`). In tables the unit drops to Meta size in Dimmed Ink right after the value.
@@ -309,8 +309,8 @@ Two to four stat cells in one 6px-bordered block, split by 1px Hairline rules (`
 ### Nutri-Score scale
 Five joined cells A–E (36px tall), unselected ones pale (`color-mix` of the official color into `bg-default`, so dark mode works), the product's grade in full color, wider and 52px tall, cut out from its neighbors by a 3px `bg-default` outline. Unknown or not-applicable grades keep the band in Track Gray with no selection and a one-line explanation beside it.
 
-### Weight trend chart
-A hand-drawn SVG at real pixel width, so labels keep their size on mobile. Daily weigh-ins are small dots in Dimmed Ink, the 7-day trend is a 2.5px Signal Indigo line that draws in over 900ms, the calculator projection is a 1.5px dashed Dimmed Ink line, and the goal is a 1px Muted Ink rule with a semibold caption. Gridlines are Hairline and axis ticks are Meta in Dimmed Ink. Hover, touch and arrow keys move a Firm Hairline crosshair, with a 4px-radius tooltip listing Pesée / Tendance (indigo) / Projection. A legend of tiny inline SVG swatches sits beneath.
+### Weight chart
+A hand-drawn SVG at real pixel width, so labels keep their size on mobile. Daily weigh-ins are small dots in Dimmed Ink, the 7-day trend (display only: no figure is computed from it) is a 2.5px Signal Indigo line that draws in over 900ms, the latest weigh-in carries a Muted Ink marker and its value, the calculator projection is a 1.5px dashed Dimmed Ink line, and the goal is a 1px Muted Ink rule with a semibold caption. Gridlines are Hairline and axis ticks are Meta in Dimmed Ink. Hover, touch and arrow keys move a Firm Hairline crosshair, with a 4px-radius tooltip listing Pesée / Tendance (indigo) / Projection. A legend of tiny inline SVG swatches sits beneath.
 
 ### Weekly menu calendar
 A grid of days × meal rows, with today's column tinted `bg-primary/5`. Each cell holds 3px-radius meal cards (name in Meta medium, then quantity, kcal and G/P/L in neutral Dimmed Ink). They are draggable, and their edit / copy / delete icons turn indigo or red on hover. Each cell ends with a dashed "+" slot. A copied meal gets a solid primary border, and every "+" slot tints to show where it will paste. The drop placeholder is a dashed, faintly indigo ghost.

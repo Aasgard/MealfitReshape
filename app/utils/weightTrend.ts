@@ -22,17 +22,12 @@ export interface WeightGoal {
   projection: number[] | null
 }
 
-export interface TrendPoint extends WeighIn {
-  /** Moyenne des pesées des 7 derniers jours calendaires, jour inclus. */
-  trendKg: number
-}
-
-/** Fenêtre de la moyenne glissante : gomme les variations d'eau et de sel d'un jour à l'autre. */
-export const TREND_WINDOW_DAYS = 7
-/** En dessous de ce nombre de pesées, la tendance est encore trop sensible au bruit. */
-export const MIN_WEIGH_INS_FOR_TREND = 7
+/** Durée minimale couverte par les pesées avant de calculer un rythme. */
+export const MIN_RATE_SPAN_DAYS = 7
+/** En dessous de ce nombre de pesées, le rythme est encore trop sensible au bruit (eau, sel) pour l'accueil. */
+export const MIN_WEIGH_INS_FOR_RATE = 7
 /** Au-delà de cet écart entre deux pesées, la courbe est interrompue plutôt que de relier le trou. */
-export const TREND_GAP_BREAK_DAYS = 4
+export const CHART_GAP_BREAK_DAYS = 4
 
 export const toIsoDay = (date: Date) => format(date, 'yyyy-MM-dd')
 
@@ -62,43 +57,18 @@ export function sortWeighIns(weighIns: WeighIn[]): WeighIn[] {
   return [...weighIns].sort((a, b) => a.date.localeCompare(b.date))
 }
 
-/** Moyenne glissante calculée sur les pesées disponibles : les jours sans pesée ne comptent pas. */
-export function computeTrend(weighIns: WeighIn[]): TrendPoint[] {
-  const sorted = sortWeighIns(weighIns)
-  return sorted.map((weighIn, i) => {
-    const day = parseISO(weighIn.date)
-    let sum = 0
-    let count = 0
-    for (let j = i; j >= 0; j--) {
-      const previous = sorted[j]!
-      if (differenceInCalendarDays(day, parseISO(previous.date)) >= TREND_WINDOW_DAYS) break
-      sum += previous.weightKg
-      count++
-    }
-    return { ...weighIn, trendKg: sum / count }
-  })
-}
-
-/** Dernier point de tendance à la date donnée ou avant. */
-export function trendAt(points: TrendPoint[], date: string): TrendPoint | null {
-  for (let i = points.length - 1; i >= 0; i--) {
-    if (points[i]!.date <= date) return points[i]!
-  }
-  return null
-}
-
 /**
- * Rythme réel en kg/semaine : pente (moindres carrés) de la tendance sur les `days` derniers jours.
+ * Rythme réel en kg/semaine : pente (moindres carrés) des pesées brutes des `days` derniers jours, triées.
  * `null` tant que les pesées ne couvrent pas au moins une semaine.
  */
-export function trendRateKgPerWeek(points: TrendPoint[], days = 28): number | null {
-  const last = points[points.length - 1]
+export function weightRateKgPerWeek(sorted: WeighIn[], days = 28): number | null {
+  const last = sorted[sorted.length - 1]
   if (!last) return null
   const end = parseISO(last.date)
-  const recent = points
-    .map(p => ({ x: -differenceInCalendarDays(end, parseISO(p.date)), y: p.trendKg }))
+  const recent = sorted
+    .map(w => ({ x: -differenceInCalendarDays(end, parseISO(w.date)), y: w.weightKg }))
     .filter(p => p.x > -days)
-  if (recent.length < 2 || -recent[0]!.x < TREND_WINDOW_DAYS) return null
+  if (recent.length < 2 || -recent[0]!.x < MIN_RATE_SPAN_DAYS) return null
 
   const meanX = recent.reduce((s, p) => s + p.x, 0) / recent.length
   const meanY = recent.reduce((s, p) => s + p.y, 0) / recent.length
@@ -122,13 +92,13 @@ export function projectionAt(goal: WeightGoal, date: string): number | null {
 }
 
 /** Part du chemin parcourue entre le poids de départ et le poids visé, bornée à [0, 1]. */
-export function goalRatio(goal: WeightGoal, trendKg: number): number {
+export function goalRatio(goal: WeightGoal, weightKg: number): number {
   const total = goal.startWeightKg - goal.targetWeightKg
-  return total === 0 ? 1 : Math.min(Math.max((goal.startWeightKg - trendKg) / total, 0), 1)
+  return total === 0 ? 1 : Math.min(Math.max((goal.startWeightKg - weightKg) / total, 0), 1)
 }
 
 export interface WeightProgress {
-  /** Rythme de la tendance sur 4 semaines ; `null` tant qu'il y a moins de `MIN_WEIGH_INS_FOR_TREND` pesées. */
+  /** Rythme des pesées sur 4 semaines ; `null` tant qu'il y a moins de `MIN_WEIGH_INS_FOR_RATE` pesées. */
   rateKgPerWeek: number | null
   /** Part de l'objectif atteinte, en % entier ; `null` sans objectif. */
   goalPercent: number | null
@@ -141,12 +111,12 @@ export interface WeightProgress {
  * rien à montrer (aucune pesée, ou ni rythme ni objectif).
  */
 export function weightProgressAt(weighIns: WeighIn[], goal: WeightGoal | null, date: string): WeightProgress | null {
-  const points = computeTrend(weighIns.filter(w => w.date <= date))
-  const current = points.at(-1)
+  const sorted = sortWeighIns(weighIns.filter(w => w.date <= date))
+  const current = sorted.at(-1)
   if (!current) return null
 
-  const rateKgPerWeek = points.length >= MIN_WEIGH_INS_FOR_TREND ? trendRateKgPerWeek(points) : null
-  const goalPercent = goal ? Math.round(goalRatio(goal, current.trendKg) * 100) : null
+  const rateKgPerWeek = sorted.length >= MIN_WEIGH_INS_FOR_RATE ? weightRateKgPerWeek(sorted) : null
+  const goalPercent = goal ? Math.round(goalRatio(goal, current.weightKg) * 100) : null
   if (rateKgPerWeek === null && goalPercent === null) return null
 
   const roundedRate = rateKgPerWeek === null ? 0 : Math.round(rateKgPerWeek * 100)
@@ -155,14 +125,14 @@ export function weightProgressAt(weighIns: WeighIn[], goal: WeightGoal | null, d
 }
 
 /**
- * Rythme prévu en kg/semaine sur les `days` jours qui précèdent `date`, pour le comparer à `trendRateKgPerWeek` :
+ * Rythme prévu en kg/semaine sur les `days` jours qui précèdent `date`, pour le comparer à `weightRateKgPerWeek` :
  * il ralentit au fil de l'objectif, puis tombe à 0 une fois le poids visé atteint. La première semaine, celui du départ.
  */
 export function projectionRateKgPerWeek(goal: WeightGoal, date: string, days = 28): number | null {
   const projection = goal.projection
   const end = differenceInCalendarDays(parseISO(date), parseISO(goal.startDate))
   if (!projection || end < 0) return null
-  const last = Math.min(Math.max(end, TREND_WINDOW_DAYS), projection.length - 1)
+  const last = Math.min(Math.max(end, MIN_RATE_SPAN_DAYS), projection.length - 1)
   const first = Math.max(last - days, 0)
   return ((projection[last]! - projection[first]!) / (last - first)) * 7
 }

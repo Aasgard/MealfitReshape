@@ -2,7 +2,7 @@
 import type { DropdownMenuItem, TabsItem } from '@nuxt/ui'
 import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { TrendPoint, WeighIn } from '~/utils/weightTrend'
+import type { WeighIn } from '~/utils/weightTrend'
 
 useSeoMeta({
   title: 'Dashboard - Suivi de poids - Mealfit',
@@ -31,32 +31,32 @@ const goal = computed(() => {
   return value && !settings.value.showGoalProjection ? { ...value, projection: null } : value
 })
 
-// --- Tendance et indicateurs ---
+// --- Indicateurs ---
 
 const today = toIsoDay(new Date())
-const points = computed(() => computeTrend(weighIns.value))
+const points = computed(() => sortWeighIns(weighIns.value))
 const latest = computed(() => points.value.at(-1) ?? null)
-const isProvisional = computed(() => points.value.length < MIN_WEIGH_INS_FOR_TREND)
 
 const shortDate = (date: string) => format(parseISO(date), 'd MMM', { locale: fr })
 const longDate = (date: string) => format(parseISO(date), 'd MMMM', { locale: fr })
 
-const latestLabel = computed(() => {
-  if (!latest.value) return ''
-  if (latest.value.date === today) return 'Pesée du jour'
-  return `Dernière pesée le ${longDate(latest.value.date)}`
-})
-
-/** Variation de la tendance sur 30 jours (ou depuis la première pesée si l'historique est plus court). */
-const monthChange = computed(() => {
+/** Variation entre la première et la dernière pesée ; `null` avec une seule pesée. */
+const totalChange = computed(() => {
   const current = latest.value
   const first = points.value[0]
   if (!current || !first || current === first) return null
-  const reference = trendAt(points.value, toIsoDay(subDays(parseISO(current.date), 30))) ?? first
-  return { deltaKg: current.trendKg - reference.trendKg, from: reference }
+  return { deltaKg: current.weightKg - first.weightKg, from: first, to: current }
 })
 
-const rate = computed(() => trendRateKgPerWeek(points.value))
+/** Libellé selon le sens, à partir de l'écart arrondi au dixième comme affiché. */
+const totalChangeLabel = computed(() => {
+  const rounded = totalChange.value ? Math.round(totalChange.value.deltaKg * 10) : 0
+  if (rounded < 0) return 'Perte totale'
+  if (rounded > 0) return 'Prise totale'
+  return 'Variation totale'
+})
+
+const rate = computed(() => weightRateKgPerWeek(points.value))
 /** Rythme de la projection sur les mêmes 4 semaines ; `null` sans projection. */
 const plannedRate = computed(() => (goal.value && latest.value ? projectionRateKgPerWeek(goal.value, latest.value.date) : null))
 
@@ -64,15 +64,15 @@ const goalProgress = computed(() => {
   const g = goal.value
   const current = latest.value
   if (!g || !current) return null
-  const remainingKg = Math.abs(current.trendKg - g.targetWeightKg)
-  const ratio = goalRatio(g, current.trendKg)
+  const remainingKg = Math.abs(current.weightKg - g.targetWeightKg)
+  const ratio = goalRatio(g, current.weightKg)
   const projectedKg = projectionAt(g, current.date)
   return {
     remainingKg,
     ratio,
     /** Positif : au-dessus de la projection (en retard sur une perte) ; `null` sans projection à cette date. */
-    gapKg: projectedKg === null ? null : current.trendKg - projectedKg,
-    eta: estimateGoalDate(current.trendKg, g.targetWeightKg, rate.value, current.date),
+    gapKg: projectedKg === null ? null : current.weightKg - projectedKg,
+    eta: estimateGoalDate(current.weightKg, g.targetWeightKg, rate.value, current.date),
   }
 })
 
@@ -100,7 +100,7 @@ const JOURNAL_PAGE_SIZE = 14
 const visibleCount = ref(JOURNAL_PAGE_SIZE)
 
 type JournalRow =
-  | { kind: 'entry', key: string, entry: TrendPoint }
+  | { kind: 'entry', key: string, entry: WeighIn }
   | { kind: 'gap', key: string, missingDays: number }
 
 /** Pesées de la plus récente à la plus ancienne, avec une ligne quand plusieurs jours manquent. */
@@ -199,7 +199,7 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
         class="py-16"
         icon="i-lucide-scale"
         title="Aucune pesée pour l'instant"
-        description="Pesez-vous le matin, à jeun, et notez le chiffre ici. Après une semaine, la tendance lisse les variations d'eau et de sel pour montrer votre vraie évolution."
+        description="Pesez-vous le matin, à jeun, et notez le chiffre ici. Après une semaine de pesées, le rythme montre votre évolution par semaine."
         :actions="[{ label: 'Ajouter ma première pesée', icon: 'i-lucide-plus', onClick: openCreate }]"
       />
 
@@ -207,50 +207,23 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
         <!-- Relevé : une seule grille à filets, lue comme une fiche technique. -->
         <section
           aria-label="Relevé"
-          class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-default bg-border lg:grid-cols-4"
+          class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-default bg-border lg:grid-cols-3"
         >
-          <div class="col-span-2 flex flex-col gap-1 bg-default p-4 sm:p-5 lg:col-span-1">
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-                Tendance 7 jours
-              </p>
-              <UBadge
-                v-if="isProvisional"
-                label="Provisoire"
-                color="neutral"
-                variant="subtle"
-                size="sm"
-                class="rounded-full"
-              />
-            </div>
-            <p class="flex items-baseline gap-1">
-              <span class="text-4xl font-bold tracking-tight tabular-nums text-highlighted">{{ formatWeight(latest.trendKg) }}</span>
-              <span class="text-sm text-muted">kg</span>
-            </p>
-            <p class="text-xs text-dimmed">
-              {{ latestLabel }}
-              <span class="font-semibold tabular-nums text-muted">{{ formatWeight(latest.weightKg) }} kg</span>
-            </p>
-            <p v-if="isProvisional" class="text-xs text-dimmed">
-              Fiable à partir de {{ MIN_WEIGH_INS_FOR_TREND }} pesées ({{ points.length }} pour l'instant)
-            </p>
-          </div>
-
           <div class="flex flex-col gap-1 bg-default p-4 sm:p-5">
             <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-              Sur 30 jours
+              {{ totalChangeLabel }}
             </p>
-            <template v-if="monthChange">
+            <template v-if="totalChange">
               <p class="flex items-baseline gap-1">
-                <span class="text-2xl font-bold tabular-nums text-highlighted">{{ formatSignedWeight(monthChange.deltaKg) }}</span>
+                <span class="text-2xl font-bold tabular-nums text-highlighted lg:text-4xl lg:tracking-tight">{{ formatWeight(Math.abs(totalChange.deltaKg)) }}</span>
                 <span class="text-sm text-muted">kg</span>
               </p>
               <p class="text-xs text-dimmed">
-                depuis <span class="tabular-nums">{{ formatWeight(monthChange.from.trendKg) }}</span> kg le {{ shortDate(monthChange.from.date) }}
+                Du {{ shortDate(totalChange.from.date) }} au {{ shortDate(totalChange.to.date) }}
               </p>
             </template>
             <p v-else class="text-sm text-dimmed">
-              Une seule pesée pour l'instant
+              Une seule pesée pour l'instant, <span class="tabular-nums">{{ formatWeight(latest.weightKg) }}</span> kg le {{ shortDate(latest.date) }}
             </p>
           </div>
 
@@ -325,7 +298,7 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
           </div>
         </section>
 
-        <!-- Évolution : tendance contre projection du calculateur. -->
+        <!-- Évolution : pesées contre projection du calculateur. -->
         <section aria-labelledby="evolution-title" class="flex flex-col gap-4 rounded-xl border border-default bg-default p-4 sm:p-5">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex flex-col gap-1">
@@ -334,10 +307,10 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
               </h2>
               <template v-if="goal && goalProgress?.gapKg != null">
                 <p v-if="Math.abs(goalProgress.gapKg) < 0.1" class="text-sm text-muted">
-                  Tendance alignée sur la projection du calculateur
+                  Dernière pesée alignée sur la projection du calculateur
                 </p>
                 <p v-else class="text-sm text-muted">
-                  Tendance
+                  Dernière pesée
                   <span class="font-semibold tabular-nums text-highlighted">{{ formatWeight(Math.abs(goalProgress.gapKg)) }} kg</span>
                   {{ goalProgress.gapKg > 0 === isLossGoal(goal) ? 'derrière' : 'devant' }}
                   la projection du calculateur
@@ -389,11 +362,10 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
             </p>
           </div>
 
-          <div class="hidden grid-cols-[8.5rem_minmax(0,1fr)_5.5rem_6rem_2rem] gap-x-4 border-y border-default px-5 py-2 text-xs font-semibold uppercase tracking-wide text-dimmed sm:grid">
+          <div class="hidden grid-cols-[8.5rem_minmax(0,1fr)_5.5rem_2rem] gap-x-4 border-y border-default px-5 py-2 text-xs font-semibold uppercase tracking-wide text-dimmed sm:grid">
             <span>Date</span>
             <span>Note</span>
             <span class="text-end">Poids</span>
-            <span class="text-end">Vs tendance</span>
             <span class="sr-only">Actions</span>
           </div>
 
@@ -401,7 +373,7 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
             <template v-for="row in journalRows" :key="row.key">
               <li
                 v-if="row.kind === 'entry'"
-                class="grid grid-cols-[minmax(0,1fr)_auto_2rem] items-center gap-x-4 px-4 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)_5.5rem_6rem_2rem] sm:px-5"
+                class="grid grid-cols-[minmax(0,1fr)_auto_2rem] items-center gap-x-4 px-4 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)_5.5rem_2rem] sm:px-5"
               >
                 <div class="min-w-0 sm:contents">
                   <p class="text-sm text-highlighted first-letter:uppercase">
@@ -412,14 +384,9 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
                     <span v-else class="hidden sm:inline text-dimmed">—</span>
                   </p>
                 </div>
-                <div class="text-end sm:contents">
-                  <p class="text-sm font-semibold tabular-nums text-highlighted sm:text-end">
-                    {{ formatWeight(row.entry.weightKg) }} <span class="font-normal text-muted">kg</span>
-                  </p>
-                  <p class="text-xs tabular-nums text-dimmed sm:text-end sm:text-sm">
-                    {{ formatSignedWeight(row.entry.weightKg - row.entry.trendKg) }}
-                  </p>
-                </div>
+                <p class="text-end text-sm font-semibold tabular-nums text-highlighted">
+                  {{ formatWeight(row.entry.weightKg) }} <span class="font-normal text-muted">kg</span>
+                </p>
                 <UDropdownMenu :items="rowActions(row.entry)" :content="{ align: 'end' }">
                   <UButton
                     icon="i-lucide-ellipsis"

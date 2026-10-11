@@ -13,7 +13,7 @@ type StoredWeighIn = {
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /**
- * Pesées de l'utilisateur connecté et écritures associées. Toute la sous-collection est lue : la tendance, le journal
+ * Pesées de l'utilisateur connecté et écritures associées. Toute la sous-collection est lue : le rythme, le journal
  * et la période « Tout » du graphique ont besoin de l'historique complet, et rien de calculé n'y est stocké.
  */
 export const useWeighIns = () => {
@@ -28,7 +28,7 @@ export const useWeighIns = () => {
 
   const stored = useCollection<StoredWeighIn>(() => (user.value ? weighInsRef() : null))
 
-  /** Un document mal formé (id qui n'est pas un jour, poids absent) est ignoré plutôt que de casser la tendance. */
+  /** Un document mal formé (id qui n'est pas un jour, poids absent) est ignoré plutôt que de casser le rythme. */
   const weighIns = computed<WeighIn[]>(() => stored.value.flatMap(({ id, weightKg, note }) =>
     ISO_DAY.test(id) && typeof weightKg === 'number' && Number.isFinite(weightKg)
       ? [{ id, date: id, weightKg, ...(note ? { note } : {}) }]

@@ -321,14 +321,14 @@ const macroRows = computed(() => ([
             </span>
             <span class="text-xs text-muted lg:text-sm">kcal</span>
           </p>
-          <!-- Jamais de poids brut ici : le rythme de la tendance et la part de l'objectif. -->
+          <!-- Jamais de poids brut ici : le rythme des pesées et la part de l'objectif. -->
           <p
             v-if="weightProgress && weightProgress.rateKgPerWeek !== null"
             class="flex items-baseline gap-1"
-            title="Tendance du poids sur 4 semaines"
+            title="Rythme du poids sur 4 semaines"
           >
             <UIcon :name="trendIcon" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
-            <span class="sr-only">Tendance du poids :</span>
+            <span class="sr-only">Rythme du poids :</span>
             <span class="text-base font-bold tabular-nums min-[380px]:text-lg lg:text-xl" :class="trendClass">
               {{ formatSignedWeight(weightProgress.rateKgPerWeek, 2) }}
             </span>

@@ -208,6 +208,37 @@ const stockOptions = computed(() => dishes.value
   })
   .sort((a, b) => Number(a.isPlanned) - Number(b.isPlanned)))
 
+/**
+ * Parts prêtes dans le stock au jour de la case, par recette d'origine : signalées dans la liste des recettes, avec le
+ * plat le plus ancien (à finir en premier) pour « Prendre dans le stock ».
+ */
+const stockByRecipe = computed(() => {
+  const byRecipe = new Map<string, { parts: number, dishes: number, oldest: (typeof stockOptions.value)[number] }>()
+  for (const option of stockOptions.value) {
+    const id = option.dish.recipeId
+    if (!id || option.isPlanned) continue
+    const entry = byRecipe.get(id)
+    if (entry) {
+      entry.parts += option.available
+      entry.dishes++
+    } else {
+      byRecipe.set(id, { parts: option.available, dishes: 1, oldest: option })
+    }
+  }
+  return byRecipe
+})
+
+const selectedRecipeStock = computed(() => recipeId.value ? stockByRecipe.value.get(recipeId.value) ?? null : null)
+
+/** Bascule sur l'onglet Stock, le plat le plus ancien de la recette choisie sélectionné, au même nombre de parts si possible. */
+const takeFromStock = () => {
+  const stock = selectedRecipeStock.value
+  if (!stock) return
+  stockParts.value = parts.value
+  mode.value = 'stock'
+  selectDish(stock.oldest.dish.id)
+}
+
 const selectedStock = computed(() => stockOptions.value.find(option => option.dish.id === dishId.value && !option.isPlanned))
 /** Plat du repas modifié retiré du stock depuis : le repas garde sa copie, qu'on peut seulement réenregistrer telle quelle. */
 const isInitialDishGone = computed(() => !!initialStock.value && dishId.value === initialStock.value.dishId && !dishes.value.some(d => d.id === dishId.value))
@@ -907,6 +938,16 @@ const onSubmit = () => {
                   <span class="flex items-center gap-2 min-w-0">
                     <span class="truncate text-sm font-medium" :class="recipeId === option.id ? 'text-primary' : 'text-highlighted'">{{ option.label }}</span>
                     <span v-if="option.slightlyOver" class="sr-only">, dépasse légèrement un objectif du jour</span>
+                    <!-- Déjà des parts prêtes dans le stock : pas besoin de la recuisiner. -->
+                    <span
+                      v-if="stockByRecipe.get(option.id)"
+                      class="flex items-center gap-0.5 shrink-0 rounded-sm bg-primary/10 px-1 py-px text-xs font-semibold text-primary tabular-nums"
+                      :title="`${formatParts(stockByRecipe.get(option.id)!.parts)} en stock`"
+                    >
+                      <UIcon name="i-lucide-archive" class="size-3 shrink-0" aria-hidden="true" />
+                      {{ stockByRecipe.get(option.id)!.parts.toLocaleString('fr-FR') }}
+                      <span class="sr-only">{{ stockByRecipe.get(option.id)!.parts > 1 ? 'parts' : 'part' }} en stock</span>
+                    </span>
                     <span v-if="option.macros" class="ml-auto flex items-center gap-1.5 shrink-0">
                       <span class="text-sm font-semibold text-highlighted tabular-nums">{{ option.kcal }}</span>
                       <span class="text-xs text-dimmed">kcal</span>
@@ -947,6 +988,19 @@ const onSubmit = () => {
               </div>
             </div>
           </UFormField>
+
+          <!-- La recette choisie a des parts prêtes dans le stock : les prendre plutôt que la recuisiner. -->
+          <UAlert
+            v-if="selectedRecipeStock"
+            color="primary"
+            variant="subtle"
+            icon="i-lucide-archive"
+            :title="`${formatParts(selectedRecipeStock.parts)} déjà en stock`"
+            :description="selectedRecipeStock.dishes > 1 ? `Dans ${selectedRecipeStock.dishes} plats préparés.` : `Préparé le ${formatDishDay(selectedRecipeStock.oldest.dish.preparedOn)}.`"
+            :actions="[{ label: 'Prendre dans le stock', color: 'primary', variant: 'solid', size: 'xs', onClick: takeFromStock }]"
+            orientation="horizontal"
+            class="shrink-0"
+          />
         </template>
 
         <template v-else-if="mode === 'ingredient'">

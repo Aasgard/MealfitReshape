@@ -224,30 +224,8 @@ async function startChrono() {
 const restStartedAt = ref<number | null>(null)
 const restSec = computed(() => restStartedAt.value ? (now.value - restStartedAt.value) / 1000 : null)
 
-/** Garde l'écran allumé pendant une séance en direct (téléphone posé sur le banc). */
-let wakeLock: { release: () => Promise<void> } | null = null
-async function syncWakeLock() {
-  try {
-    if (live.value && !wakeLock && document.visibilityState === 'visible' && 'wakeLock' in navigator) {
-      wakeLock = await (navigator as Navigator & { wakeLock: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock.request('screen')
-    }
-    else if (!live.value && wakeLock) {
-      await wakeLock.release()
-      wakeLock = null
-    }
-  }
-  catch {
-    // Refusé (économie d'énergie, navigateur) : l'écran s'éteindra comme d'habitude.
-  }
-}
-watch(live, syncWakeLock)
-onMounted(syncWakeLock)
-// Le navigateur rend le verrou quand la page passe en arrière-plan : on le redemande au retour.
-useEventListener(document, 'visibilitychange', () => {
-  wakeLock = null
-  void syncWakeLock()
-})
-onBeforeUnmount(() => { void wakeLock?.release().catch(() => undefined) })
+/** Garde l'écran allumé pendant une séance en direct. */
+useScreenWakeLock(live)
 
 // --- Exercices ---
 

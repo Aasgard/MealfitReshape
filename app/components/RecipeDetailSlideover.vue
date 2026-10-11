@@ -15,6 +15,8 @@ const props = defineProps<{
 
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
+// On cuisine avec la recette sous les yeux : l'écran ne doit pas se verrouiller.
+useScreenWakeLock(open)
 
 const { formatDate } = useDateFormat()
 

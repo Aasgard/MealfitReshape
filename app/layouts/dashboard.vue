@@ -26,11 +26,11 @@ const links = [{
     icon: 'i-lucide-book-open',
     to: '/dashboard/recipes',
   }, {
-    label: 'Menus de la semaine',
+    label: 'Menus',
     icon: 'i-lucide-calendar-days',
     to: '/dashboard/menus',
   }, {
-    label: 'Liste de courses',
+    label: 'Courses',
     icon: 'i-lucide-shopping-cart',
     to: '/dashboard/liste-courses',
   }, {
@@ -60,11 +60,11 @@ const links = [{
   icon: 'i-lucide-ruler',
   defaultOpen: true,
   children: [{
-    label: 'Suivi de poids',
+    label: 'Poids',
     icon: 'i-lucide-scale',
     to: '/dashboard/suivi-poids',
   }, {
-    label: 'Suivi de mensurations',
+    label: 'Mensurations',
     icon: 'i-lucide-ruler-dimension-line',
     to: '/dashboard/suivi-mensurations',
   }]
@@ -73,11 +73,11 @@ const links = [{
   icon: 'i-lucide-wrench',
   defaultOpen: true,
   children: [{
-    label: 'Calculateur de besoins journaliers',
+    label: 'Calculateur macros',
     icon: 'i-lucide-calculator',
     to: '/dashboard/besoins-journaliers',
   }, {
-    label: 'Calculateur pour trail',
+    label: 'Calculateur trail',
     icon: 'i-lucide-sport-shoe',
     to: '/dashboard/calculateur-allure',
   }, {

@@ -48,6 +48,10 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
   label: 'Réglages',
   icon: 'i-lucide-settings',
   to: '/dashboard/reglages'
+}, {
+  label: 'Foyer',
+  icon: 'i-lucide-house',
+  to: '/dashboard/household'
 }], [{
   label: 'Thème',
   icon: 'i-lucide-palette',

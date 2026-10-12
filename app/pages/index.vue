@@ -158,15 +158,7 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-default">
-    <header class="border-b border-default">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <NuxtLink to="/" class="font-bold tracking-tight text-highlighted">
-          MEALFIT <span class="text-primary">RESHAPE</span>
-        </NuxtLink>
-
-        <UButton v-if="!user" to="/login" label="Se connecter" color="neutral" variant="outline" />
-      </div>
-    </header>
+    <PublicHeader />
 
     <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
       <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">

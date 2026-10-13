@@ -2,7 +2,7 @@
 /**
  * Nom d'un article, avec ses signaux : éclair pour un achat urgent, horloge pour une denrée fragile attendue au-delà
  * de J+2. Un appui court (ou un clic) ouvre le détail des besoins : jour par jour, conseil pour les fragiles et
- * marquage urgent (sauf besoin aujourd'hui ou demain, déjà urgent). Souris et clavier : popover ; toucher : panneau en bas d'écran.
+ * marquage urgent (sauf besoin aujourd'hui ou demain, déjà urgent) ; pour un ajout manuel, le jour où il est nécessaire. Souris et clavier : popover ; toucher : panneau en bas d'écran.
  */
 import { createReusableTemplate } from '@vueuse/core'
 import type { GroceryLine } from '~/utils/groceryList'
@@ -103,6 +103,15 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
           est à acheter plus tard, ou à congeler.
         </span>
       </p>
+
+      <UFormField v-if="line.manual" label="Nécessaire pour le" :size="inDrawer ? 'lg' : 'sm'">
+        <UInput
+          :model-value="line.item.neededBy ?? ''"
+          type="date"
+          class="w-full"
+          @update:model-value="list.setNeededBy(line, String($event ?? ''))"
+        />
+      </UFormField>
 
       <!-- Déjà urgent par ses dates (besoin aujourd'hui ou demain) : le marquage n'y changerait rien. -->
       <USwitch

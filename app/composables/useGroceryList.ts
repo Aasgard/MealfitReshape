@@ -317,22 +317,30 @@ export function useGroceryList() {
   /** Modale d'ajout manuel, ouverte depuis les deux modes. */
   const isAddItemOpen = ref(false)
 
-  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '') {
+  /** `neededBy` : jour où l'article est nécessaire (`yyyy-MM-dd`), vide si aucun. */
+  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '', urgent = false, neededBy = '') {
     const trimmed = label.trim()
     if (!trimmed) return false
-    shoppingList.addManual(
-      trimmed.charAt(0).toUpperCase() + trimmed.slice(1),
-      aisle.id === MISC_AISLE.id ? undefined : aisle.id,
-      quantity.trim() || undefined,
-    ).catch(fail(`« ${trimmed} » n'a pas pu être ajouté`))
+    shoppingList.addManual(trimmed.charAt(0).toUpperCase() + trimmed.slice(1), {
+      categoryId: aisle.id === MISC_AISLE.id ? undefined : aisle.id,
+      quantity: quantity.trim() || undefined,
+      urgent,
+      neededBy: neededBy || undefined,
+    }).catch(fail(`« ${trimmed} » n'a pas pu être ajouté`))
     return true
   }
 
-  /** Enregistre la quantité saisie ; vide ou identique au calcul : revient à la quantité calculée. */
   function toggleUrgent(line: GroceryLine) {
     shoppingList.setUrgent(line.item, !line.isMarkedUrgent).catch(fail(`« ${line.label} » n'a pas pu être modifié`))
   }
 
+  /** Échéance d'un ajout manuel ; vide la retire. */
+  function setNeededBy(line: GroceryLine, neededBy: string) {
+    if (!line.manual || (neededBy || undefined) === line.item.neededBy) return
+    shoppingList.setNeededBy(line.item, neededBy || null).catch(fail(`« ${line.label} » n'a pas pu être modifié`))
+  }
+
+  /** Enregistre la quantité saisie ; vide ou identique au calcul : revient à la quantité calculée. */
   function setQuantity(line: GroceryLine, value: string | null) {
     const trimmed = value?.trim() ?? ''
     const quantity = trimmed && trimmed !== line.computedQuantityLabel ? trimmed : null
@@ -412,6 +420,7 @@ export function useGroceryList() {
     addManual,
     setQuantity,
     toggleUrgent,
+    setNeededBy,
     removeManual,
     finishShopping,
     clearAll,
@@ -430,7 +439,7 @@ export function useInjectedGroceryList(): GroceryListState {
 }
 
 /** Gestes du détail d'un article (`GroceryLineName`) : fournis par la page Liste de courses, ou par l'accueil. */
-export type GroceryLineActions = Pick<GroceryListState, 'toggleUrgent' | 'removeManual'>
+export type GroceryLineActions = Pick<GroceryListState, 'toggleUrgent' | 'setNeededBy' | 'removeManual'>
 
 export const GROCERY_LINE_ACTIONS_KEY: InjectionKey<GroceryLineActions> = Symbol('groceryLineActions')
 

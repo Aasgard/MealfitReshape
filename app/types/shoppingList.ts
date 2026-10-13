@@ -47,6 +47,8 @@ export interface ShoppingItem {
   quantity?: string
   /** Marqué urgent à la main (plus de stock, indispensable...), en plus de l'urgence calculée depuis les apports. */
   urgent?: boolean
+  /** Ajout manuel : jour où l'article est nécessaire, `yyyy-MM-dd`. Échéance, pas repas : passée, elle reste due. */
+  neededBy?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

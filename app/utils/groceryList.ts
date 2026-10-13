@@ -52,7 +52,7 @@ export interface GroceryLine {
   sources: string[]
   manual: boolean
   status: ShoppingItemStatus
-  /** Besoins jour par jour, passés compris, tirés des apports ; vides pour un ajout manuel. */
+  /** Besoins jour par jour, passés compris, tirés des apports ; pour un ajout manuel, son échéance s'il en a une. */
   needs: GroceryNeedRow[]
   /** "mar. 14 → sam. 18", "pour demain"... sur les besoins à venir ; vide s'il n'y en a pas. */
   rangeLabel: string
@@ -117,6 +117,7 @@ export function groceryLineFromItem(
   const computedQuantityLabel = grams > 0 || milliliters > 0 ? formatShoppingQuantity({ grams, milliliters, pieces }) : ''
   const isFragile = FRAGILE_AISLE_IDS.has(aisle.id) && !isEgg(item.label)
 
+  const manual = !item.ingredientId
   const needs = totals.map((need): GroceryNeedRow => {
     const date = parseISO(need.date)
     const offset = differenceInCalendarDays(date, today)
@@ -129,6 +130,20 @@ export function groceryLineFromItem(
       isTooEarly: isFragile && offset > FRAGILE_KEEP_DAYS,
     }
   })
+
+  // L'échéance d'un ajout manuel n'est jamais « passée » : non acheté à temps, il reste à acheter, et urgent.
+  if (manual && item.neededBy) {
+    const date = parseISO(item.neededBy)
+    const offset = differenceInCalendarDays(date, today)
+    needs.push({
+      date: item.neededBy,
+      dayLabel: dayLabel(date, today),
+      quantityLabel: item.quantity ?? '',
+      sources: [offset < 0 ? 'En retard' : 'Date souhaitée'],
+      isPast: false,
+      isTooEarly: isFragile && offset > FRAGILE_KEEP_DAYS,
+    })
+  }
 
   const upcoming = needs.filter(need => !need.isPast)
   const first = upcoming.at(0)
@@ -150,7 +165,7 @@ export function groceryLineFromItem(
     computedQuantityLabel,
     isQuantityEdited: !!item.quantity,
     sources: [...new Set(totals.flatMap(need => need.sources))].sort(compareShoppingSources),
-    manual: !item.ingredientId,
+    manual,
     status: item.status,
     needs,
     rangeLabel,

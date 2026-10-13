@@ -94,8 +94,9 @@ export const useShoppingList = () => {
     return skipped
   }
 
-  /** Ajoute un article saisi à la main, à acheter, avec une quantité libre facultative. */
-  function addManual(label: string, categoryId?: string, quantity?: string) {
+  /** Ajoute un article saisi à la main, à acheter, avec quantité libre, marquage urgent et échéance facultatifs. */
+  function addManual(label: string, options: { categoryId?: string, quantity?: string, urgent?: boolean, neededBy?: string } = {}) {
+    const { categoryId, quantity, urgent, neededBy } = options
     const uid = requireUid()
     const batch = writeBatch(db)
     batch.set(doc(shoppingListRef), {
@@ -104,6 +105,8 @@ export const useShoppingList = () => {
       status: 'toBuy',
       ...(categoryId ? { categoryId } : {}),
       ...(quantity ? { quantity } : {}),
+      ...(urgent ? { urgent } : {}),
+      ...(neededBy ? { neededBy } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -116,6 +119,10 @@ export const useShoppingList = () => {
   /** Marquage urgent à la main ; `false` retire le champ (l'urgence calculée depuis les besoins reste). */
   const setUrgent = (item: ShoppingItem, urgent: boolean) =>
     updateDoc(doc(shoppingListRef, item.id), { urgent: urgent || deleteField(), updatedAt: serverTimestamp() })
+
+  /** Échéance d'un ajout manuel (`yyyy-MM-dd`) ; `null` la retire. */
+  const setNeededBy = (item: ShoppingItem, neededBy: string | null) =>
+    updateDoc(doc(shoppingListRef, item.id), { neededBy: neededBy ?? deleteField(), updatedAt: serverTimestamp() })
 
   /** Quantité saisie à la main ; `null` revient à la quantité calculée (ou à aucune, pour un ajout manuel). */
   const setQuantity = (item: ShoppingItem, quantity: string | null) =>
@@ -190,6 +197,7 @@ export const useShoppingList = () => {
     addManual,
     setStatus,
     setUrgent,
+    setNeededBy,
     setQuantity,
     removeManual,
     finishShopping,

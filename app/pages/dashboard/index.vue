@@ -476,13 +476,16 @@ const shoppingLines = computed<GroceryLine[]>(() => {
     .map(({ line }) => line)
 })
 
-/** Détail d'un article ouvert depuis l'accueil : marquer urgent, retirer un ajout manuel. */
+/** Détail d'un article ouvert depuis l'accueil : marquer urgent ; pour un ajout manuel, le dater ou le retirer. */
 const failShopping = (label: string) => (error: any) => {
   toast.add({ title: 'Erreur', description: `« ${label} » n'a pas pu être modifié : ${error?.message || 'une erreur est survenue'}.`, color: 'error' })
 }
 provide(GROCERY_LINE_ACTIONS_KEY, {
   toggleUrgent: (line: GroceryLine) => {
     shoppingList.setUrgent(line.item, !line.isMarkedUrgent).catch(failShopping(line.label))
+  },
+  setNeededBy: (line: GroceryLine, neededBy: string) => {
+    if (line.manual && (neededBy || undefined) !== line.item.neededBy) shoppingList.setNeededBy(line.item, neededBy || null).catch(failShopping(line.label))
   },
   removeManual: (line: GroceryLine) => {
     if (line.manual) shoppingList.removeManual(line.item).catch(failShopping(line.label))

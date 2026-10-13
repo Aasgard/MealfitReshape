@@ -1,10 +1,12 @@
 <script setup lang="ts">
 /**
- * Ajout manuel d'un article : nom, rayon et quantité (facultative, texte libre).
+ * Ajout manuel d'un article : nom, rayon et quantité (facultative, texte libre), puis, facultatifs, le jour où il est
+ * nécessaire et le marquage urgent.
  * Le rayon choisi est gardé d'un ajout à l'autre : on ajoute souvent plusieurs articles du même rayon.
  * Écran tactile : panneau du bas, remonté au-dessus du clavier, pour tout voir sans défiler ; sinon une modale.
  */
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
+import { format } from 'date-fns'
 
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
@@ -18,7 +20,12 @@ useKeyboardInset(() => open.value && isTouch.value)
 const label = ref('')
 const aisleId = ref(MISC_AISLE.id)
 const quantity = ref('')
+/** `yyyy-MM-dd`, vide si aucun jour. */
+const neededBy = ref('')
+const urgent = ref(false)
 const submitted = ref(false)
+
+const today = () => format(new Date(), 'yyyy-MM-dd')
 
 const aisleItems = computed(() =>
   list.aisleOptions.map(aisle => ({ label: aisle.label, value: aisle.id, icon: categoryIconName(aisle.icon) })))
@@ -27,6 +34,8 @@ watch(open, (isOpen) => {
   if (!isOpen) return
   label.value = ''
   quantity.value = ''
+  neededBy.value = ''
+  urgent.value = false
   submitted.value = false
 })
 
@@ -36,7 +45,7 @@ function onSubmit() {
   submitted.value = true
   if (labelError.value) return
   const aisle = list.aisleOptions.find(a => a.id === aisleId.value)
-  if (list.addManual(label.value, aisle, quantity.value)) open.value = false
+  if (list.addManual(label.value, aisle, quantity.value, urgent.value, neededBy.value)) open.value = false
 }
 
 function close() {
@@ -79,6 +88,19 @@ function close() {
             class="w-full"
           />
         </UFormField>
+      </div>
+
+      <div class="grid grid-cols-2 items-end gap-3">
+        <UFormField label="Pour le" class="min-w-0">
+          <UInput
+            v-model="neededBy"
+            type="date"
+            :min="today()"
+            class="w-full"
+          />
+        </UFormField>
+
+        <USwitch v-model="urgent" label="Urgent" class="min-h-8" />
       </div>
 
       <div class="mt-1 flex justify-end gap-2">

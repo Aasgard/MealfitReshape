@@ -33,6 +33,8 @@ const props = withDefaults(defineProps<{
   defaultOpen?: boolean
   /** Moyenne d'une semaine : nombre de jours complets pris en compte ; à 0, la carte le signale au lieu de chiffres nuls. */
   completeDays?: number | null
+  /** Accueil, jour à venir : sur mobile, les chiffres sous la jauge cèdent la place à un picto d'attente. */
+  pending?: boolean
 }>(), {
   weightProgress: null,
   burnedKcal: undefined,
@@ -41,6 +43,7 @@ const props = withDefaults(defineProps<{
   stateKey: 'today-calorie-summary-open',
   defaultOpen: true,
   completeDays: null,
+  pending: false,
 })
 
 const hasNoCompleteDay = computed(() => props.completeDays === 0)
@@ -60,6 +63,13 @@ const open = useState(props.stateKey, () => props.defaultOpen)
 
 /** Kcal dépensées en séance, 0 sans séance ou sans kcal renseignées. */
 const burned = computed(() => typeof props.burnedKcal === 'number' ? props.burnedKcal : 0)
+/**
+ * lg+ : colonne des chiffres de poids (ou jours complets), le sablier un jour à venir. Elle et la 2e colonne ont une
+ * largeur minimale, pour que les colonnes ne bougent pas d'un jour passé à un jour à venir (« _ » et sablier plus étroits).
+ */
+const hasFiguresColumn = computed(() => !!props.weightProgress || props.completeDays !== null || props.pending)
+/** lg+, 2e colonne : un jour à venir, « _ » plutôt qu'un 0 qui n'a pas encore de sens. */
+const pendingZero = computed(() => (props.pending ? '_' : 0))
 /** Bilan net (mangé − dépensé) : c'est lui que la jauge compare à l'objectif, qui ne change pas. */
 const netKcal = computed(() => props.eatenKcal - burned.value)
 /** Toujours affichée sur l'accueil : 0 un jour sans séance. */
@@ -158,7 +168,11 @@ const macroRows = computed(() => ([
         À gauche la jauge et les calories, à droite les macros empilées : les deux colonnes ont la même hauteur
         (les macros se répartissent sur celle de la jauge et des calories). Les chiffres dessous (mobile, tablette) ; lg+ : jauge, kcal, macros, poids en 4 colonnes.
       -->
-      <div v-else class="grid h-full grid-cols-[auto_minmax(0,1fr)] content-center gap-x-5 gap-y-3 px-4 pb-4 sm:px-5 sm:pb-5 lg:grid-cols-[auto_auto_minmax(0,16rem)_auto] lg:justify-between lg:gap-x-8">
+      <div
+        v-else
+        class="grid h-full grid-cols-[auto_minmax(0,1fr)] content-center gap-x-5 gap-y-3 px-4 pb-4 sm:px-5 sm:pb-5 lg:justify-between lg:gap-x-8"
+        :class="hasFiguresColumn ? 'lg:grid-cols-[auto_minmax(11rem,auto)_minmax(0,16rem)_minmax(10rem,auto)]' : 'lg:grid-cols-[auto_minmax(11rem,auto)_minmax(0,16rem)]'"
+      >
         <div class="flex flex-col gap-1.5">
           <div
             class="relative mx-auto w-32 lg:w-36"
@@ -267,7 +281,7 @@ const macroRows = computed(() => ([
             <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">En plus :</span>
             <span class="text-xl font-bold tabular-nums" :class="extraKcal > 0 ? 'text-purple-500' : 'text-highlighted'">
-              {{ extraKcal > 0 ? '+' : '' }}{{ extraKcal }}
+              {{ extraKcal > 0 ? `+${extraKcal}` : pendingZero }}
             </span>
             <span class="text-sm text-muted">kcal</span>
           </p>
@@ -275,7 +289,7 @@ const macroRows = computed(() => ([
           <p v-if="showBurned" class="flex items-baseline gap-1" :title="burnedTitle">
             <UIcon name="i-lucide-dumbbell" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Dépensées en séance :</span>
-            <span class="text-xl font-bold tabular-nums text-highlighted">{{ burned ? `−${burned}` : 0 }}</span>
+            <span class="text-xl font-bold tabular-nums text-highlighted">{{ burned ? `−${burned}` : pendingZero }}</span>
             <span class="text-sm text-muted">kcal</span>
           </p>
         </div>
@@ -302,10 +316,18 @@ const macroRows = computed(() => ([
           (passé dans la 2e colonne).
         -->
         <div
-          class="col-span-2 flex flex-nowrap items-center justify-between gap-x-3 whitespace-nowrap border-t border-default pt-3 lg:col-span-1 lg:flex-col lg:items-start lg:justify-center lg:gap-y-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-          :class="!weightProgress && completeDays === null && 'lg:hidden'"
+          class="col-span-2 flex flex-nowrap items-center gap-x-3 whitespace-nowrap border-t border-default pt-3 lg:col-span-1 lg:flex-col lg:justify-center lg:gap-y-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+          :class="[!hasFiguresColumn && 'lg:hidden', pending ? 'justify-center' : 'justify-between lg:items-start']"
         >
-          <p v-if="showBurned" class="flex items-baseline gap-1 lg:hidden" :title="burnedTitle">
+          <!--
+            Jour à venir : un seul picto à la place des chiffres, qui n'ont pas encore de sens. Mobile, tablette : dépense
+            et poids ; lg+ : le poids seul (la dépense est dans la 2e colonne).
+          -->
+          <p v-if="pending" class="flex items-center gap-1.5 text-muted" title="Chiffres en attente de ce jour">
+            <UIcon name="i-lucide-hourglass" class="size-5 shrink-0" aria-hidden="true" />
+            <span class="sr-only">Chiffres en attente de ce jour</span>
+          </p>
+          <p v-if="showBurned" v-show="!pending" class="flex items-baseline gap-1 lg:hidden" :title="burnedTitle">
             <UIcon name="i-lucide-dumbbell" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
             <span class="sr-only">Dépensées en séance :</span>
             <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl">
@@ -313,7 +335,7 @@ const macroRows = computed(() => ([
             </span>
             <span class="text-xs text-muted lg:text-sm">kcal</span>
           </p>
-          <p v-else class="flex items-baseline gap-1 lg:hidden" :title="`${extraKcal} kcal en plus (hors plan)`">
+          <p v-else v-show="!pending" class="flex items-baseline gap-1 lg:hidden" :title="`${extraKcal} kcal en plus (hors plan)`">
             <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-muted lg:text-highlighted" aria-hidden="true" />
             <span class="sr-only">En plus :</span>
             <span class="text-base font-bold tabular-nums text-muted min-[380px]:text-lg lg:text-xl">
@@ -323,7 +345,7 @@ const macroRows = computed(() => ([
           </p>
           <!-- Jamais de poids brut ici : le rythme des pesées et la part de l'objectif. -->
           <p
-            v-if="weightProgress && weightProgress.rateKgPerWeek !== null"
+            v-if="!pending && weightProgress && weightProgress.rateKgPerWeek !== null"
             class="flex items-baseline gap-1"
             title="Rythme du poids sur 4 semaines"
           >
@@ -335,7 +357,7 @@ const macroRows = computed(() => ([
             <span class="text-xs text-muted lg:text-sm">kg/sem</span>
           </p>
           <p
-            v-if="weightProgress && weightProgress.goalPercent !== null"
+            v-if="!pending && weightProgress && weightProgress.goalPercent !== null"
             class="flex items-baseline gap-1"
             :title="`${weightProgress.goalPercent} % de l'objectif de poids atteint`"
           >

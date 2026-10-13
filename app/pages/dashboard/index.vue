@@ -49,6 +49,8 @@ const goToNextDay = () => goToDay(addDays(selectedDay.value, 1))
 
 const selectedDayKey = computed(() => format(selectedDay.value, 'yyyy-MM-dd'))
 const isTodaySelected = computed(() => differenceInCalendarDays(selectedDay.value, today) === 0)
+/** À partir de demain : la dépense et le suivi du poids n'ont pas encore de valeur. */
+const isFutureSelected = computed(() => differenceInCalendarDays(selectedDay.value, today) > 0)
 
 /** "Aujourd'hui", "Hier", "Demain", sinon "Lundi 28 septembre". */
 const selectedDayTitle = computed(() => {
@@ -749,6 +751,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :weight-progress="weightProgress"
               :burned-kcal="burnedKcal"
               show-burned
+              :pending="isFutureSelected"
             />
 
             <template v-if="shoppingLines.length">

@@ -86,7 +86,7 @@ export const totalEnergyExpenditure = (model: BodyModel) => basalMetabolicRateAt
 const leanEnergyShare = (fatMassKg: number) => ENERGY_PARTITION_CONSTANT_KG / (ENERGY_PARTITION_CONSTANT_KG + Math.max(fatMassKg, 0.1))
 
 /** kcal par kg de poids perdu ou pris au départ : mélange de masse grasse et de masse maigre. */
-function energyPerKgAtStart(model: BodyModel): number {
+export function energyPerKgAtStart(model: BodyModel): number {
   const p = leanEnergyShare(model.fatMassKg)
   return 1 / ((1 - p) / FAT_ENERGY_DENSITY_KCAL_PER_KG + p / LEAN_ENERGY_DENSITY_KCAL_PER_KG)
 }

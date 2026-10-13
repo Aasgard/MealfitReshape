@@ -344,12 +344,15 @@ function rowActions(weighIn: WeighIn): DropdownMenuItem[][] {
                 Projection du calculateur
               </li>
               <li class="flex items-center gap-2">
-                <svg width="18" height="10" aria-hidden="true"><line x1="0" x2="18" y1="5" y2="5" stroke="var(--ui-text-muted)" stroke-width="1" /></svg>
+                <svg width="18" height="10" aria-hidden="true"><line x1="0" x2="18" y1="5" y2="5" stroke="var(--ui-info)" stroke-width="1" /></svg>
                 Objectif
               </li>
             </template>
           </ul>
         </section>
+
+        <!-- Bilan énergétique : déficit de chaque semaine converti en kg, contre la variation constatée. -->
+        <WeightEnergyBalance :points="points" />
 
         <!-- Journal des pesées. -->
         <section aria-labelledby="journal-title" class="flex flex-col rounded-xl border border-default bg-default">

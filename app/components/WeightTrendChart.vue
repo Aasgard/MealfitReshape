@@ -6,7 +6,7 @@
  *
  * La tendance n'existe que pour l'affichage : les indicateurs (rythme, perte, objectif) partent des pesées brutes.
  */
-import { differenceInCalendarDays, format, parseISO, addDays } from 'date-fns'
+import { differenceInCalendarDays, format, getISOWeek, parseISO, addDays, startOfISOWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { WeighIn, WeightGoal } from '~/utils/weightTrend'
 
@@ -104,12 +104,16 @@ const yTicks = computed(() => {
   return ticks
 })
 
+/** Graduations sur les lundis, au numéro de semaine (« S41 ») comme les graphiques par semaine ; une sur n si trop serrées. */
 const xTicks = computed(() => {
-  const count = Math.min(Math.max(Math.floor(innerWidth.value / 90), 2), 6)
-  return Array.from({ length: count }, (_, i) => {
-    const date = format(addDays(fromDate.value, Math.round((totalDays.value * i) / (count - 1))), 'yyyy-MM-dd')
-    return { date, x: x(date), label: format(parseISO(date), 'd MMM', { locale: fr }), anchor: i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle' }
-  })
+  const mondays: string[] = []
+  for (let day = startOfISOWeek(addDays(fromDate.value, 6)); format(day, 'yyyy-MM-dd') <= props.to; day = addDays(day, 7)) {
+    mondays.push(format(day, 'yyyy-MM-dd'))
+  }
+  const every = Math.max(1, Math.ceil(mondays.length / Math.max(Math.floor(innerWidth.value / 44), 1)))
+  return mondays
+    .filter((_, i) => (mondays.length - 1 - i) % every === 0)
+    .map(date => ({ date, x: x(date), label: `S${getISOWeek(parseISO(date))}`, anchor: 'middle' }))
 })
 
 /** Tendance découpée en segments : un trou de plus de 4 jours interrompt la ligne. */
@@ -251,14 +255,14 @@ const ariaLabel = computed(() => {
           :x2="width - PAD.right"
           :y1="y(goal.targetWeightKg)"
           :y2="y(goal.targetWeightKg)"
-          stroke="var(--ui-text-muted)"
+          stroke="var(--ui-info)"
           stroke-width="1"
         />
         <text
           :x="PAD.left + 6"
           :y="y(goal.targetWeightKg) - 6"
           class="text-xs font-semibold"
-          fill="var(--ui-text-muted)"
+          fill="var(--ui-info)"
         >Objectif {{ formatWeight(goal.targetWeightKg) }} kg</text>
       </g>
 
@@ -349,6 +353,7 @@ const ariaLabel = computed(() => {
     >
       <p class="font-semibold text-highlighted first-letter:uppercase">
         {{ format(parseISO(active.date), 'EEEE d MMMM', { locale: fr }) }}
+        <span class="font-normal text-dimmed">· S{{ getISOWeek(parseISO(active.date)) }}</span>
       </p>
       <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 tabular-nums">
         <dt class="text-muted">

@@ -372,6 +372,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :complete-days="summary.completeDays"
         />
 
+        <!-- Semaines jusqu'à celle affichée : macros empilées et kcal moyennes, repliées par défaut. -->
+        <MenuWeeksMacroChart :selected-week-start="selectedWeekStart" @select-week="goToWeek" />
+
         <!--
           PC : le calendrier glisse du côté de la semaine demandée. Mode continu : une seule instance, qui défile d'une
           semaine à l'autre et annonce celle où elle s'arrête (`visible-week`).

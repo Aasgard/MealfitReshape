@@ -135,17 +135,19 @@ const series = computed(() => weeks.value.map(week => ({
   actualAsDeficit: week.actualKg === null ? null : deficitOf(week.actualKg),
 })))
 
+/**
+ * Échelle resserrée sur les valeurs affichées (zéro n'est pas forcé) : les écarts d'une semaine à l'autre restent
+ * lisibles. Une graduation entière de marge au plus de chaque côté.
+ */
 const yDomain = computed(() => {
-  const values = [0, ...series.value.flatMap(p => [p.deficit, p.actualAsDeficit].filter((v): v is number => v !== null))]
+  const values = series.value.flatMap(p => [p.deficit, p.actualAsDeficit].filter((v): v is number => v !== null))
+  if (!values.length) return { min: 0, max: 100, step: 50 }
   const rawMin = Math.min(...values)
   const rawMax = Math.max(...values)
-  const span = Math.max(rawMax - rawMin, 200)
-  const step = [50, 100, 200, 250, 500, 1000].find(s => span / s <= 5) ?? 1000
-  return {
-    min: Math.floor(rawMin / step - 1e-9) * step,
-    max: Math.max(Math.ceil(rawMax / step + 1e-9) * step, step),
-    step,
-  }
+  const span = Math.max(rawMax - rawMin, 100)
+  const step = [25, 50, 100, 200, 250, 500, 1000].find(s => span / s <= 5) ?? 1000
+  const min = Math.floor(rawMin / step - 1e-9) * step
+  return { min, max: Math.max(Math.ceil(rawMax / step + 1e-9) * step, min + step), step }
 })
 
 const x = (index: number) => PAD.left + ((index + 0.5) / Math.max(series.value.length, 1)) * innerWidth.value
@@ -352,7 +354,7 @@ const ariaLabel = computed(() => {
         >
           <g class="text-xs tabular-nums" style="font-feature-settings: 'tnum'">
             <!-- Unités des deux axes, au-dessus de leurs graduations. -->
-            <text :x="PAD.left - 8" y="12" text-anchor="end" fill="var(--ui-text-muted)">kcal/j</text>
+            <text :x="PAD.left - 8" y="12" text-anchor="end" fill="var(--ui-text-toned)">kcal/j</text>
             <text :x="width - PAD.right + 8" y="12" fill="var(--ui-primary)">kg/sem</text>
 
             <template v-for="tick in leftTicks" :key="`l-${tick.value}`">
@@ -363,14 +365,14 @@ const ariaLabel = computed(() => {
                 :y2="tick.y"
                 :stroke="tick.value === 0 ? 'var(--ui-border-accented)' : 'var(--ui-border)'"
               />
-              <text :x="PAD.left - 8" :y="tick.y + 4" text-anchor="end" fill="var(--ui-text-dimmed)">{{ tick.label }}</text>
+              <text :x="PAD.left - 8" :y="tick.y + 4" text-anchor="end" fill="var(--ui-text-toned)">{{ tick.label }}</text>
             </template>
             <text
               v-for="tick in rightTicks"
               :key="`r-${tick.value}`"
               :x="width - PAD.right + 8"
               :y="tick.y + 4"
-              fill="var(--ui-text-dimmed)"
+              fill="var(--ui-primary)"
             >{{ tick.label }}</text>
             <text
               v-for="tick in xTicks"

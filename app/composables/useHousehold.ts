@@ -1,3 +1,7 @@
+import { collection, doc, limit, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Timestamp, type Transaction } from 'firebase/firestore'
+import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
+import type { HouseholdDoc } from '~/types/household'
+
 /** Membre d'un foyer. Le propriétaire seul invite, renomme et retire ; les autres peuvent partir. */
 export interface HouseholdMember {
   id: string
@@ -24,6 +28,7 @@ export interface Household {
 /** Point de vue de la maquette : le compte connecté est propriétaire ou simple membre. */
 export type HouseholdDemoView = 'owner' | 'member'
 
+/** Id du compte connecté tant que son uid n'est pas connu. */
 export const SELF_ID = 'self'
 
 /** Lettres et chiffres sans ambiguïté à la lecture (ni 0/O, ni 1/I/L). */
@@ -55,6 +60,35 @@ export function successorOf(household: Household): HouseholdMember | null {
 
 const today = () => new Date().toISOString().slice(0, 10)
 
+/** Un horodatage serveur pas encore confirmé date de maintenant. */
+const isoOf = (ts: Timestamp | null | undefined) => (ts ? ts.toDate() : new Date()).toISOString()
+
+/** Foyer enregistré, vu par le compte `uid`. */
+function fromDoc(stored: HouseholdDoc, uid: string): Household {
+  return {
+    name: stored.name,
+    createdAt: isoOf(stored.createdAt),
+    inviteCode: stored.inviteCode,
+    ownerId: stored.ownerId,
+    members: Object.entries(stored.members ?? {}).map(([id, m]) => ({
+      id,
+      name: m.name,
+      email: m.email,
+      photoUrl: m.photoUrl,
+      joinedAt: isoOf(m.joinedAt),
+      isSelf: id === uid,
+    })),
+  }
+}
+
+/** Entrée de `members` du compte connecté, arrivé maintenant ; Firestore refuse les champs `undefined`. */
+const memberEntry = (self: HouseholdMember) => ({
+  name: self.name,
+  email: self.email,
+  ...(self.photoUrl ? { photoUrl: self.photoUrl } : {}),
+  joinedAt: serverTimestamp(),
+})
+
 const CAMILLE = { id: 'demo-camille', name: 'Camille Laurent', email: 'camille.laurent@exemple.fr' }
 const HUGO = { id: 'demo-hugo', name: 'Hugo Martin', email: 'hugo.martin@exemple.fr' }
 
@@ -64,9 +98,9 @@ function demoHousehold(self: HouseholdMember, view: HouseholdDemoView): Househol
   return view === 'owner'
     ? {
         ...base,
-        ownerId: SELF_ID,
+        ownerId: self.id,
         members: [
-          { ...self, id: SELF_ID, joinedAt: '2026-03-04' },
+          { ...self, joinedAt: '2026-03-04' },
           { ...CAMILLE, joinedAt: '2026-03-11' },
           { ...HUGO, joinedAt: '2026-06-18' },
         ],
@@ -76,7 +110,7 @@ function demoHousehold(self: HouseholdMember, view: HouseholdDemoView): Househol
         ownerId: CAMILLE.id,
         members: [
           { ...CAMILLE, joinedAt: '2026-03-04' },
-          { ...self, id: SELF_ID, joinedAt: '2026-05-02' },
+          { ...self, joinedAt: '2026-05-02' },
           { ...HUGO, joinedAt: '2026-06-18' },
         ],
       }
@@ -91,71 +125,140 @@ export const HOUSEHOLD_SHARED = [
 ] as const
 
 /**
- * Foyer du compte connecté (un seul au plus). Maquette : état en mémoire, membres fictifs.
- * `self` fournit le compte connecté (id `SELF_ID`).
+ * Foyer du compte connecté (un seul au plus) : celui de la collection Firestore `households` dont il est membre,
+ * sinon le foyer de démonstration s'il est affiché (état en mémoire, membres fictifs).
+ * Créer, renommer, changer de code et supprimer le foyer (dernier membre) écrivent dans Firestore ;
+ * rejoindre, retirer un membre et partir à plusieurs ne touchent encore que la démo.
+ * `self` fournit le compte connecté, son uid pour id.
  */
 export function useHousehold() {
-  const household = useState<Household | null>('household', () => null)
-  const demoView = useState<HouseholdDemoView>('household-demo-view', () => 'owner')
-  const demoSeeded = useState('household-demo-seeded', () => false)
+  const db = useFirestore()
+  const user = useCurrentUser()
 
-  /** Premier passage : la maquette s'ouvre sur un foyer rempli, vu par son propriétaire. */
-  function seed(self: HouseholdMember) {
-    if (demoSeeded.value) return
-    demoSeeded.value = true
-    household.value = demoHousehold(self, demoView.value)
+  const stored = useCollection<HouseholdDoc>(() => {
+    const uid = user.value?.uid
+    if (!uid) return null
+    return query(collection(db, 'households'), where('memberIds', 'array-contains', uid), limit(1))
+  })
+  const storedHousehold = computed(() => stored.value[0] ?? null)
+
+  const demo = useState<Household | null>('household-demo', () => null)
+  const demoView = useState<HouseholdDemoView>('household-demo-view', () => 'owner')
+
+  const household = computed(() => {
+    const uid = user.value?.uid
+    return storedHousehold.value && uid ? fromDoc(storedHousehold.value, uid) : demo.value
+  })
+  const isDemo = computed(() => !storedHousehold.value && !!demo.value)
+  const loading = computed(() => !user.value || stored.pending.value)
+
+  const requireUid = () => {
+    const uid = user.value?.uid
+    if (!uid) throw new Error('Vous devez être connecté.')
+    return uid
+  }
+
+  /**
+   * Réserve dans `tx` un code libre (`inviteCodes/{code}`) pour le foyer `householdId` et le renvoie.
+   * Un code déjà pris, ou égal à `avoid`, est retiré au sort.
+   */
+  async function reserveCode(tx: Transaction, householdId: string, avoid?: string) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = generateInviteCode()
+      if (code === avoid) continue
+      const ref = doc(db, 'inviteCodes', code)
+      if ((await tx.get(ref)).exists()) continue
+      tx.set(ref, { householdId, createdAt: serverTimestamp() })
+      return code
+    }
+    throw new Error('Aucun code d\'invitation libre, réessayez.')
   }
 
   function setDemo(withHousehold: boolean, self: HouseholdMember) {
-    household.value = withHousehold ? demoHousehold(self, demoView.value) : null
+    demo.value = withHousehold ? demoHousehold(self, demoView.value) : null
   }
 
   function setDemoView(view: HouseholdDemoView, self: HouseholdMember) {
     demoView.value = view
-    household.value = demoHousehold(self, view)
+    demo.value = demoHousehold(self, view)
   }
 
-  /** Créer un foyer en fait le propriétaire. */
-  function create(name: string, self: HouseholdMember) {
-    demoView.value = 'owner'
-    household.value = {
-      name,
-      createdAt: today(),
-      inviteCode: generateInviteCode(),
-      ownerId: SELF_ID,
-      members: [{ ...self, id: SELF_ID, joinedAt: today() }],
-    }
+  /**
+   * Crée le foyer avec le compte connecté pour propriétaire et seul membre, et lui réserve un code d'invitation.
+   * Transaction : elle échoue hors ligne plutôt que de risquer un code déjà pris.
+   */
+  async function create(name: string, self: HouseholdMember) {
+    const uid = requireUid()
+    const ref = doc(collection(db, 'households'))
+    await runTransaction(db, async (tx) => {
+      const inviteCode = await reserveCode(tx, ref.id)
+      tx.set(ref, {
+        name,
+        ownerId: uid,
+        inviteCode,
+        memberIds: [uid],
+        members: { [uid]: memberEntry(self) },
+        createdAt: serverTimestamp(),
+      })
+    })
+    demo.value = null
   }
 
   /** Maquette : tout code bien formé mène au foyer de démonstration, comme simple membre arrivé aujourd'hui. */
   function join(self: HouseholdMember) {
     demoView.value = 'member'
-    const demo = demoHousehold(self, 'member')
-    household.value = { ...demo, members: demo.members.map(m => (m.id === SELF_ID ? { ...m, joinedAt: today() } : m)) }
+    const member = demoHousehold(self, 'member')
+    demo.value = { ...member, members: member.members.map(m => (m.id === self.id ? { ...m, joinedAt: today() } : m)) }
   }
 
-  function rename(name: string) {
-    if (household.value) household.value.name = name
+  async function rename(name: string) {
+    if (isDemo.value) {
+      demo.value!.name = name
+      return
+    }
+    const current = storedHousehold.value
+    if (current) await updateDoc(doc(db, 'households', current.id), { name })
   }
 
-  function regenerateCode() {
-    if (!household.value) return
-    let code = generateInviteCode()
-    while (code === household.value.inviteCode) code = generateInviteCode()
-    household.value.inviteCode = code
+  /** Remplace le code d'invitation ; l'ancien est libéré. */
+  async function regenerateCode() {
+    if (isDemo.value) {
+      let code = generateInviteCode()
+      while (code === demo.value!.inviteCode) code = generateInviteCode()
+      demo.value!.inviteCode = code
+      return
+    }
+    const current = storedHousehold.value
+    if (!current) return
+    await runTransaction(db, async (tx) => {
+      const inviteCode = await reserveCode(tx, current.id, current.inviteCode)
+      tx.delete(doc(db, 'inviteCodes', current.inviteCode))
+      tx.update(doc(db, 'households', current.id), { inviteCode })
+    })
   }
 
+  /** Maquette seulement. */
   function removeMember(id: string) {
-    if (household.value) household.value.members = household.value.members.filter(m => m.id !== id)
+    if (isDemo.value) demo.value!.members = demo.value!.members.filter(m => m.id !== id)
   }
 
   /**
-   * Si le propriétaire part, le plus ancien des autres membres le devient ; seul, il supprime le foyer.
-   * Dans la maquette, le foyer disparaît de toute façon pour ce compte.
+   * Si le propriétaire part, le plus ancien des autres membres le devient ; seul, il supprime le foyer et son code.
+   * Partir d'un foyer à plusieurs n'est encore possible que dans la démo, où le foyer disparaît pour ce compte.
    */
-  function leave() {
-    household.value = null
+  async function leave() {
+    if (isDemo.value) {
+      demo.value = null
+      return
+    }
+    const current = storedHousehold.value
+    if (!current) return
+    if (current.memberIds.length > 1) throw new Error('Quitter un foyer à plusieurs n\'est pas encore possible.')
+    const batch = writeBatch(db)
+    batch.delete(doc(db, 'households', current.id))
+    batch.delete(doc(db, 'inviteCodes', current.inviteCode))
+    await batch.commit()
   }
 
-  return { household, demoView, seed, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave }
+  return { household, isDemo, loading, demoView, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave }
 }

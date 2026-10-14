@@ -14,19 +14,17 @@ const currentUser = useCurrentUser()
 const route = useRoute()
 const requestUrl = useRequestURL()
 const toast = useToast()
-const { household, demoView, seed, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave } = useHousehold()
+const { household, isDemo, loading, demoView, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave } = useHousehold()
 
-/** Le compte connecté, toujours lu en direct : la maquette ne stocke que sa date d'arrivée. */
+/** Le compte connecté, toujours lu en direct : le foyer n'en garde qu'une copie et sa date d'arrivée. */
 const self = computed<HouseholdMember>(() => ({
-  id: SELF_ID,
+  id: currentUser.value?.uid ?? SELF_ID,
   name: currentUser.value?.displayName || currentUser.value?.email || 'Vous',
   email: currentUser.value?.email || '',
   photoUrl: currentUser.value?.photoURL || undefined,
   joinedAt: '',
   isSelf: true,
 }))
-
-seed(self.value)
 
 const members = computed(() => household.value
   ? sortedMembers(household.value).map(m => (m.isSelf ? { ...m, ...self.value, joinedAt: m.joinedAt } : m))
@@ -35,7 +33,7 @@ const members = computed(() => household.value
 // --- Propriétaire ---
 
 const isOwnerId = (id: string) => household.value?.ownerId === id
-const isOwner = computed(() => isOwnerId(SELF_ID))
+const isOwner = computed(() => isOwnerId(self.value.id))
 const owner = computed(() => members.value.find(m => isOwnerId(m.id)))
 const successor = computed(() => household.value ? successorOf(household.value) : null)
 
@@ -48,12 +46,17 @@ const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`
 const queryCode = computed(() => normalizeInviteCode(String(route.query.code ?? '')))
 const queryCodeIsOwn = computed(() => !!household.value && queryCode.value === household.value.inviteCode)
 
-// --- Démo ---
+// --- Démo (seulement sans foyer enregistré) ---
 
 const demoOn = computed({
-  get: () => !!household.value,
+  get: () => isDemo.value,
   set: (on: boolean) => setDemo(on, self.value),
 })
+
+const failed = (title: string, error: unknown) => {
+  console.error(title, error)
+  toast.add({ title, description: error instanceof Error ? error.message : undefined, color: 'error' })
+}
 
 const DEMO_VIEWS: { value: HouseholdDemoView, label: string }[] = [
   { value: 'owner', label: 'Propriétaire' },
@@ -84,8 +87,8 @@ function submitRename() {
     nameError.value = 'Donnez un nom au foyer.'
     return
   }
-  rename(name)
   editingName.value = false
+  rename(name).catch(error => failed('Renommage impossible', error))
 }
 
 // --- Invitation ---
@@ -112,11 +115,16 @@ onBeforeUnmount(() => clearTimeout(copiedTimer))
 
 const confirmRegenerate = ref(false)
 
-function onRegenerate() {
-  regenerateCode()
+async function onRegenerate() {
+  confirmRegenerate.value = false
+  try {
+    await regenerateCode()
+  } catch (error) {
+    failed('Nouveau code impossible', error)
+    return
+  }
   codeChanged.value = true
   copied.value = null
-  confirmRegenerate.value = false
   toast.add({ title: 'Nouveau code généré', description: 'L\'ancien code ne fonctionne plus.', color: 'success' })
 }
 
@@ -155,12 +163,17 @@ const leaveHint = computed(() => {
   return 'Vos recettes et ingrédients privés partent avec vous. Les menus, la liste de courses et le stock restent au foyer.'
 })
 
-function onLeave() {
+async function onLeave() {
   const name = household.value?.name
   const deleted = isLastMember.value
   const heir = isOwner.value ? successor.value : null
-  leave()
   confirmLeave.value = false
+  try {
+    await leave()
+  } catch (error) {
+    failed(deleted ? 'Suppression impossible' : 'Impossible de quitter le foyer', error)
+    return
+  }
   toast.add({
     title: deleted ? `Foyer « ${name} » supprimé` : `Vous avez quitté « ${name} »`,
     description: heir ? `${heir.name} en est maintenant propriétaire.` : undefined,
@@ -172,18 +185,27 @@ function onLeave() {
 
 const createName = ref('')
 const createError = ref('')
+const creating = ref(false)
 const joinCode = ref(queryCode.value ? formatInviteCode(queryCode.value) : '')
 const joinError = ref('')
 
 watch(queryCode, (c) => { if (c && !household.value) joinCode.value = formatInviteCode(c) })
 
-function submitCreate() {
+async function submitCreate() {
   const name = createName.value.trim()
   if (!name) {
     createError.value = 'Donnez un nom au foyer, par exemple « Maison ».'
     return
   }
-  create(name, self.value)
+  creating.value = true
+  try {
+    await create(name, self.value)
+  } catch (error) {
+    failed('Création du foyer impossible', error)
+    return
+  } finally {
+    creating.value = false
+  }
   createName.value = ''
   createError.value = ''
   codeChanged.value = false
@@ -221,8 +243,9 @@ const PERSONAL = [
     </template>
 
     <template #body>
-      <!-- Commandes de la maquette : à retirer avec les données fictives. -->
+      <!-- Commandes de la maquette, sans foyer enregistré : à retirer avec les données fictives. -->
       <div
+        v-if="!loading && (!household || isDemo)"
         class="mx-auto flex w-full flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-dashed border-default px-3 py-2"
         :class="household ? 'max-w-5xl' : 'max-w-3xl'"
       >
@@ -248,8 +271,13 @@ const PERSONAL = [
         </div>
       </div>
 
+      <div v-if="loading" class="mx-auto flex w-full max-w-5xl flex-col gap-6" aria-busy="true">
+        <USkeleton class="h-8 w-48" />
+        <USkeleton class="h-48 w-full rounded-xl" />
+      </div>
+
       <!-- Foyer existant -->
-      <div v-if="household" class="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <div v-else-if="household" class="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <UAlert
           v-if="queryCode"
           :title="queryCodeIsOwn ? 'Vous faites déjà partie de ce foyer.' : 'Vous faites déjà partie d\'un foyer.'"
@@ -490,7 +518,7 @@ const PERSONAL = [
                   @update:model-value="createError = ''"
                 />
               </UFormField>
-              <UButton type="submit" label="Créer le foyer" :color="joinCode ? 'neutral' : 'primary'" :variant="joinCode ? 'outline' : 'solid'" class="self-start" />
+              <UButton type="submit" label="Créer le foyer" :loading="creating" :color="joinCode ? 'neutral' : 'primary'" :variant="joinCode ? 'outline' : 'solid'" class="self-start" />
             </div>
           </form>
 

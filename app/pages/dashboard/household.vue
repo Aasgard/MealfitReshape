@@ -143,11 +143,16 @@ const memberMenu = (member: HouseholdMember): DropdownMenuItem[] => [{
   onSelect: () => { memberToRemove.value = member },
 }]
 
-function onRemove() {
+async function onRemove() {
   const member = memberToRemove.value
   if (!member) return
-  removeMember(member.id)
   memberToRemove.value = null
+  try {
+    await removeMember(member.id)
+  } catch (error) {
+    failed(`Impossible de retirer ${member.name}`, error)
+    return
+  }
   toast.add({ title: `${member.name} ne fait plus partie du foyer`, color: 'success' })
 }
 
@@ -188,6 +193,7 @@ const createError = ref('')
 const creating = ref(false)
 const joinCode = ref(queryCode.value ? formatInviteCode(queryCode.value) : '')
 const joinError = ref('')
+const joining = ref(false)
 
 watch(queryCode, (c) => { if (c && !household.value) joinCode.value = formatInviteCode(c) })
 
@@ -212,16 +218,29 @@ async function submitCreate() {
   toast.add({ title: `Foyer « ${name} » créé`, description: 'Partagez le code d\'invitation pour y faire entrer quelqu\'un.', color: 'success' })
 }
 
-function submitJoin() {
-  if (!normalizeInviteCode(joinCode.value)) {
+async function submitJoin() {
+  const code = normalizeInviteCode(joinCode.value)
+  if (!code) {
     joinError.value = 'Le code compte 6 lettres ou chiffres, par exemple K7F-2QM.'
     return
   }
-  join(self.value)
+  joining.value = true
+  let name: string
+  try {
+    name = await join(code, self.value)
+  } catch (error) {
+    console.error('Impossible de rejoindre le foyer', error)
+    joinError.value = error instanceof Error ? error.message : 'Impossible de rejoindre le foyer.'
+    return
+  } finally {
+    joining.value = false
+  }
   joinCode.value = ''
   joinError.value = ''
   codeChanged.value = false
-  toast.add({ title: `Vous avez rejoint « ${household.value?.name} »`, color: 'success' })
+  // Le lien d'invitation a servi : sans lui, la page n'annonce pas « vous faites déjà partie de ce foyer ».
+  if (route.query.code) navigateTo({ query: { ...route.query, code: undefined } }, { replace: true })
+  toast.add({ title: name ? `Vous avez rejoint « ${name} »` : 'Vous avez rejoint le foyer', color: 'success' })
 }
 
 const PERSONAL = [
@@ -545,7 +564,7 @@ const PERSONAL = [
                   @update:model-value="joinError = ''"
                 />
               </UFormField>
-              <UButton type="submit" label="Rejoindre" :color="joinCode ? 'primary' : 'neutral'" :variant="joinCode ? 'solid' : 'outline'" class="self-start" />
+              <UButton type="submit" label="Rejoindre" :loading="joining" :color="joinCode ? 'primary' : 'neutral'" :variant="joinCode ? 'solid' : 'outline'" class="self-start" />
             </div>
           </form>
         </div>

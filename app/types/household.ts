@@ -9,6 +9,8 @@ export type HouseholdMemberDoc = {
   email: string
   photoUrl?: string
   joinedAt: Timestamp
+  /** Code saisi pour rejoindre : les règles le comparent à celui du foyer. Absent chez le créateur. */
+  inviteCode?: string
 }
 
 /**

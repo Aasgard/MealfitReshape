@@ -1,6 +1,7 @@
-import { collection, doc, limit, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Timestamp, type Transaction } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, collection, deleteField, doc, getDoc, limit, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Timestamp, type Transaction } from 'firebase/firestore'
+import { FirebaseError } from 'firebase/app'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
-import type { HouseholdDoc } from '~/types/household'
+import type { HouseholdDoc, InviteCodeDoc } from '~/types/household'
 
 /** Membre d'un foyer. Le propriétaire seul invite, renomme et retire ; les autres peuvent partir. */
 export interface HouseholdMember {
@@ -57,8 +58,6 @@ export function sortedMembers(household: Household): HouseholdMember[] {
 export function successorOf(household: Household): HouseholdMember | null {
   return sortedMembers(household).find(m => m.id !== household.ownerId) ?? null
 }
-
-const today = () => new Date().toISOString().slice(0, 10)
 
 /** Un horodatage serveur pas encore confirmé date de maintenant. */
 const isoOf = (ts: Timestamp | null | undefined) => (ts ? ts.toDate() : new Date()).toISOString()
@@ -127,8 +126,7 @@ export const HOUSEHOLD_SHARED = [
 /**
  * Foyer du compte connecté (un seul au plus) : celui de la collection Firestore `households` dont il est membre,
  * sinon le foyer de démonstration s'il est affiché (état en mémoire, membres fictifs).
- * Créer, renommer, changer de code et supprimer le foyer (dernier membre) écrivent dans Firestore ;
- * rejoindre, retirer un membre et partir à plusieurs ne touchent encore que la démo.
+ * Toutes les actions écrivent dans Firestore, sauf sur la démo, qu'elles ne changent qu'en mémoire.
  * `self` fournit le compte connecté, son uid pour id.
  */
 export function useHousehold() {
@@ -204,11 +202,28 @@ export function useHousehold() {
     demo.value = null
   }
 
-  /** Maquette : tout code bien formé mène au foyer de démonstration, comme simple membre arrivé aujourd'hui. */
-  function join(self: HouseholdMember) {
-    demoView.value = 'member'
-    const member = demoHousehold(self, 'member')
-    demo.value = { ...member, members: member.members.map(m => (m.id === self.id ? { ...m, joinedAt: today() } : m)) }
+  /**
+   * Rejoint le foyer du code (`K7F2QM`) et renvoie son nom. Un non-membre ne peut pas lire le foyer : le code le désigne
+   * (`inviteCodes`), et l'entrée ajoutée le recopie pour que les règles le comparent à celui du foyer.
+   */
+  async function join(code: string, self: HouseholdMember) {
+    const uid = requireUid()
+    const codeSnap = await getDoc(doc(db, 'inviteCodes', code))
+    if (!codeSnap.exists()) throw new Error('Ce code ne correspond à aucun foyer. Vérifiez-le auprès du propriétaire.')
+    const ref = doc(db, 'households', (codeSnap.data() as InviteCodeDoc).householdId)
+    try {
+      await updateDoc(ref, {
+        memberIds: arrayUnion(uid),
+        [`members.${uid}`]: { ...memberEntry(self), inviteCode: code },
+      })
+    } catch (error) {
+      if (error instanceof FirebaseError && error.code === 'permission-denied') {
+        throw new Error('Code refusé : il vient peut-être de changer. Demandez le nouveau au propriétaire.')
+      }
+      throw error
+    }
+    demo.value = null
+    return ((await getDoc(ref)).data() as HouseholdDoc | undefined)?.name ?? ''
   }
 
   async function rename(name: string) {
@@ -237,14 +252,22 @@ export function useHousehold() {
     })
   }
 
-  /** Maquette seulement. */
-  function removeMember(id: string) {
-    if (isDemo.value) demo.value!.members = demo.value!.members.filter(m => m.id !== id)
+  /** Champs qui sortent le membre `id` du foyer. */
+  const withoutMember = (id: string) => ({ memberIds: arrayRemove(id), [`members.${id}`]: deleteField() })
+
+  /** Retire un membre (propriétaire seulement). */
+  async function removeMember(id: string) {
+    if (isDemo.value) {
+      demo.value!.members = demo.value!.members.filter(m => m.id !== id)
+      return
+    }
+    const current = storedHousehold.value
+    if (current) await updateDoc(doc(db, 'households', current.id), withoutMember(id))
   }
 
   /**
    * Si le propriétaire part, le plus ancien des autres membres le devient ; seul, il supprime le foyer et son code.
-   * Partir d'un foyer à plusieurs n'est encore possible que dans la démo, où le foyer disparaît pour ce compte.
+   * Dans la démo, le foyer disparaît pour ce compte.
    */
   async function leave() {
     if (isDemo.value) {
@@ -252,12 +275,17 @@ export function useHousehold() {
       return
     }
     const current = storedHousehold.value
+    const uid = requireUid()
     if (!current) return
-    if (current.memberIds.length > 1) throw new Error('Quitter un foyer à plusieurs n\'est pas encore possible.')
-    const batch = writeBatch(db)
-    batch.delete(doc(db, 'households', current.id))
-    batch.delete(doc(db, 'inviteCodes', current.inviteCode))
-    await batch.commit()
+    if (current.memberIds.length <= 1) {
+      const batch = writeBatch(db)
+      batch.delete(doc(db, 'households', current.id))
+      batch.delete(doc(db, 'inviteCodes', current.inviteCode))
+      await batch.commit()
+      return
+    }
+    const heir = current.ownerId === uid ? successorOf(fromDoc(current, uid)) : null
+    await updateDoc(doc(db, 'households', current.id), { ...withoutMember(uid), ...(heir ? { ownerId: heir.id } : {}) })
   }
 
   return { household, isDemo, loading, demoView, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave }

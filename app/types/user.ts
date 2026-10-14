@@ -67,4 +67,9 @@ export type UserDoc = {
   body?: UserBody
   goal?: UserGoal
   targets?: UserTargets
+  /**
+   * Foyer du compte : les règles de sécurité y vérifient que lui et le créateur d'un récipient en sont membres. Peut être
+   * périmé (compte retiré du foyer) sans rien ouvrir : les règles relisent toujours `memberIds`.
+   */
+  householdId?: string
 }

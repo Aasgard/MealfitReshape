@@ -17,7 +17,10 @@ export interface Container {
   imageUrl?: string
   /** Chemin Storage de la photo, pour la remplacer ou la supprimer. */
   imagePath?: string
-  /** Propriétaire (uid utilisateur) : un récipient est toujours privé. */
+  /**
+   * Créateur (uid utilisateur), qui ne change jamais. Les membres de son foyer voient et modifient le récipient ;
+   * il l'emporte en quittant le foyer.
+   */
   owner: string
   createdAt?: Timestamp
   updatedAt?: Timestamp

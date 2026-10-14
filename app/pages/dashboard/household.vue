@@ -163,9 +163,9 @@ const isLastMember = computed(() => members.value.length === 1)
 const leaveHint = computed(() => {
   if (isLastMember.value) return 'Vous êtes le dernier membre : le foyer sera supprimé, avec ses menus, sa liste de courses et son stock.'
   if (isOwner.value && successor.value) {
-    return `${successor.value.name}, membre depuis ${monthYear(successor.value.joinedAt)}, deviendra propriétaire. Vos recettes et ingrédients privés partent avec vous.`
+    return `${successor.value.name}, membre depuis ${monthYear(successor.value.joinedAt)}, deviendra propriétaire. Vos recettes, ingrédients privés et récipients partent avec vous.`
   }
-  return 'Vos recettes et ingrédients privés partent avec vous. Les menus, la liste de courses et le stock restent au foyer.'
+  return 'Vos recettes, ingrédients privés et récipients partent avec vous. Les menus, la liste de courses et le stock restent au foyer.'
 })
 
 async function onLeave() {
@@ -470,7 +470,7 @@ const PERSONAL = [
             </header>
 
             <ul class="grid gap-px border-t border-default bg-border sm:grid-cols-2">
-              <li v-for="item in HOUSEHOLD_SHARED" :key="item.key" class="flex bg-default">
+              <li v-for="item in HOUSEHOLD_SHARED" :key="item.key" class="flex bg-default sm:odd:last:col-span-2">
                 <NuxtLink
                   :to="item.to"
                   class="group flex flex-1 flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-elevated/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:px-5"
@@ -606,7 +606,7 @@ const PERSONAL = [
       <ConfirmDialog
         v-model:open="confirmRemove"
         :title="`Retirer ${memberToRemove?.name ?? ''} du foyer ?`"
-        description="Ce compte n'aura plus accès aux menus, à la liste de courses ni au stock du foyer. Ses recettes et ingrédients privés quittent le foyer avec lui."
+        description="Ce compte n'aura plus accès aux menus, à la liste de courses ni au stock du foyer. Ses recettes, ingrédients privés et récipients quittent le foyer avec lui."
         confirm-label="Retirer"
         confirm-color="error"
         confirm-icon="i-lucide-user-minus"

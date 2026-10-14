@@ -1,7 +1,8 @@
-import { arrayRemove, arrayUnion, collection, deleteField, doc, getDoc, limit, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch, type Timestamp, type Transaction } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, collection, deleteField, doc, getDoc, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch, type Timestamp, type Transaction } from 'firebase/firestore'
 import { FirebaseError } from 'firebase/app'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { HouseholdDoc, InviteCodeDoc } from '~/types/household'
+import type { UserDoc } from '~/types/user'
 
 /** Membre d'un foyer. Le propriétaire seul invite, renomme et retire ; les autres peuvent partir. */
 export interface HouseholdMember {
@@ -121,6 +122,7 @@ export const HOUSEHOLD_SHARED = [
   { key: 'courses', label: 'Liste de courses', icon: 'i-lucide-shopping-cart', to: '/dashboard/liste-courses', value: 23, unit: 'articles', hint: 'Cochés par celui ou celle qui fait les courses.' },
   { key: 'recettes', label: 'Recettes et ingrédients privés', icon: 'i-lucide-chef-hat', to: '/dashboard/recipes', value: 12, unit: 'recettes', extra: '5 ingrédients', hint: 'Les entrées « Privé » sont visibles par le foyer.' },
   { key: 'stock', label: 'Stock de plats préparés', icon: 'i-lucide-refrigerator', to: '/dashboard/stock', value: 7, unit: 'parts', hint: 'Au frigo et au congélateur, pour tout le monde.' },
+  { key: 'recipients', label: 'Récipients', icon: 'i-lucide-cooking-pot', to: '/dashboard/recipients', value: 6, unit: 'récipients', hint: 'Modifiables par tous, ils partent avec qui les a ajoutés.' },
 ] as const
 
 /**
@@ -149,12 +151,42 @@ export function useHousehold() {
   })
   const isDemo = computed(() => !storedHousehold.value && !!demo.value)
   const loading = computed(() => !user.value || stored.pending.value)
+  /** Id du foyer enregistré, jamais celui de la démo. */
+  const householdId = computed(() => storedHousehold.value?.id ?? null)
+  /** Membres du foyer enregistré, le compte connecté seul sans foyer. */
+  const memberIds = computed(() => storedHousehold.value?.memberIds ?? (user.value ? [user.value.uid] : []))
 
   const requireUid = () => {
     const uid = user.value?.uid
     if (!uid) throw new Error('Vous devez être connecté.')
     return uid
   }
+
+  /**
+   * Dernier `users/{uid}.householdId` vérifié ; `undefined` tant qu'il ne l'est pas. Les règles le lisent pour ouvrir
+   * les récipients des autres membres : une requête sur leurs récipients attend qu'il soit à jour (`shared`).
+   */
+  const pointer = useState<string | null | undefined>('household-pointer', () => undefined)
+  const shared = computed(() => !loading.value && !!householdId.value && pointer.value === householdId.value)
+  const userRef = (uid: string) => doc(db, 'users', uid)
+  const pointerData = (hid: string | null) => ({ householdId: hid ?? deleteField() })
+
+  /**
+   * Rattrape le pointeur : foyer créé ou rejoint avant qu'il existe, ou compte retiré du foyer par son propriétaire
+   * (qui ne peut pas écrire le document `users` d'un autre).
+   */
+  watch([loading, householdId], async () => {
+    const uid = user.value?.uid
+    const hid = householdId.value
+    if (loading.value || !uid || pointer.value === hid) return
+    try {
+      const current = ((await getDoc(userRef(uid))).data() as UserDoc | undefined)?.householdId ?? null
+      if (current !== hid) await setDoc(userRef(uid), pointerData(hid), { merge: true })
+      pointer.value = hid
+    } catch (error) {
+      console.error('Foyer non enregistré sur le compte :', error)
+    }
+  }, { immediate: true })
 
   /**
    * Réserve dans `tx` un code libre (`inviteCodes/{code}`) pour le foyer `householdId` et le renvoie.
@@ -198,7 +230,9 @@ export function useHousehold() {
         members: { [uid]: memberEntry(self) },
         createdAt: serverTimestamp(),
       })
+      tx.set(userRef(uid), pointerData(ref.id), { merge: true })
     })
+    pointer.value = ref.id
     demo.value = null
   }
 
@@ -211,17 +245,21 @@ export function useHousehold() {
     const codeSnap = await getDoc(doc(db, 'inviteCodes', code))
     if (!codeSnap.exists()) throw new Error('Ce code ne correspond à aucun foyer. Vérifiez-le auprès du propriétaire.')
     const ref = doc(db, 'households', (codeSnap.data() as InviteCodeDoc).householdId)
+    const batch = writeBatch(db)
+    batch.update(ref, {
+      memberIds: arrayUnion(uid),
+      [`members.${uid}`]: { ...memberEntry(self), inviteCode: code },
+    })
+    batch.set(userRef(uid), pointerData(ref.id), { merge: true })
     try {
-      await updateDoc(ref, {
-        memberIds: arrayUnion(uid),
-        [`members.${uid}`]: { ...memberEntry(self), inviteCode: code },
-      })
+      await batch.commit()
     } catch (error) {
       if (error instanceof FirebaseError && error.code === 'permission-denied') {
         throw new Error('Code refusé : il vient peut-être de changer. Demandez le nouveau au propriétaire.')
       }
       throw error
     }
+    pointer.value = ref.id
     demo.value = null
     return ((await getDoc(ref)).data() as HouseholdDoc | undefined)?.name ?? ''
   }
@@ -255,7 +293,7 @@ export function useHousehold() {
   /** Champs qui sortent le membre `id` du foyer. */
   const withoutMember = (id: string) => ({ memberIds: arrayRemove(id), [`members.${id}`]: deleteField() })
 
-  /** Retire un membre (propriétaire seulement). */
+  /** Retire un membre (propriétaire seulement) ; son pointeur `users/{uid}.householdId` se rattrape à son retour. */
   async function removeMember(id: string) {
     if (isDemo.value) {
       demo.value!.members = demo.value!.members.filter(m => m.id !== id)
@@ -277,16 +315,18 @@ export function useHousehold() {
     const current = storedHousehold.value
     const uid = requireUid()
     if (!current) return
+    const batch = writeBatch(db)
+    batch.set(userRef(uid), pointerData(null), { merge: true })
     if (current.memberIds.length <= 1) {
-      const batch = writeBatch(db)
       batch.delete(doc(db, 'households', current.id))
       batch.delete(doc(db, 'inviteCodes', current.inviteCode))
-      await batch.commit()
-      return
+    } else {
+      const heir = current.ownerId === uid ? successorOf(fromDoc(current, uid)) : null
+      batch.update(doc(db, 'households', current.id), { ...withoutMember(uid), ...(heir ? { ownerId: heir.id } : {}) })
     }
-    const heir = current.ownerId === uid ? successorOf(fromDoc(current, uid)) : null
-    await updateDoc(doc(db, 'households', current.id), { ...withoutMember(uid), ...(heir ? { ownerId: heir.id } : {}) })
+    await batch.commit()
+    pointer.value = null
   }
 
-  return { household, isDemo, loading, demoView, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave }
+  return { household, householdId, memberIds, shared, isDemo, loading, demoView, setDemo, setDemoView, create, join, rename, regenerateCode, removeMember, leave }
 }

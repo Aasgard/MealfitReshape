@@ -13,15 +13,20 @@ const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
 const photos = useUserPhotos('containers')
+const { memberIds, shared, loading: householdLoading } = useHousehold()
 
-/** Récipients de l'utilisateur, toujours privés ; tri côté client pour éviter un index composite owner + label. */
+/**
+ * Récipients des membres du foyer (de l'utilisateur seul sans foyer) : ils suivent leur créateur, qui les emporte en
+ * partant. Ceux des autres attendent que les règles puissent les ouvrir (`shared`, voir `useHousehold`).
+ * Tri côté client pour éviter un index composite.
+ */
 const containers = useCollection<Container>(() => {
   const uid = user.value?.uid
-  if (!uid) return null
-  return query(collection(db, 'containers'), where('owner', '==', uid))
+  if (!uid || householdLoading.value) return null
+  return query(collection(db, 'containers'), where('owner', 'in', shared.value ? memberIds.value : [uid]))
 })
 
-const containersLoading = computed(() => !user.value || containers.pending.value)
+const containersLoading = computed(() => householdLoading.value || containers.pending.value)
 
 /** La recherche n'aide qu'à partir d'une liste qui ne tient plus d'un coup d'œil. */
 const SEARCH_THRESHOLD = 8

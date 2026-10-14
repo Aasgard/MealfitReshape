@@ -7,6 +7,7 @@ import { parsePositiveNumber } from '~/utils/numberInput'
  * Slideover d'ajout/modification d'un récipient — un seul composant pour les deux modes.
  * `container` nul = création ; non nul = édition (le formulaire est pré-rempli à l'ouverture).
  * La photo est réduite dans le navigateur, envoyée dans Storage, puis le document Firestore est écrit.
+ * Modifié par un autre membre du foyer, un récipient garde son créateur (`owner`).
  */
 const props = defineProps<{
   container: Container | null

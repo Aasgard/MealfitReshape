@@ -113,6 +113,47 @@ export const useShoppingList = () => {
     return batch.commit()
   }
 
+  /**
+   * Ajoute le complément d'un ingrédient (« Vérifier un article ») : un ajout manuel, à acheter, rangé dans le rayon de
+   * l'ingrédient. S'il y a déjà un complément à acheter, il grossit (échéance la plus proche, urgent s'il l'un l'est).
+   */
+  function addComplement(
+    ingredient: { id: string, label: string, categoryId?: string },
+    amount: { grams: number, milliliters: number },
+    options: { quantity: string, neededBy: string, urgent: boolean },
+  ) {
+    const uid = requireUid()
+    const existing = items.value.find(item => item.status === 'toBuy' && item.complementOf?.ingredientId === ingredient.id)
+    if (existing?.complementOf) {
+      const neededBy = existing.neededBy && existing.neededBy < options.neededBy ? existing.neededBy : options.neededBy
+      return updateDoc(doc(shoppingListRef, existing.id), {
+        complementOf: {
+          ingredientId: ingredient.id,
+          grams: existing.complementOf.grams + amount.grams,
+          milliliters: existing.complementOf.milliliters + amount.milliliters,
+        },
+        quantity: options.quantity,
+        neededBy,
+        ...(options.urgent ? { urgent: true } : {}),
+        updatedAt: serverTimestamp(),
+      })
+    }
+    const batch = writeBatch(db)
+    batch.set(doc(shoppingListRef), {
+      user: uid,
+      label: `${ingredient.label} (complément)`,
+      status: 'toBuy',
+      ...(ingredient.categoryId ? { categoryId: ingredient.categoryId } : {}),
+      quantity: options.quantity,
+      neededBy: options.neededBy,
+      ...(options.urgent ? { urgent: true } : {}),
+      complementOf: { ingredientId: ingredient.id, ...amount },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return batch.commit()
+  }
+
   const setStatus = (item: ShoppingItem, status: ShoppingItemStatus) =>
     updateDoc(doc(shoppingListRef, item.id), { status, updatedAt: serverTimestamp() })
 
@@ -195,6 +236,7 @@ export const useShoppingList = () => {
     applyInclusions,
     moveInclusion,
     addManual,
+    addComplement,
     setStatus,
     setUrgent,
     setNeededBy,

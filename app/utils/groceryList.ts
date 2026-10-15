@@ -76,7 +76,8 @@ export const compareGroceryLines = (a: GroceryLine, b: GroceryLine) =>
 
 const shortDay = (date: Date) => format(date, 'EEE d', { locale: fr })
 
-function dayLabel(date: Date, today: Date) {
+/** "aujourd'hui", "demain", sinon "mar. 14". */
+export function groceryDayLabel(date: Date, today: Date) {
   const offset = differenceInCalendarDays(date, today)
   if (offset === 0) return 'aujourd\'hui'
   if (offset === 1) return 'demain'
@@ -123,7 +124,7 @@ export function groceryLineFromItem(
     const offset = differenceInCalendarDays(date, today)
     return {
       date: need.date,
-      dayLabel: dayLabel(date, today),
+      dayLabel: groceryDayLabel(date, today),
       quantityLabel: needQuantityLabel(need, item.gramsPerPiece),
       sources: need.sources,
       isPast: offset < 0,
@@ -137,7 +138,7 @@ export function groceryLineFromItem(
     const offset = differenceInCalendarDays(date, today)
     needs.push({
       date: item.neededBy,
-      dayLabel: dayLabel(date, today),
+      dayLabel: groceryDayLabel(date, today),
       quantityLabel: item.quantity ?? '',
       sources: [offset < 0 ? 'En retard' : 'Date souhaitée'],
       isPast: false,

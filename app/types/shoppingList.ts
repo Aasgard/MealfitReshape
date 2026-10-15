@@ -23,6 +23,13 @@ export interface ShoppingContribution {
   label: string
 }
 
+/** Ce qu'un complément ajoute d'un ingrédient (en grammes, ou en ml faute de densité). */
+export interface ShoppingComplement {
+  ingredientId: string
+  grams: number
+  milliliters: number
+}
+
 /**
  * Un article de la collection Firestore `shoppingList`, un document par article.
  * Ajouté à la main, ou depuis les menus : il porte alors ses apports, dont se déduisent quantités et besoins par jour.
@@ -49,6 +56,11 @@ export interface ShoppingItem {
   urgent?: boolean
   /** Ajout manuel : jour où l'article est nécessaire, `yyyy-MM-dd`. Échéance, pas repas : passée, elle reste due. */
   neededBy?: string
+  /**
+   * Complément d'un ingrédient (« Vérifier un article ») : ajout manuel, hors du calcul des menus, qui couvre ce qui
+   * manquera. Sa quantité compte comme déjà à acheter lors d'une prochaine vérification.
+   */
+  complementOf?: ShoppingComplement
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

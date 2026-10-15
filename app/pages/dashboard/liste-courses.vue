@@ -70,6 +70,10 @@ useSwipe(swipeArea, {
   },
 })
 
+function openStockCheck() {
+  list.isStockCheckOpen = true
+}
+
 const clearOpen = ref(false)
 function openClear() {
   clearOpen.value = true
@@ -137,6 +141,16 @@ async function onConfirmFinish() {
         </template>
         <template #right>
           <UButton
+            icon="i-lucide-scale"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            aria-label="Vérifier un article"
+            @click="openStockCheck"
+          >
+            <span class="hidden sm:inline">Vérifier un article</span>
+          </UButton>
+          <UButton
             v-if="list.mode === 'prepare'"
             icon="i-lucide-rotate-ccw"
             color="neutral"
@@ -176,6 +190,8 @@ async function onConfirmFinish() {
   </UDashboardPanel>
 
   <GroceryAddItemModal v-model:open="list.isAddItemOpen" />
+
+  <GroceryStockCheck v-model:open="list.isStockCheckOpen" />
 
   <ConfirmDialog
     v-model:open="clearOpen"

@@ -202,15 +202,61 @@ export function useGroceryList() {
     return run
   }
 
+  /** Ingrédients qu'apportent des repas ajoutés à la liste. */
+  function draftIngredientIds(drafts: InclusionDraft[]) {
+    const ids = new Set<string>()
+    for (const draft of drafts) {
+      if (draft.ingredientId) ids.add(draft.ingredientId)
+      const recipe = draft.recipeId ? recipesById.value.get(draft.recipeId) : undefined
+      for (const line of recipe?.ingredients ?? []) {
+        if (line.ingredientRef) ids.add(line.ingredientRef.id)
+      }
+    }
+    return ids
+  }
+
+  /**
+   * Un repas coché apporte un ingrédient qui a déjà un complément à acheter (« Vérifier un article ») : le complément
+   * risque de faire doublon, on propose de le retirer.
+   */
+  function offerComplementRemoval(drafts: InclusionDraft[]) {
+    const ids = draftIngredientIds(drafts)
+    const complements = shoppingList.items.value.filter(item =>
+      item.status === 'toBuy' && item.complementOf && ids.has(item.complementOf.ingredientId))
+    for (const item of complements) {
+      toast.add({
+        title: `${item.label} : toujours utile ?`,
+        description: 'Ce repas ajoute déjà cet ingrédient à la liste. Le complément risque de faire doublon.',
+        color: 'neutral',
+        icon: 'i-lucide-scale',
+        duration: 10000,
+        actions: [{
+          label: 'Retirer le complément',
+          color: 'neutral',
+          variant: 'outline',
+          onClick: () => {
+            shoppingList.removeManual(item).catch(fail(`« ${item.label} » n'a pas pu être retiré`))
+          },
+        }],
+      })
+    }
+  }
+
   function plan(action: string, change: () => { upserts: InclusionDraft[], removals: ShoppingMealInclusion[] }) {
     if (!isCatalogReady.value) return
     void enqueue(async () => {
       try {
         const { upserts, removals } = change()
         if (!upserts.length && !removals.length) return
+        // Repas nouvellement inclus, ou recette dont les parts augmentent : la liste en demande davantage.
+        const added = upserts.filter((draft) => {
+          const previous = inclusionByMealId.value.get(draft.mealId)
+          return !previous || (draft.parts ?? 0) > (previous.parts ?? 0) + 1e-6
+        })
         const write = shoppingList.applyInclusions(upserts, removals, catalog())
         write.then((skipped) => {
           if (skipped.length) toast.add({ title: 'Non compté', description: `${skipped.join(', ')}.`, color: 'warning', icon: 'i-lucide-info' })
+          if (added.length) offerComplementRemoval(added)
         }).catch(fail(action))
         await Promise.race([write.catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))])
       }
@@ -317,6 +363,18 @@ export function useGroceryList() {
   /** Modale d'ajout manuel, ouverte depuis les deux modes. */
   const isAddItemOpen = ref(false)
 
+  /** Panneau « Vérifier un article », ouvert depuis la barre d'outils des deux modes. */
+  const isStockCheckOpen = ref(false)
+
+  /** Ajoute ce qui manquera d'un ingrédient (voir `addComplement`), dans la file des gestes. */
+  function addComplement(...args: Parameters<typeof shoppingList.addComplement>) {
+    return enqueue(async () => {
+      const write = shoppingList.addComplement(...args)
+      write.catch(fail(`Le complément de « ${args[0].label} » n'a pas pu être ajouté`))
+      await Promise.race([write.catch(() => {}), new Promise(resolve => setTimeout(resolve, 400))])
+    })
+  }
+
   /** `neededBy` : jour où l'article est nécessaire (`yyyy-MM-dd`), vide si aucun. */
   function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '', urgent = false, neededBy = '') {
     const trimmed = label.trim()
@@ -417,6 +475,12 @@ export function useGroceryList() {
     toggleAtHome,
     toggleInCart,
     isAddItemOpen,
+    isStockCheckOpen,
+    addComplement,
+    today,
+    rangeDays,
+    items: shoppingList.items,
+    inclusionByMealId,
     addManual,
     setQuantity,
     toggleUrgent,

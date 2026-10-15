@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { HouseholdMember } from '~/composables/useHousehold'
 import type { DishStorage, PreparedDish } from '~/types/preparedDish'
 import { DISH_STORAGES, formatDishDay, formatParts, isDishDepleted, isDishPlanned, isDishStale, STOCK_PARTS_STEP } from '~/utils/preparedDishes'
 
@@ -13,6 +14,8 @@ const props = defineProps<{
   recipePersons?: number
   /** Parts des repas des menus cuisinés dans la même fournée que ce surplus. */
   menuParts?: number
+  /** Membre du foyer qui a ajouté le plat, quand ce n'est pas le compte connecté. */
+  addedBy?: HouseholdMember
 }>()
 
 const emit = defineEmits<{
@@ -26,8 +29,11 @@ const isPlanned = computed(() => isDishPlanned(props.dish, props.todayKey))
 const isDepleted = computed(() => isDishDepleted(props.dish))
 const isStale = computed(() => !isDepleted.value && isDishStale(props.dish, props.todayKey))
 
-/** Parts cuisinées en une fois avec ce surplus prévu (menus + stock) ; `null` une fois cuisiné, ou hors fournée. */
-const batchTotal = computed(() => isPlanned.value && props.dish.batch
+/**
+ * Parts cuisinées en une fois avec ce surplus prévu (menus + stock) ; `null` une fois cuisiné, hors fournée, ou pour la
+ * fournée d'un autre membre (ses menus ne sont pas connus).
+ */
+const batchTotal = computed(() => isPlanned.value && props.dish.batch && !props.addedBy
   ? (props.menuParts ?? 0) + props.dish.batch.surplusParts
   : null)
 
@@ -74,6 +80,9 @@ const actions = computed<DropdownMenuItem[][]>(() => [
         <div class="min-w-0 flex-1">
           <p class="flex min-w-0 items-center gap-2">
             <span class="truncate font-semibold" :class="isDepleted ? 'text-muted' : 'text-highlighted'">{{ dish.label }}</span>
+            <UTooltip v-if="addedBy" :text="`Ajouté par ${addedBy.name}`">
+              <UAvatar :src="addedBy.photoUrl" :alt="addedBy.name" size="3xs" class="shrink-0" />
+            </UTooltip>
             <UBadge v-if="isPlanned" label="Prévu" icon="i-lucide-calendar-clock" color="info" variant="subtle" size="sm" class="shrink-0" />
             <UBadge v-else-if="isDepleted" label="Épuisé" color="neutral" variant="subtle" size="sm" class="shrink-0" />
             <UBadge v-else-if="isStale" label="À consommer vite" icon="i-lucide-clock-alert" color="warning" variant="subtle" size="sm" class="shrink-0" />

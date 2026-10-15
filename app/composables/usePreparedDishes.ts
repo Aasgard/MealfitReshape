@@ -30,19 +30,28 @@ export type BatchSurplusInput = DishBatchSurplus & {
 export type StockMealChange = { source: MealSource, day: string }
 
 /**
- * Stock de plats préparés de l'utilisateur connecté (collection Firestore `preparedDishes`, toujours privée) et
- * écritures associées. Les parts placées dans un repas sont retirées du plat dans la même écriture que le repas
- * (voir `useMeals`) ; supprimer ou réduire le repas les rend.
+ * Stock de plats préparés du foyer (collection Firestore `preparedDishes`) et écritures associées. Chaque membre prend
+ * et range dans les plats de tous ; un plat suit son créateur (`owner`), qui l'emporte en quittant le foyer. Les parts
+ * placées dans un repas sont retirées du plat dans la même écriture que le repas (voir `useMeals`) ; supprimer ou
+ * réduire le repas les rend.
  */
 export const usePreparedDishes = () => {
   const db = useFirestore()
   const user = useCurrentUser()
+  const { memberIds, shared, loading: householdLoading } = useHousehold()
 
+  /** Plats des membres du foyer ; ceux des autres attendent que les règles puissent les ouvrir (`shared`). */
   const dishes = useCollection<PreparedDish>(() => {
     const uid = user.value?.uid
-    if (!uid) return null
-    return query(collection(db, 'preparedDishes'), where('owner', '==', uid))
+    if (!uid || householdLoading.value) return null
+    return query(collection(db, 'preparedDishes'), where('owner', 'in', shared.value ? memberIds.value : [uid]))
   })
+
+  /**
+   * Plats ajoutés par le compte connecté : seuls leurs surplus de fournée comptent dans son « Cuisiner » et sa liste de
+   * courses (celui d'un autre membre se cuisine et s'achète chez lui).
+   */
+  const ownDishes = computed(() => dishes.value.filter(dish => dish.owner === user.value?.uid))
 
   const dishesById = computed(() => new Map(dishes.value.map(dish => [dish.id, dish])))
 
@@ -216,7 +225,7 @@ export const usePreparedDishes = () => {
     const uid = requireUid()
     await dishes.promise.value
     const now = Timestamp.now()
-    const existing = findBatchSurplus(dishes.value, meal.recipeId, input.cookDay)
+    const existing = findBatchSurplus(ownDishes.value, meal.recipeId, input.cookDay)
     const batch = writeBatch(db)
     batch.delete(doc(db, 'meals', meal.id))
 
@@ -247,5 +256,5 @@ export const usePreparedDishes = () => {
     return ref.id
   }
 
-  return { dishes, dishesById, sendMealToStock, stageStockChanges, stageStockMove, saveDish, setDishParts, setDishStorage, deleteDish, saveBatchSurplus }
+  return { dishes, ownDishes, dishesById, sendMealToStock, stageStockChanges, stageStockMove, saveDish, setDishParts, setDishStorage, deleteDish, saveBatchSurplus }
 }

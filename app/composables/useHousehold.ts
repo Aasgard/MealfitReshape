@@ -121,7 +121,7 @@ export const HOUSEHOLD_SHARED = [
   { key: 'menus', label: 'Menus de la semaine', icon: 'i-lucide-calendar-days', to: '/dashboard/menus', value: 19, unit: 'repas', hint: 'Un seul planning, modifiable par tous.' },
   { key: 'courses', label: 'Liste de courses', icon: 'i-lucide-shopping-cart', to: '/dashboard/liste-courses', value: 23, unit: 'articles', hint: 'Cochés par celui ou celle qui fait les courses.' },
   { key: 'recettes', label: 'Recettes et ingrédients privés', icon: 'i-lucide-chef-hat', to: '/dashboard/recipes', value: 12, unit: 'recettes', extra: '5 ingrédients', hint: 'Les entrées « Privé » sont visibles par le foyer.' },
-  { key: 'stock', label: 'Stock de plats préparés', icon: 'i-lucide-refrigerator', to: '/dashboard/stock', value: 7, unit: 'parts', hint: 'Au frigo et au congélateur, pour tout le monde.' },
+  { key: 'stock', label: 'Stock de plats préparés', icon: 'i-lucide-refrigerator', to: '/dashboard/stock', value: 7, unit: 'parts', hint: 'Chacun y pioche, ils partent avec qui les a ajoutés.' },
   { key: 'recipients', label: 'Récipients', icon: 'i-lucide-cooking-pot', to: '/dashboard/recipients', value: 6, unit: 'récipients', hint: 'Modifiables par tous, ils partent avec qui les a ajoutés.' },
 ] as const
 

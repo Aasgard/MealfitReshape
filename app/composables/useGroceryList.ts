@@ -112,9 +112,9 @@ export function useGroceryList() {
   })
 
   /** Repas de la période, sans ceux pris dans le stock (rien à acheter), avec les surplus prévus des fournées. */
-  const { dishes } = usePreparedDishes()
+  const { ownDishes } = usePreparedDishes()
   const rangeMeals = computed(() => (range.value
-    ? [...meals.value.filter(isPlannedMeal), ...surplusMeals(dishes.value, rangeDays.value)]
+    ? [...meals.value.filter(isPlannedMeal), ...surplusMeals(ownDishes.value, rangeDays.value)]
     : []))
   const inclusionByMealId = computed(() => new Map(shoppingList.inclusions.value.map(inclusion => [inclusion.mealId, inclusion])))
 

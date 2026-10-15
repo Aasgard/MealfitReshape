@@ -13,7 +13,7 @@ import { COOKING_DAYS, recipesToCook } from '~/utils/recipesToCook'
 export const useSendToStock = (history: () => Meal[]) => {
   const toast = useToast()
   const { recipesById, ingredientsById } = useFoodCatalog()
-  const { dishes, sendMealToStock } = usePreparedDishes()
+  const { ownDishes, sendMealToStock } = usePreparedDishes()
   const shoppingList = useShoppingList()
 
   const meal = ref<(Meal & RecipeMealSource) | null>(null)
@@ -33,7 +33,7 @@ export const useSendToStock = (history: () => Meal[]) => {
   const isCooked = computed(() => cookDay.value <= format(new Date(), 'yyyy-MM-dd'))
   const label = computed(() => meal.value ? recipesById.value.get(meal.value.recipeId)?.title ?? '' : '')
   /** Surplus déjà prévu pour la fournée : les parts le rejoignent. */
-  const surplus = computed(() => meal.value ? findBatchSurplus(dishes.value, meal.value.recipeId, cookDay.value) ?? null : null)
+  const surplus = computed(() => meal.value ? findBatchSurplus(ownDishes.value, meal.value.recipeId, cookDay.value) ?? null : null)
 
   /** Seul un repas d'une recette se met au stock. */
   const open = (target: Meal | undefined) => {

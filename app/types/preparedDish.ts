@@ -21,7 +21,10 @@ export interface DishBatchSurplus {
  */
 export interface PreparedDish {
   id: string
-  /** Propriétaire (uid utilisateur) : le stock est privé, en attendant un stock de foyer. */
+  /**
+   * Créateur (uid utilisateur), qui ne change jamais. Les membres de son foyer voient le plat, y prennent des parts et le
+   * modifient ; il l'emporte en quittant le foyer.
+   */
   owner: string
   label: string
   /** Recette d'origine, pour sa fiche ; absente pour un plat hors recette. */

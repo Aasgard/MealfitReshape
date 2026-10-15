@@ -62,11 +62,11 @@ watch(meals.error, (error) => {
 const isLoading = computed(() => meals.pending.value)
 
 /** Repas de la période, sans ceux pris dans le stock (rien à acheter), avec les surplus prévus des fournées. */
-const { dishes } = usePreparedDishes()
+const { ownDishes } = usePreparedDishes()
 const rangeMeals = computed(() => {
   if (!range.value) return []
   const days = { start: format(range.value.start, 'yyyy-MM-dd'), end: format(range.value.end, 'yyyy-MM-dd') }
-  return [...meals.value.filter(isPlannedMeal), ...surplusMeals(dishes.value, days)]
+  return [...meals.value.filter(isPlannedMeal), ...surplusMeals(ownDishes.value, days)]
 })
 
 const mealRows = computed(() => groupPlannedMeals(rangeMeals.value, props.recipesById, props.ingredientsById))

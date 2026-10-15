@@ -83,9 +83,22 @@ const selectedRecipe = computed(() => props.recipes.find(r => r.id === recipeId.
 const recipePerPart = (recipe: Recipe): IngredientMacros =>
   macrosForRecipe(recipe.ingredients, props.ingredientsById, recipe.persons && recipe.persons > 0 ? recipe.persons : 1)
 
-const recipeOptions = computed(() => props.recipes
-  .map(r => ({ id: r.id, label: r.title, kcalLabel: `${Math.round(recipePerPart(r).calories)} kcal / part` }))
-  .sort((a, b) => a.label.localeCompare(b.label, 'fr')))
+/**
+ * Recette d'un plat ajouté par un autre membre du foyer, qu'on ne peut pas lire : proposée sous le nom du plat, avec ses
+ * macros figées, pour pouvoir le modifier sans en changer la recette.
+ */
+const unreadableRecipe = computed(() => {
+  const dish = props.dish
+  return dish?.recipeId && !props.recipes.some(r => r.id === dish.recipeId) ? dish : null
+})
+const isUnreadableRecipe = computed(() => !!unreadableRecipe.value && recipeId.value === unreadableRecipe.value.recipeId)
+
+const recipeOptions = computed(() => [
+  ...props.recipes.map(r => ({ id: r.id, label: r.title, kcalLabel: `${Math.round(recipePerPart(r).calories)} kcal / part` })),
+  ...(unreadableRecipe.value
+    ? [{ id: unreadableRecipe.value.recipeId!, label: unreadableRecipe.value.label, kcalLabel: `${Math.round(unreadableRecipe.value.perPart.calories)} kcal / part` }]
+    : []),
+].sort((a, b) => a.label.localeCompare(b.label, 'fr')))
 
 /**
  * Macros d'une part à enregistrer. Un plat déjà rangé garde celles figées à son entrée au stock tant que sa recette ne
@@ -93,6 +106,7 @@ const recipeOptions = computed(() => props.recipes
  */
 const perPart = computed<IngredientMacros | null>(() => {
   if (kind.value === 'recipe') {
+    if (isUnreadableRecipe.value) return props.dish!.perPart
     if (!selectedRecipe.value) return null
     if (props.dish?.recipeId === selectedRecipe.value.id) return props.dish.perPart
     return recipePerPart(selectedRecipe.value)
@@ -146,7 +160,8 @@ const stepParts = (direction: 1 | -1) => {
 async function handleSubmit() {
   submitted.value = true
   const macros = perPart.value
-  const dishLabel = kind.value === 'recipe' ? selectedRecipe.value?.title : label.value.trim()
+  const recipeTitle = isUnreadableRecipe.value ? props.dish!.label : selectedRecipe.value?.title
+  const dishLabel = kind.value === 'recipe' ? recipeTitle : label.value.trim()
   if (!macros || !dishLabel || dateError.value) return
 
   saving.value = true

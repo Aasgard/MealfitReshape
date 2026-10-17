@@ -39,7 +39,9 @@ const batchTotal = computed(() => isPlanned.value && props.dish.batch && !props.
 
 const dayLine = computed(() => isPlanned.value
   ? `À cuisiner le ${formatDishDay(props.dish.preparedOn)}`
-  : `Préparé le ${formatDishDay(props.dish.preparedOn)}`)
+  : props.dish.thawedOn
+    ? `Préparé le ${formatDishDay(props.dish.preparedOn)} · décongelé le ${formatDishDay(props.dish.thawedOn)}`
+    : `Préparé le ${formatDishDay(props.dish.preparedOn)}`)
 
 const kcalPerPart = computed(() => Math.round(props.dish.perPart.calories))
 

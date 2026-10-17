@@ -32,6 +32,8 @@ export type TodayCookingDay = {
   /** Jour abrégé. Ex : "Auj.", "Dem.", "Ven.". */
   label: string
   portions: TodayCookingPortion[]
+  /** "Décongeler" : jour déjà arrivé alors que ses parts sont encore au congélateur. */
+  isLate?: boolean
 }
 
 /** Une recette de la liste "Cuisiner" de l'accueil, à préparer en une fois. */
@@ -50,4 +52,30 @@ export type TodayCookingRecipe = {
   persons?: number
   /** Parts cuisinées en plus pour le stock, et où elles seront rangées. */
   surplus?: { parts: number, storage: DishStorage }
+}
+
+/** Un repas d'un plat à sortir du congélateur, tel que listé dans la confirmation. */
+export type TodayThawMeal = {
+  mealId: string
+  /** Ex : "Demain · Déjeuner". */
+  label: string
+  parts: number
+  /** Membre du foyer à qui est ce repas ; absent pour le compte connecté. */
+  memberName?: string
+}
+
+/** Un plat de la liste "Décongeler" de l'accueil : ses repas encore au congélateur, à sortir la veille. */
+export type TodayThawDish = {
+  dishId: string
+  title: string
+  /** Recette d'origine, pour ouvrir sa fiche ; photo affichée à la place de l'icône. */
+  recipeId?: string
+  imageUrl?: string
+  /** Répartition des parts par jour puis par repas, écrite comme dans "Cuisiner". */
+  days: TodayCookingDay[]
+  /** Somme des parts de ces repas. */
+  parts: number
+  /** Un repas du jour même est encore au congélateur : il aurait dû sortir la veille. */
+  isLate: boolean
+  meals: TodayThawMeal[]
 }

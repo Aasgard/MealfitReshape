@@ -256,5 +256,46 @@ export const usePreparedDishes = () => {
     return ref.id
   }
 
-  return { dishes, ownDishes, dishesById, sendMealToStock, stageStockChanges, stageStockMove, saveDish, setDishParts, setDishStorage, deleteDish, saveBatchSurplus }
+  /**
+   * Sort un plat du congélateur (« Décongeler » de l'accueil) : les repas `meals`, de n'importe quel membre du foyer,
+   * passent au frigo ; `extraParts` parts encore au congélateur sortent avec eux et forment un nouveau plat au frigo,
+   * décongelé aujourd'hui (même libellé, mêmes macros, même jour de préparation). Une seule écriture.
+   */
+  const thawMeals = async (meals: Meal[], extraParts: number, dishId: string) => {
+    const uid = requireUid()
+    const todayKey = dayKeyOf(new Date())
+    const now = Timestamp.now()
+    const batch = writeBatch(db)
+    for (const meal of meals) batch.update(doc(db, 'meals', meal.id), { storage: 'FRIDGE', thawedOn: todayKey })
+
+    if (extraParts > PARTS_EPSILON) {
+      await dishes.promise.value
+      const dish = dishesById.value.get(dishId)
+      if (!dish) throw new Error('Ce plat n\'est plus dans le stock')
+      if (extraParts > dish.parts + PARTS_EPSILON) throw new Error(`Il ne reste que ${formatParts(dish.parts)} de « ${dish.label} » au congélateur`)
+      const remaining = Math.max(0, dish.parts - extraParts)
+      batch.update(doc(db, 'preparedDishes', dish.id), {
+        parts: increment(-extraParts),
+        updatedAt: now,
+        // Vidé : il reste affiché jusqu'à ce soir, comme un plat remis à 0 à la main.
+        ...(remaining < PARTS_EPSILON && (!dish.lastMealOn || dish.lastMealOn < todayKey) ? { lastMealOn: todayKey } : {}),
+      })
+      batch.set(doc(collection(db, 'preparedDishes')), {
+        owner: uid,
+        label: dish.label,
+        perPart: dish.perPart,
+        parts: extraParts,
+        storage: 'FRIDGE',
+        preparedOn: dish.preparedOn,
+        thawedOn: todayKey,
+        ...(dish.recipeId ? { recipeId: dish.recipeId } : {}),
+        ...(dish.comment ? { comment: dish.comment } : {}),
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    await batch.commit()
+  }
+
+  return { dishes, ownDishes, dishesById, sendMealToStock, thawMeals, stageStockChanges, stageStockMove, saveDish, setDishParts, setDishStorage, deleteDish, saveBatchSurplus }
 }

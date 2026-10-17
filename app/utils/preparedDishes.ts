@@ -44,8 +44,15 @@ export const isDishDepleted = (dish: Pick<PreparedDish, 'parts'>) => dish.parts 
 export const isDishShown = (dish: PreparedDish, todayKey: string) =>
   !isDishDepleted(dish) || (dish.lastMealOn ?? dish.preparedOn) >= todayKey
 
-/** Rangé depuis plus longtemps que ce que son rangement conseille (frigo : 3 jours, congélateur : 3 mois). */
+/** Au-delà de ce nombre de jours depuis sa sortie du congélateur, un plat décongelé est « à consommer vite ». */
+export const THAWED_STALE_AFTER_DAYS = 1
+
+/**
+ * Rangé depuis plus longtemps que ce que son rangement conseille (frigo : 3 jours, congélateur : 3 mois) ; décongelé,
+ * sorti du congélateur depuis plus d'un jour.
+ */
 export function isDishStale(dish: PreparedDish, todayKey: string) {
+  if (dish.thawedOn) return differenceInCalendarDays(parseISO(todayKey), parseISO(dish.thawedOn)) > THAWED_STALE_AFTER_DAYS
   const limit = dishStorageOf(dish.storage).staleAfterDays
   if (limit == null || isDishPlanned(dish, todayKey)) return false
   return differenceInCalendarDays(parseISO(todayKey), parseISO(dish.preparedOn)) > limit

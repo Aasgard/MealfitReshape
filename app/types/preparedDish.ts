@@ -36,6 +36,8 @@ export interface PreparedDish {
   storage: DishStorage
   /** Jour de préparation, `yyyy-MM-dd` ; plus tard qu'aujourd'hui, le plat est prévu (pas encore disponible). */
   preparedOn: string
+  /** Jour où le plat est sorti du congélateur, `yyyy-MM-dd` : sa fraîcheur se compte depuis ce jour-là. */
+  thawedOn?: string
   comment?: string
   /** Présent quand le plat vient du surplus prévu d'une fournée. */
   batch?: DishBatchSurplus

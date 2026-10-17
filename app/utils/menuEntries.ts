@@ -125,6 +125,7 @@ export function mealSourceOf(meal: Meal): MealSource {
         label: meal.label,
         perPart: meal.perPart,
         storage: meal.storage,
+        ...(meal.thawedOn ? { thawedOn: meal.thawedOn } : {}),
         ...(meal.recipeId ? { recipeId: meal.recipeId } : {}),
         ...(meal.comment ? { comment: meal.comment } : {}),
       }

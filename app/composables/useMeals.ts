@@ -91,10 +91,15 @@ export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
    * ordre dans la case. Le document est réécrit en entier : passer d'une recette à un aliment ne doit pas laisser traîner
    * `recipeId` / `value`. Les parts du stock suivent : celles de l'ancien contenu sont rendues, celles du nouveau prises.
    */
-  const updateMealSource = async (meal: Meal, source: MealSource) => {
+  const updateMealSource = async (meal: Meal, edited: MealSource) => {
     const day = dayKeyOf(meal.date.toDate())
+    const previous = mealSourceOf(meal)
+    // Mêmes parts d'un plat déjà sorti du congélateur : elles restent au frigo.
+    const source = previous.category === 'STOCK' && previous.thawedOn && edited.category === 'STOCK' && edited.dishId === previous.dishId
+      ? { ...edited, storage: previous.storage, thawedOn: previous.thawedOn }
+      : edited
     const batch = writeBatch(db)
-    await stageStockChanges(batch, [{ source: mealSourceOf(meal), day }], [{ source, day }])
+    await stageStockChanges(batch, [{ source: previous, day }], [{ source, day }])
     batch.set(doc(db, 'meals', meal.id), {
       ...source,
       user: meal.user,

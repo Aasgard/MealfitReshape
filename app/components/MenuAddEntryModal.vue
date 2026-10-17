@@ -812,7 +812,9 @@ const onSubmit = () => {
                   <template v-else>
                     <span class="font-semibold text-muted">{{ formatParts(option.available) }}</span>
                     <span aria-hidden="true" class="text-dimmed">·</span>
-                    <span class="text-dimmed">préparé le {{ formatDishDay(option.dish.preparedOn) }}</span>
+                    <span class="text-dimmed">
+                      {{ option.dish.thawedOn ? `décongelé le ${formatDishDay(option.dish.thawedOn)}` : `préparé le ${formatDishDay(option.dish.preparedOn)}` }}
+                    </span>
                     <span v-if="option.isStale" class="flex items-center gap-0.5 text-warning">
                       <UIcon name="i-lucide-clock-alert" class="size-3 shrink-0" aria-hidden="true" />
                       à consommer vite

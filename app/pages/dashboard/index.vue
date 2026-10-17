@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { addDays, differenceInCalendarDays, format, parseISO, startOfDay, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { useCurrentUser } from 'vuefire'
 import type { Ingredient } from '~/types/ingredient'
-import type { Meal, MealSource, MealType } from '~/types/meal'
+import type { Meal, MealSource, MealType, StockMealSource } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import type { Workout } from '~/types/workout'
-import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow } from '~/types/today'
+import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow, TodayThawDish } from '~/types/today'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
 import { buildDayEntries, consumedOfDay, mealSourceOf, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { COOKING_DAYS, recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
 import type { DishStorage } from '~/types/preparedDish'
-import { findBatchSurplus, formatParts, PARTS_EPSILON, SURPLUS_MEAL_PREFIX } from '~/utils/preparedDishes'
+import { findBatchSurplus, formatParts, isDishPlanned, PARTS_EPSILON, SURPLUS_MEAL_PREFIX } from '~/utils/preparedDishes'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
 import { shortDayLabel, WEEK_STARTS_ON } from '~/utils/menuWeek'
 
@@ -180,7 +181,7 @@ watch(workoutsError, (error) => {
 })
 
 const shoppingList = useShoppingList()
-const { dishes, ownDishes, saveBatchSurplus } = usePreparedDishes()
+const { dishes, ownDishes, dishesById, saveBatchSurplus, thawMeals } = usePreparedDishes()
 watch(shoppingList.items.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger la liste de courses : ${error.message}`, color: 'error' })
@@ -311,7 +312,7 @@ const cookingDayLabel = (day: Date) => {
  * Récipients regroupés par jour (les repas arrivent triés, ceux d'un même jour se suivent) : le jour n'est écrit qu'une fois,
  * et l'icône du repas n'apparaît que si la recette revient à plusieurs repas ce jour-là. Ex : "Auj. ☀ 1 🌇 0,5".
  */
-const cookingDays = (portions: RecipeToCookPortion[]): TodayCookingDay[] => {
+const cookingDays = (portions: RecipeToCookPortion[], { alwaysShowMeal = false } = {}): TodayCookingDay[] => {
   const days: { day: Date, portions: RecipeToCookPortion[] }[] = []
   for (const portion of portions) {
     const last = days.at(-1)
@@ -323,7 +324,7 @@ const cookingDays = (portions: RecipeToCookPortion[]): TodayCookingDay[] => {
     key: String(day.getTime()),
     label: cookingDayLabel(day),
     portions: dayPortions.map((portion): TodayCookingPortion => {
-      const row = dayPortions.length > 1 ? MENU_MEAL_TYPES.find(item => item.key === portion.mealType) : undefined
+      const row = alwaysShowMeal || dayPortions.length > 1 ? MENU_MEAL_TYPES.find(item => item.key === portion.mealType) : undefined
       return { key: portion.mealType, meal: row && { label: row.label, icon: row.icon }, parts: portion.parts }
     }),
   }))
@@ -369,6 +370,109 @@ const cookingRecipes = computed<TodayCookingRecipe[]>(() => {
 
   return [...batches, ...surplusOnly]
 })
+
+// --- Décongeler : plats du congélateur prévus le lendemain du jour affiché, pour tout le foyer ---
+
+/**
+ * Repas du foyer du jour affiché et du lendemain ; aucune requête pour un jour passé (ces repas-là sont mangés). Ne
+ * bloque pas l'ouverture de l'accueil : la section apparaît à l'arrivée des repas.
+ */
+const thawMealsRange = computed(() => differenceInCalendarDays(selectedDay.value, today) < 0
+  ? null
+  : { start: selectedDay.value, end: addDays(selectedDay.value, 1) })
+const { meals: householdMeals } = useHouseholdMealsBetween(thawMealsRange)
+watch(householdMeals.error, (error) => {
+  if (!error) return
+  toast.add({ title: 'Erreur', description: `Impossible de charger les repas du foyer : ${error.message}`, color: 'error' })
+})
+
+const { household } = useHousehold()
+const currentUser = useCurrentUser()
+/** Prénom d'un autre membre du foyer, pour distinguer ses repas dans la confirmation. */
+const memberNameOf = (uid: string) =>
+  uid === currentUser.value?.uid ? undefined : household.value?.members.find(member => member.id === uid)?.name
+
+const mealTypeRank = (mealType: MealType) => MENU_MEAL_TYPES.findIndex(row => row.key === mealType)
+
+/**
+ * Plats dont des repas sont encore au congélateur : ceux du lendemain du jour affiché, à sortir la veille, et, le jour
+ * même seulement, ceux d'aujourd'hui (oubliés hier, en tête). Un plat passé au frigo en entier disparaît de la liste.
+ */
+const thawDishes = computed<TodayThawDish[]>(() => {
+  const range = thawMealsRange.value
+  if (!range) return []
+  const firstDay = isTodaySelected.value ? range.start : range.end
+  const frozen = householdMeals.value
+    .filter((meal): meal is Meal & StockMealSource => meal.category === 'STOCK' && meal.storage === 'FREEZER')
+    .filter(meal => differenceInCalendarDays(meal.date.toDate(), firstDay) >= 0)
+    .sort((a, b) => a.date.toMillis() - b.date.toMillis() || mealTypeRank(a.mealType) - mealTypeRank(b.mealType))
+
+  const byDish = new Map<string, (Meal & StockMealSource)[]>()
+  for (const meal of frozen) byDish.set(meal.dishId, [...(byDish.get(meal.dishId) ?? []), meal])
+
+  return [...byDish.values()].map((dishMeals): TodayThawDish => {
+    const first = dishMeals[0]!
+    const recipe = first.recipeId ? recipesById.value.get(first.recipeId) : undefined
+    // Parts d'un même repas cumulées entre membres du foyer : un récipient par repas, comme dans « Cuisiner ».
+    const portions: RecipeToCookPortion[] = []
+    for (const meal of dishMeals) {
+      const day = meal.date.toDate()
+      const same = portions.find(p => p.mealType === meal.mealType && differenceInCalendarDays(p.day, day) === 0)
+      if (same) same.parts += meal.value
+      else portions.push({ day, mealType: meal.mealType, parts: meal.value })
+    }
+    const days = cookingDays(portions, { alwaysShowMeal: true })
+      .map(day => ({ ...day, isLate: differenceInCalendarDays(new Date(Number(day.key)), today) <= 0 }))
+    return {
+      dishId: first.dishId,
+      title: first.label,
+      recipeId: recipe?.id,
+      imageUrl: recipe?.imageUrl,
+      days,
+      parts: dishMeals.reduce((total, meal) => total + meal.value, 0),
+      isLate: days.some(day => day.isLate),
+      meals: dishMeals.map(meal => ({
+        mealId: meal.id,
+        label: `${shortDayLabel(meal.date.toDate(), today)} · ${MENU_MEAL_TYPES.find(row => row.key === meal.mealType)?.label ?? ''}`,
+        parts: meal.value,
+        memberName: memberNameOf(meal.user),
+      })),
+    }
+  }).sort((a, b) => Number(b.isLate) - Number(a.isLate))
+})
+
+const thawOpen = ref(false)
+const thawTarget = ref<TodayThawDish | null>(null)
+const thawSaving = ref(false)
+
+/** Parts du plat encore au congélateur, hors repas : elles peuvent sortir avec eux. */
+const thawFrozenParts = computed(() => {
+  const dish = thawTarget.value ? dishesById.value.get(thawTarget.value.dishId) : undefined
+  return dish && dish.storage === 'FREEZER' && !isDishPlanned(dish, format(today, 'yyyy-MM-dd')) ? dish.parts : 0
+})
+
+const openThaw = (dish: TodayThawDish) => {
+  thawTarget.value = dish
+  thawOpen.value = true
+}
+
+const confirmThaw = async ({ mealIds, extraParts }: { mealIds: string[], extraParts: number }) => {
+  const target = thawTarget.value
+  if (!target) return
+  const selected = householdMeals.value.filter(meal => mealIds.includes(meal.id))
+  const parts = selected.reduce((total, meal) => total + (meal.category === 'STOCK' ? meal.value : 0), 0) + extraParts
+
+  thawSaving.value = true
+  try {
+    await thawMeals(selected, extraParts, target.dishId)
+    thawOpen.value = false
+    toast.add({ title: 'Passé au frigo', description: `${formatParts(parts)} de « ${target.title} »`, color: 'success', icon: 'i-lucide-refrigerator' })
+  } catch (error: any) {
+    toast.add({ title: 'Erreur', description: `« ${target.title} » n'a pas pu passer au frigo : ${error.message || 'une erreur est survenue'}.`, color: 'error' })
+  } finally {
+    thawSaving.value = false
+  }
+}
 
 // --- Surplus pour le stock, depuis « Cuisiner » ---
 
@@ -654,7 +758,7 @@ const onTouchEnd = (event: TouchEvent) => {
 }
 
 /** Flèches ← / → du clavier (desktop), sauf pendant une saisie ou quand une fenêtre est ouverte. */
-const isOverlayOpen = computed(() => addModalOpen.value || recipeDetailOpen.value || ingredientDetailOpen.value || surplusOpen.value || sendToStock.isOpen.value)
+const isOverlayOpen = computed(() => addModalOpen.value || recipeDetailOpen.value || ingredientDetailOpen.value || surplusOpen.value || thawOpen.value || sendToStock.isOpen.value)
 
 const onKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
@@ -775,6 +879,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <TodayShopping :lines="shoppingLines":to="SHOPPING_LIST_LINK" />
             </template>
 
+            <template v-if="thawDishes.length">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
+                  <UIcon name="i-lucide-snowflake" class="size-5 text-primary" aria-hidden="true" />
+                  Décongeler
+                </h2>
+                <NuxtLink to="/dashboard/stock" class="text-sm font-medium text-primary hover:underline">
+                  Stock
+                </NuxtLink>
+              </div>
+
+              <TodayThawing :dishes="thawDishes" @open="openRecipeDetail" @thaw="openThaw" />
+            </template>
+
             <div class="flex items-center justify-between gap-3">
               <h2 class="flex items-center gap-2 text-lg font-bold tracking-tight text-highlighted">
                 <UIcon name="i-lucide-chef-hat" class="size-5 text-primary" aria-hidden="true" />
@@ -839,6 +957,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :dish="surplusDish"
     :saving="surplusSaving"
     @save="saveSurplus"
+  />
+
+  <ThawDishModal
+    v-model:open="thawOpen"
+    :dish="thawTarget"
+    :frozen-parts="thawFrozenParts"
+    :saving="thawSaving"
+    @confirm="confirmThaw"
   />
 
   <SendToStockModal

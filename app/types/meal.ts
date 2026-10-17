@@ -65,6 +65,8 @@ export type StockMealSource = {
   /** Macros d'une part. */
   perPart: IngredientMacros
   storage: DishStorage
+  /** Jour où ses parts sont passées du congélateur au frigo, `yyyy-MM-dd` (« Décongeler » de l'accueil). */
+  thawedOn?: string
   /** Recette d'origine du plat, pour ouvrir sa fiche. */
   recipeId?: string
   comment?: string

@@ -181,6 +181,21 @@ async function onConfirmFinish() {
     <template #body>
       <!-- overflow-x-clip : le décalage du slide ne doit pas élargir la page pendant la transition. -->
       <div ref="swipeArea" class="mx-auto flex w-full min-w-0 max-w-6xl flex-1 touch-pan-y flex-col overflow-x-clip lg:min-h-0">
+        <!-- Ajouts manuels de la liste perso, d'avant l'arrivée dans le foyer. -->
+        <UAlert
+          v-if="list.mode === 'prepare' && list.personalItems.length"
+          class="mb-4 shrink-0"
+          icon="i-lucide-list-plus"
+          color="neutral"
+          variant="subtle"
+          :title="`${list.personalItems.length} article${list.personalItems.length > 1 ? 's' : ''} sur votre liste perso`"
+          :description="`Ajouté${list.personalItems.length > 1 ? 's' : ''} à la main avant de rejoindre le foyer : ${list.personalItems.map(item => item.label).join(', ')}.`"
+          orientation="horizontal"
+          :actions="[
+            { label: 'Les ajouter à la liste du foyer', color: 'primary', onClick: () => list.adoptPersonalItems() },
+            { label: 'Laisser de côté', color: 'neutral', variant: 'ghost', onClick: () => list.dismissPersonalItems() },
+          ]"
+        />
         <Transition :name="slideName" mode="out-in">
           <GroceryPrepareView v-if="list.mode === 'prepare'" />
           <GroceryStoreView v-else :finishing="isFinishing" @finish="onFinish" />

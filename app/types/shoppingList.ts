@@ -38,8 +38,10 @@ export interface ShoppingComplement {
  */
 export interface ShoppingItem {
   id: string
-  /** Utilisateur auquel l'article est rattaché (uid, identifiant du document `users`). */
-  user: string
+  /** Liste de l'article : celle du foyer (id `households`), sinon celle du compte (uid). */
+  scope: string
+  /** Compte qui l'a ajouté à la main ; absent pour un article venu des menus. */
+  addedBy?: string
   label: string
   status: ShoppingItemStatus
   /** Ingrédient (Firestore `ingredients`) dont provient l'article ; absent pour un ajout manuel. */
@@ -66,14 +68,16 @@ export interface ShoppingItem {
 }
 
 /**
- * Un repas inclus dans la liste de courses (collection Firestore `shoppingMeals`), id `{uid}_{mealId}`.
+ * Un repas inclus dans la liste de courses (collection Firestore `shoppingMeals`), id `{scope}_{mealId}` : un repas
+ * n'entre qu'une fois dans la liste du foyer, quel que soit le membre qui le coche.
  * Garde de quoi recalculer les apports sans relire les menus : modifier un repas dans les menus ne change pas la liste.
  * - `listed` : ses ingrédients sont dans la liste ;
  * - `bought` : achetés (fin des courses) ; ne peut plus être décoché ni racheté. Supprimé 2 jours après le repas.
  */
 export interface ShoppingMealInclusion {
   id: string
-  user: string
+  /** Liste de l'inclusion, comme `ShoppingItem.scope`. */
+  scope: string
   /** Repas d'origine (Firestore `meals`). */
   mealId: string
   /** Jour du repas, `yyyy-MM-dd`. */

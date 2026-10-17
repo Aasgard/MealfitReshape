@@ -234,6 +234,9 @@ export function useHousehold() {
     })
     pointer.value = ref.id
     demo.value = null
+    // Seul membre, le créateur garde sa liste de courses : elle devient celle du foyer.
+    await moveShoppingList(db, where('scope', '==', uid), ref.id)
+      .catch(error => console.error('Liste de courses non reprise dans le foyer :', error))
   }
 
   /**
@@ -304,8 +307,8 @@ export function useHousehold() {
   }
 
   /**
-   * Si le propriétaire part, le plus ancien des autres membres le devient ; seul, il supprime le foyer et son code.
-   * Dans la démo, le foyer disparaît pour ce compte.
+   * Si le propriétaire part, le plus ancien des autres membres le devient ; seul, il supprime le foyer et son code, et
+   * reprend sa liste de courses. Sinon la liste reste au foyer. Dans la démo, le foyer disparaît pour ce compte.
    */
   async function leave() {
     if (isDemo.value) {
@@ -315,6 +318,7 @@ export function useHousehold() {
     const current = storedHousehold.value
     const uid = requireUid()
     if (!current) return
+    if (current.memberIds.length <= 1) await moveShoppingList(db, where('scope', '==', current.id), uid)
     const batch = writeBatch(db)
     batch.set(userRef(uid), pointerData(null), { merge: true })
     if (current.memberIds.length <= 1) {

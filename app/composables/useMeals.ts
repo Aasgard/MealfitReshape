@@ -132,3 +132,30 @@ export const useMealsBetween = (range: MaybeRefOrGetter<DayRange | null>) => {
     )
   })
 }
+
+/**
+ * Repas de tous les membres du foyer (lecture seule) du jour `start` au jour `end` inclus : la liste de courses du foyer
+ * les cumule. Comme pour le stock, ceux des autres attendent que les règles puissent les ouvrir (`shared`) ; sans foyer,
+ * ceux du compte seul. `isLoading` couvre aussi l'attente du foyer. Même index composite que `useMeals`.
+ */
+export const useHouseholdMealsBetween = (range: MaybeRefOrGetter<DayRange | null>) => {
+  const db = useFirestore()
+  const user = useCurrentUser()
+  const { memberIds, shared, loading: householdLoading } = useHousehold()
+
+  const meals = useCollection<Meal>(() => {
+    const uid = user.value?.uid
+    const { start, end } = toValue(range) ?? {}
+    if (!uid || householdLoading.value || !start || !end) return null
+
+    return query(
+      collection(db, 'meals'),
+      where('user', 'in', shared.value ? memberIds.value : [uid]),
+      where('date', '>=', Timestamp.fromDate(startOfDay(start))),
+      where('date', '<', Timestamp.fromDate(addDays(startOfDay(end), 1)))
+    )
+  })
+
+  const isLoading = computed(() => meals.pending.value || (!!toValue(range) && householdLoading.value))
+  return { meals, isLoading }
+}

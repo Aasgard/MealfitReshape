@@ -4,6 +4,8 @@ import { useDocumentVisibility } from '@vueuse/core'
 import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import type { IngredientCategory } from '~/types/ingredientCategory'
+import { useCurrentUser } from 'vuefire'
+import type { HouseholdMember } from '~/composables/useHousehold'
 import type { DayRange } from '~/composables/useMeals'
 import type { InclusionDraft } from '~/composables/useShoppingList'
 import type { Meal } from '~/types/meal'
@@ -32,6 +34,10 @@ export interface GroceryMealRow extends PlannedMealRow {
   hasBought: boolean
   /** Tous achetés : la ligne est verrouillée. */
   isLocked: boolean
+  /** Autres membres du foyer qui ont prévu des repas de la ligne. */
+  plannedBy: HouseholdMember[]
+  /** Le compte connecté en a prévu aussi. */
+  isPlannedBySelf: boolean
 }
 
 /** Repas inclus dans la fenêtre mais disparus des menus depuis. */
@@ -52,12 +58,19 @@ const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? '
 
 /**
  * État de la page « Liste de courses », partagé par les modes « Lister » et « Acheter » : les articles de la
- * collection `shoppingList` et les repas planifiés d'une période, cochés s'ils sont dans la liste. Cocher, décocher ou
- * changer des parts met la liste à jour aussitôt (voir `planItemWrites`). Le mode et la période restent locaux.
+ * collection `shoppingList` et les repas planifiés d'une période par tous les membres du foyer, cochés s'ils sont dans
+ * la liste. Cocher, décocher ou changer des parts met la liste à jour aussitôt (voir `planItemWrites`). Le mode et la
+ * période restent locaux.
  */
 export function useGroceryList() {
   const toast = useToast()
+  const user = useCurrentUser()
   const shoppingList = useShoppingList()
+  const personal = usePersonalShoppingItems()
+  const { household } = useHousehold()
+
+  /** Autres membres du foyer, par id : leurs repas et leurs ajouts portent leur avatar. */
+  const othersById = computed(() => new Map((household.value?.members ?? []).filter(m => !m.isSelf).map(m => [m.id, m])))
   const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
   const categoriesStore = useIngredientCategoriesStore()
 
@@ -106,15 +119,15 @@ export function useGroceryList() {
     ? { start: format(range.value.start, 'yyyy-MM-dd'), end: format(range.value.end, 'yyyy-MM-dd') }
     : null))
 
-  const meals = useMealsBetween(range)
+  const { meals, isLoading: isLoadingMeals } = useHouseholdMealsBetween(range)
   watch(meals.error, (error) => {
     if (error) fail('Impossible de charger les repas')(error)
   })
 
-  /** Repas de la période, sans ceux pris dans le stock (rien à acheter), avec les surplus prévus des fournées. */
-  const { ownDishes } = usePreparedDishes()
+  /** Repas de la période, sans ceux pris dans le stock (rien à acheter), avec les surplus prévus des fournées du foyer. */
+  const { dishes } = usePreparedDishes()
   const rangeMeals = computed(() => (range.value
-    ? [...meals.value.filter(isPlannedMeal), ...surplusMeals(ownDishes.value, rangeDays.value)]
+    ? [...meals.value.filter(isPlannedMeal), ...surplusMeals(dishes.value, rangeDays.value)]
     : []))
   const inclusionByMealId = computed(() => new Map(shoppingList.inclusions.value.map(inclusion => [inclusion.mealId, inclusion])))
 
@@ -154,6 +167,8 @@ export function useGroceryList() {
         isIndeterminate: includedCount > 0 && includedCount < rowMeals.length,
         hasBought: boughtCount > 0,
         isLocked: boughtCount > 0 && boughtCount === rowMeals.length,
+        plannedBy: [...new Set(rowMeals.map(meal => meal.user))].flatMap(id => othersById.value.get(id) ?? []),
+        isPlannedBySelf: rowMeals.some(meal => meal.user === user.value?.uid),
       }
     })
   })
@@ -163,7 +178,7 @@ export function useGroceryList() {
   /** Repas inclus dans la fenêtre mais disparus des menus depuis : à retirer de la liste à la main. */
   const orphanRows = computed<GroceryOrphanRow[]>(() => {
     const days = rangeDays.value
-    if (!days || meals.pending.value) return []
+    if (!days || isLoadingMeals.value) return []
     const windowMealIds = new Set(rangeMeals.value.map(meal => meal.id))
     const byKey = new Map<string, ShoppingMealInclusion[]>()
     for (const inclusion of shoppingList.inclusions.value) {
@@ -326,8 +341,10 @@ export function useGroceryList() {
 
   // --- Liste ---
 
-  const isLoading = computed(() => shoppingList.items.pending.value && !shoppingList.items.value.length)
-  const lines = computed(() => shoppingList.items.value.map(item => groceryLineFromItem(item, aisleOf, today.value)).sort(compareGroceryLines))
+  const isLoading = computed(() => !shoppingList.scope.value || (shoppingList.items.pending.value && !shoppingList.items.value.length))
+  const lines = computed(() => shoppingList.items.value
+    .map(item => ({ ...groceryLineFromItem(item, aisleOf, today.value), addedBy: item.addedBy ? othersById.value.get(item.addedBy) : undefined }))
+    .sort(compareGroceryLines))
   /** À acheter, panier compris : les articles cochés en magasin restent dans la liste jusqu'à la fin des courses. */
   const toBuy = computed(() => lines.value.filter(line => line.status !== 'atHome'))
   const atHomeLines = computed(() => lines.value.filter(line => line.status === 'atHome'))
@@ -434,6 +451,18 @@ export function useGroceryList() {
     }
   }
 
+  /** Reprend dans la liste du foyer les ajouts manuels de la liste perso. */
+  async function adoptPersonalItems() {
+    const count = personal.offered.value.length
+    try {
+      await personal.adopt()
+      toast.add({ title: 'Articles repris', description: `${plural(count, 'article')} ajouté${count > 1 ? 's' : ''} à la liste du foyer.`, color: 'success', icon: 'i-lucide-check' })
+    }
+    catch (error) {
+      fail('Vos articles n\'ont pas pu être repris')(error)
+    }
+  }
+
   /** Repartir de zéro : tous les articles retirés et les repas décochés ; ce qui a été acheté reste mémorisé. */
   async function clearAll() {
     try {
@@ -451,7 +480,10 @@ export function useGroceryList() {
   return reactive({
     mode,
     isLoading,
-    isLoadingMeals: computed(() => meals.pending.value),
+    isLoadingMeals,
+    personalItems: personal.offered,
+    adoptPersonalItems,
+    dismissPersonalItems: personal.dismiss,
     dateRange,
     range,
     mealRows,

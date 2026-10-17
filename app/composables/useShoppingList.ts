@@ -1,4 +1,5 @@
-import { collection, deleteField, doc, query, serverTimestamp, updateDoc, where, writeBatch, type WriteBatch } from 'firebase/firestore'
+import { collection, deleteField, doc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch, type Firestore, type QueryFieldFilterConstraint, type WriteBatch } from 'firebase/firestore'
+import { useLocalStorage } from '@vueuse/core'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { ShoppingItem, ShoppingItemStatus, ShoppingMealInclusion } from '~/types/shoppingList'
 import { planFinish, planItemWrites, type ShoppingCatalog } from '~/utils/shoppingPlan'
@@ -8,30 +9,80 @@ import { gramsPerPiece } from '~/utils/shoppingList'
 const BATCH_LIMIT = 500
 
 /** Inclusion à écrire : tout sauf ce que l'écriture ajoute elle-même. */
-export type InclusionDraft = Omit<ShoppingMealInclusion, 'id' | 'user' | 'updatedAt'>
+export type InclusionDraft = Omit<ShoppingMealInclusion, 'id' | 'scope' | 'updatedAt'>
+
+const inclusionId = (scope: string, mealId: string) => `${scope}_${mealId}`
+
+/** Applique `writes` en autant de batchs que nécessaire (un seul, donc atomique, sous 500 écritures). */
+async function commitWrites(db: Firestore, writes: ((batch: WriteBatch) => void)[]) {
+  for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db)
+    for (const write of writes.slice(i, i + BATCH_LIMIT)) write(batch)
+    await batch.commit()
+  }
+}
 
 /**
- * Liste de courses de l'utilisateur connecté : les articles (collection `shoppingList`) et les repas inclus
- * (`shoppingMeals`) dont ils tirent leurs apports, avec les écritures associées. Hors ligne, les écritures s'affichent
- * tout de suite (cache local de Firestore) et leurs promesses n'aboutissent qu'à la synchronisation.
+ * Rattache à la liste `to` (foyer ou compte) les articles et les repas inclus que retient `filter` ; `manualOnly` ne
+ * reprend que les ajouts manuels. L'id d'une inclusion contient sa liste : elle est recréée sous le nouvel id.
+ * Les documents d'avant les listes de foyer (rattachés par `user`) passent au passage à `scope` / `addedBy`.
+ */
+export async function moveShoppingList(db: Firestore, filter: QueryFieldFilterConstraint, to: string, { manualOnly = false } = {}) {
+  const [items, inclusions] = await Promise.all([
+    getDocs(query(collection(db, 'shoppingList'), filter)),
+    manualOnly ? null : getDocs(query(collection(db, 'shoppingMeals'), filter)),
+  ])
+  const writes: ((batch: WriteBatch) => void)[] = []
+  for (const snap of items.docs) {
+    const { user, ingredientId } = snap.data()
+    if (manualOnly && ingredientId) continue
+    const legacy = user ? { user: deleteField(), ...(ingredientId ? {} : { addedBy: user }) } : {}
+    writes.push(batch => batch.update(snap.ref, { scope: to, ...legacy }))
+  }
+  for (const snap of inclusions?.docs ?? []) {
+    const { user: _legacy, ...data } = snap.data()
+    const ref = doc(db, 'shoppingMeals', inclusionId(to, data.mealId))
+    writes.push(batch => batch.set(ref, { ...data, scope: to }))
+    if (ref.id !== snap.id) writes.push(batch => batch.delete(snap.ref))
+  }
+  await commitWrites(db, writes)
+}
+
+/**
+ * Liste de courses du foyer du compte connecté (la sienne sans foyer) : les articles (collection `shoppingList`) et les
+ * repas inclus (`shoppingMeals`) dont ils tirent leurs apports, avec les écritures associées. Tous les membres lisent et
+ * écrivent la même liste. Hors ligne, les écritures s'affichent tout de suite (cache local de Firestore) et leurs
+ * promesses n'aboutissent qu'à la synchronisation.
  */
 export const useShoppingList = () => {
   const db = useFirestore()
   const user = useCurrentUser()
+  const { householdId, loading: householdLoading } = useHousehold()
   const shoppingListRef = collection(db, 'shoppingList')
   const shoppingMealsRef = collection(db, 'shoppingMeals')
 
-  const items = useCollection<ShoppingItem>(() => {
+  /** Liste lue et écrite : celle du foyer, sinon celle du compte ; `null` tant que le foyer n'est pas connu. */
+  const scope = computed(() => {
     const uid = user.value?.uid
-    if (!uid) return null
-    return query(shoppingListRef, where('user', '==', uid))
+    if (!uid || householdLoading.value) return null
+    return householdId.value ?? uid
   })
 
-  const inclusions = useCollection<ShoppingMealInclusion>(() => {
+  const items = useCollection<ShoppingItem>(() => scope.value ? query(shoppingListRef, where('scope', '==', scope.value)) : null)
+
+  const inclusions = useCollection<ShoppingMealInclusion>(() => scope.value ? query(shoppingMealsRef, where('scope', '==', scope.value)) : null)
+
+  /** Articles et inclusions d'avant les listes de foyer, rattachés par `user` : repris une fois dans la liste courante. */
+  const legacyMoved = useState('shopping-legacy-moved', () => false)
+  watch(scope, (current) => {
     const uid = user.value?.uid
-    if (!uid) return null
-    return query(shoppingMealsRef, where('user', '==', uid))
-  })
+    if (!current || !uid || legacyMoved.value) return
+    legacyMoved.value = true
+    moveShoppingList(db, where('user', '==', uid), current).catch((error) => {
+      legacyMoved.value = false
+      console.error('Ancienne liste de courses non reprise :', error)
+    })
+  }, { immediate: true })
 
   const requireUid = () => {
     const uid = user.value?.uid
@@ -39,24 +90,20 @@ export const useShoppingList = () => {
     return uid
   }
 
-  /** Applique `writes` en autant de batchs que nécessaire (un seul, donc atomique, sous 500 écritures). */
-  async function commit(writes: ((batch: WriteBatch) => void)[]) {
-    for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
-      const batch = writeBatch(db)
-      for (const write of writes.slice(i, i + BATCH_LIMIT)) write(batch)
-      await batch.commit()
-    }
+  const requireScope = () => {
+    if (!scope.value) throw new Error('La liste de courses n\'est pas encore chargée.')
+    return scope.value
   }
 
-  const inclusionId = (uid: string, mealId: string) => `${uid}_${mealId}`
+  const commit = (writes: ((batch: WriteBatch) => void)[]) => commitWrites(db, writes)
 
   /**
    * Inclut (ou met à jour) les repas `upserts` et retire les inclusions `removals`, puis écrit les écarts d'articles
    * qui en découlent, le tout en une écriture. Renvoie ce qui n'a pas pu être compté (recette, unité introuvables...).
    */
   async function applyInclusions(upserts: InclusionDraft[], removals: ShoppingMealInclusion[], catalog: ShoppingCatalog) {
-    const uid = requireUid()
-    const upserted: ShoppingMealInclusion[] = upserts.map(draft => ({ ...draft, id: inclusionId(uid, draft.mealId), user: uid }))
+    const scope = requireScope()
+    const upserted: ShoppingMealInclusion[] = upserts.map(draft => ({ ...draft, id: inclusionId(scope, draft.mealId), scope }))
     const changedIds = new Set([...upserted.map(i => i.id), ...removals.map(i => i.id)])
     const next = [...inclusions.value.filter(i => !changedIds.has(i.id)), ...upserted]
     const keys = [...upserted, ...removals].map(i => i.key)
@@ -76,7 +123,7 @@ export const useShoppingList = () => {
             const ingredient = catalog.ingredientsById.get(write.ingredientId)
             const pieceGrams = ingredient ? gramsPerPiece(ingredient) : null
             return (batch: WriteBatch) => batch.set(doc(shoppingListRef), {
-              user: uid,
+              scope,
               label: ingredient?.label ?? 'Ingrédient introuvable',
               status: 'toBuy',
               ingredientId: write.ingredientId,
@@ -97,10 +144,11 @@ export const useShoppingList = () => {
   /** Ajoute un article saisi à la main, à acheter, avec quantité libre, marquage urgent et échéance facultatifs. */
   function addManual(label: string, options: { categoryId?: string, quantity?: string, urgent?: boolean, neededBy?: string } = {}) {
     const { categoryId, quantity, urgent, neededBy } = options
-    const uid = requireUid()
+    const scope = requireScope()
     const batch = writeBatch(db)
     batch.set(doc(shoppingListRef), {
-      user: uid,
+      scope,
+      addedBy: requireUid(),
       label,
       status: 'toBuy',
       ...(categoryId ? { categoryId } : {}),
@@ -122,7 +170,7 @@ export const useShoppingList = () => {
     amount: { grams: number, milliliters: number },
     options: { quantity: string, neededBy: string, urgent: boolean },
   ) {
-    const uid = requireUid()
+    const scope = requireScope()
     const existing = items.value.find(item => item.status === 'toBuy' && item.complementOf?.ingredientId === ingredient.id)
     if (existing?.complementOf) {
       const neededBy = existing.neededBy && existing.neededBy < options.neededBy ? existing.neededBy : options.neededBy
@@ -140,7 +188,8 @@ export const useShoppingList = () => {
     }
     const batch = writeBatch(db)
     batch.set(doc(shoppingListRef), {
-      user: uid,
+      scope,
+      addedBy: requireUid(),
       label: `${ingredient.label} (complément)`,
       status: 'toBuy',
       ...(ingredient.categoryId ? { categoryId: ingredient.categoryId } : {}),
@@ -231,6 +280,7 @@ export const useShoppingList = () => {
   }
 
   return {
+    scope,
     items,
     inclusions,
     applyInclusions,
@@ -246,4 +296,38 @@ export const useShoppingList = () => {
     clearAll,
     pruneInclusions,
   }
+}
+
+/**
+ * En foyer, les ajouts manuels restés sur la liste du compte (d'avant son arrivée) : proposés une fois à la liste du
+ * foyer. Ceux venus des menus ne sont pas repris, leurs repas se cochent dans la liste du foyer. Les laisser de côté
+ * est retenu sur l'appareil ; ils reviennent en quittant le foyer.
+ */
+export const usePersonalShoppingItems = () => {
+  const db = useFirestore()
+  const user = useCurrentUser()
+  const { householdId } = useHousehold()
+
+  const items = useCollection<ShoppingItem>(() => {
+    const uid = user.value?.uid
+    if (!uid || !householdId.value) return null
+    return query(collection(db, 'shoppingList'), where('scope', '==', uid))
+  })
+  const manualItems = computed(() => items.value.filter(item => !item.ingredientId && item.status !== 'inCart'))
+
+  /** Foyer pour lequel ils ont été laissés de côté. */
+  const dismissedFor = useLocalStorage('grocery-personal-dismissed', '')
+  const offered = computed(() => !!householdId.value && dismissedFor.value !== householdId.value ? manualItems.value : [])
+
+  function adopt() {
+    const uid = user.value?.uid
+    if (!uid || !householdId.value) return Promise.resolve()
+    return moveShoppingList(db, where('scope', '==', uid), householdId.value, { manualOnly: true })
+  }
+
+  function dismiss() {
+    if (householdId.value) dismissedFor.value = householdId.value
+  }
+
+  return { offered, adopt, dismiss }
 }

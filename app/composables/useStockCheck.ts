@@ -25,9 +25,9 @@ export function useStockCheck(list: GroceryListState) {
   const loadRange = computed(() => (list.isStockCheckOpen && days.value
     ? { start: addDays(list.today, -LOOKBACK_DAYS), end: parseISO(days.value.end) }
     : null))
-  const meals = useMealsBetween(loadRange)
+  const { meals, isLoading: isLoadingMeals } = useHouseholdMealsBetween(loadRange)
 
-  const isLoading = computed(() => meals.pending.value || recipes.pending.value || ingredients.pending.value)
+  const isLoading = computed(() => isLoadingMeals.value || recipes.pending.value || ingredients.pending.value)
 
   const needs = computed(() => {
     const span = days.value

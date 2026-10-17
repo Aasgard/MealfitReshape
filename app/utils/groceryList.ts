@@ -1,5 +1,6 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import type { HouseholdMember } from '~/composables/useHousehold'
 import type { IngredientCategory } from '~/types/ingredientCategory'
 import type { ShoppingContribution, ShoppingItem, ShoppingItemStatus } from '~/types/shoppingList'
 import { compareShoppingSources, formatShoppingQuantity, piecesFor, type ShoppingNeed } from './shoppingList'
@@ -64,6 +65,8 @@ export interface GroceryLine {
   isFragile: boolean
   /** Fragile avec au moins un besoin au-delà de J+2 : signalé par une horloge. */
   hasTooEarlyNeed: boolean
+  /** Membre du foyer qui l'a ajouté à la main, quand ce n'est pas le compte connecté (renseigné par la page). */
+  addedBy?: HouseholdMember
   item: ShoppingItem
 }
 

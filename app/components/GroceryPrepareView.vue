@@ -75,6 +75,10 @@ const sourceSummary = computed(() => {
   return `${list.mealRows.length} repas · ${list.includedRowCount} dans la liste`
 })
 
+/** « Prévu par Alexia », « Prévu aussi par Alexia » quand le compte connecté en a prévu lui aussi. */
+const plannedByLabel = (row: GroceryMealRow) =>
+  `Prévu ${row.isPlannedBySelf ? 'aussi ' : ''}par ${row.plannedBy.map(member => member.name).join(' et ')}`
+
 /** Libellé lu par les lecteurs d'écran : l'état de la case dit ce que fera le geste. */
 function rowAriaLabel(row: GroceryMealRow) {
   if (row.isLocked) return `${row.label} : déjà acheté`
@@ -181,6 +185,11 @@ function rowAriaLabel(row: GroceryMealRow) {
                     class="min-w-0 flex-1 truncate text-sm"
                     :class="row.isChecked || row.isIndeterminate ? 'text-highlighted' : 'text-muted'"
                   >{{ row.label }}</span>
+                  <UTooltip v-if="row.plannedBy.length" :text="plannedByLabel(row)">
+                    <UAvatarGroup size="3xs" class="shrink-0">
+                      <UAvatar v-for="member in row.plannedBy" :key="member.id" :src="member.photoUrl" :alt="member.name" />
+                    </UAvatarGroup>
+                  </UTooltip>
                   <UTooltip v-if="row.hasBought" :text="row.isLocked ? 'Déjà acheté' : 'En partie acheté'">
                     <UIcon name="i-lucide-shopping-cart" class="size-3.5 shrink-0 text-dimmed" :aria-label="row.isLocked ? 'déjà acheté' : 'en partie acheté'" />
                   </UTooltip>

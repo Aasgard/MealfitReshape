@@ -45,6 +45,7 @@ const tooEarlyDays = computed(() => props.line.needs.filter(need => need.isTooEa
 
 const ariaLabel = computed(() => [
   props.line.label,
+  props.line.addedBy ? `ajouté par ${props.line.addedBy.name}` : null,
   props.line.isUrgent ? 'urgent' : null,
   props.line.hasTooEarlyNeed ? 'à acheter plus tard' : null,
   'voir les besoins',
@@ -93,6 +94,11 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
       </ul>
       <p v-else class="text-sm text-muted">
         {{ line.manual ? 'Ajouté à la main : pas de date de besoin.' : 'Ajouté avant le suivi des dates : pas de date de besoin.' }}
+      </p>
+
+      <p v-if="line.addedBy" class="flex items-center gap-2 text-xs text-muted">
+        <UAvatar :src="line.addedBy.photoUrl" :alt="line.addedBy.name" size="3xs" />
+        Ajouté par {{ line.addedBy.name }}
       </p>
 
       <p v-if="tooEarlyDays.length" class="flex gap-2 rounded-md bg-elevated px-3 py-2 text-xs text-muted">
@@ -156,6 +162,7 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
               done ? 'text-dimmed line-through' : 'font-medium text-highlighted',
             ]"
           >{{ line.label }}</span>
+          <UAvatar v-if="line.addedBy && !bare" :src="line.addedBy.photoUrl" :alt="line.addedBy.name" size="3xs" class="shrink-0" />
           <UIcon v-if="line.isUrgent && !done && !bare" name="i-lucide-zap" class="size-3.5 shrink-0 text-error" aria-hidden="true" />
           <UIcon v-if="line.hasTooEarlyNeed && !done && !bare" name="i-lucide-clock" class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
         </span>

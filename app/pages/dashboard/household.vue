@@ -161,7 +161,7 @@ async function onRemove() {
 const confirmLeave = ref(false)
 const isLastMember = computed(() => members.value.length === 1)
 const leaveHint = computed(() => {
-  if (isLastMember.value) return 'Vous êtes le dernier membre : le foyer sera supprimé, avec ses menus, sa liste de courses et son stock.'
+  if (isLastMember.value) return 'Vous êtes le dernier membre : le foyer sera supprimé. Vous gardez sa liste de courses, vos menus, votre stock et vos recettes.'
   if (isOwner.value && successor.value) {
     return `${successor.value.name}, membre depuis ${monthYear(successor.value.joinedAt)}, deviendra propriétaire. Vos recettes, ingrédients privés et récipients partent avec vous.`
   }

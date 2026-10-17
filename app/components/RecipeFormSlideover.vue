@@ -7,6 +7,7 @@ import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { RECIPE_DIFFICULTIES, recipeDifficultyLabel, type RecipeDifficulty } from '~/utils/recipeDifficulty'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
+import { macrosForRecipe } from '~/utils/recipeNutrition'
 
 /**
  * Slideover d'ajout/modification de recette — un seul composant pour les deux modes,
@@ -191,6 +192,25 @@ function unitOptionsForRow(row: IngredientRow) {
   options.push({ value: GRAMS_UNIT, label: 'Grammes (g)' })
   return options
 }
+
+/**
+ * Valeurs pour une part, recalculées à la saisie comme sur la fiche : les lignes incomplètes (ingrédient non choisi,
+ * quantité invalide) sont ignorées, et des parts invalides comptent pour une.
+ */
+const macros = computed(() => {
+  const lines = ingredientRows.value.flatMap((row) => {
+    const quantity = parsePositiveNumber(row.quantity)
+    if (!row.ingredientId || quantity === null) return []
+    const line: RecipeIngredientLine = { ingredientRef: doc(db, 'ingredients', row.ingredientId), quantity }
+    if (row.unit !== GRAMS_UNIT) line.unit = row.unit
+    return [line]
+  })
+  return macrosForRecipe(lines, ingredientsById.value, parsePositiveNumber(persons.value) ?? 1)
+})
+const hasMacros = computed(() => {
+  const m = macros.value
+  return m.calories > 0 || m.protein > 0 || m.carbohydrates > 0 || m.fat > 0
+})
 
 function ingredientRowLabel(row: IngredientRow) {
   return row.ingredientId ? ingredientsById.value.get(row.ingredientId)?.label : undefined
@@ -408,6 +428,16 @@ async function handleSubmit() {
           @update:url="onImageUrlInput"
           @remove="removePhoto"
         />
+
+        <!-- Valeurs nutritionnelles, recalculées à chaque modification des ingrédients ou des parts -->
+        <div v-if="hasMacros">
+          <p class="text-xs text-dimmed mb-2">Valeurs nutritionnelles pour une part</p>
+          <IngredientMacroSummary :macros="macros" />
+        </div>
+        <p v-else-if="ingredientRows.length > 0" class="flex items-center gap-1.5 text-xs text-dimmed">
+          <UIcon name="i-lucide-circle-slash" class="size-3.5 shrink-0" />
+          Valeurs non renseignées
+        </p>
 
         <!-- Ingrédients -->
         <div>

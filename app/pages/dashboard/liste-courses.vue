@@ -129,7 +129,8 @@ async function onConfirmFinish() {
         </template>
       </UDashboardNavbar>
 
-      <UDashboardToolbar>
+      <!-- Même hauteur que la barre de semaine de la page Menu : 49 px sur mobile (minimum par défaut), 53 px sur PC. -->
+      <UDashboardToolbar :ui="{ root: 'sm:min-h-[53px]' }">
         <template #left>
           <UTabs
             v-model="list.mode"

@@ -774,7 +774,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <UDashboardPanel id="home">
+  <UDashboardPanel id="home" :ui="{ body: 'pt-0 sm:pt-0' }">
     <template #header>
       <UDashboardNavbar title="Accueil">
         <template #leading>
@@ -782,14 +782,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         </template>
       </UDashboardNavbar>
 
-      <!-- Dans l'en-tête du panneau (hors de la zone qui défile) : la ligne du jour reste visible au défilement. -->
+      <!--
+        Dans l'en-tête du panneau (hors de la zone qui défile) : la ligne du jour reste visible au défilement.
+        Même hauteur que la barre de semaine de la page Menu (`py-2`, titre à 36 px sur PC) ; le corps du panneau perd sa
+        marge du haut, comme dans Menu, pour le même écart jusqu'à la première carte.
+      -->
       <div
-        class="flex items-center justify-between gap-3 border-b border-default bg-default px-8 py-3 sm:px-12"
+        class="flex items-center justify-between gap-3 border-b border-default bg-default px-8 py-2 sm:px-12"
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >
         <div class="flex min-w-0 items-baseline gap-2" aria-live="polite">
-          <h1 class="truncate text-2xl font-bold tracking-tight text-highlighted" :class="selectedDaySubtitle && 'shrink-0'">
+          <h1 class="truncate text-2xl font-bold tracking-tight text-highlighted sm:py-0.5" :class="selectedDaySubtitle && 'shrink-0'">
             {{ selectedDayTitle }}
           </h1>
           <p v-if="selectedDaySubtitle" class="truncate text-sm text-dimmed">

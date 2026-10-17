@@ -26,7 +26,6 @@ const emit = defineEmits<{
   /** Ouvre le choix de la semaine à recopier dans celle-ci. */
   'copy-week': []
   clear: []
-  'shopping-list': []
 }>()
 
 const pickerOpen = ref(false)
@@ -113,7 +112,7 @@ const moreItems = computed<DropdownMenuItem[][]>(() => [
       />
     </div>
 
-    <!-- Mobile : « Courses » et un menu « … » ; à partir de la tablette, toutes les actions en boutons. -->
+    <!-- Mobile : un menu « … » ; à partir de la tablette, toutes les actions en boutons. -->
     <div class="flex shrink-0 items-center gap-2">
       <UButton
         icon="i-lucide-copy"
@@ -134,15 +133,6 @@ const moreItems = computed<DropdownMenuItem[][]>(() => [
         :disabled="clearDisabled"
         @click="emit('clear')"
       />
-      <UButton
-        icon="i-lucide-shopping-cart"
-        color="primary"
-        size="sm"
-        aria-label="Liste de courses"
-        @click="emit('shopping-list')"
-      >
-        <span class="hidden sm:inline">Liste de courses</span>
-      </UButton>
       <UDropdownMenu :items="moreItems" :content="{ align: 'end' }">
         <UButton
           icon="i-lucide-ellipsis"

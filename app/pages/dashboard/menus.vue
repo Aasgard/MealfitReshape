@@ -62,7 +62,6 @@ const days = computed(() => isContinuous.value
 
 const { recipes, ingredients, recipesById, ingredientsById } = useFoodCatalog()
 const toast = useToast()
-const { settings } = useAppSettings()
 
 /**
  * Repas enregistrés (collection `meals`) de la semaine affichée, de la précédente et de la suivante : celles que le
@@ -252,16 +251,6 @@ const copyWeek = async (sourceWeekStart: Date, sourceMeals: Meal[]) => {
   }
 }
 
-const shoppingListOpen = ref(false)
-/**
- * Plage proposée à l'ouverture de la liste de courses : 7 jours à partir du jour de courses (Réglages) de la semaine
- * affichée, ex. du vendredi au jeudi suivant.
- */
-const shoppingListRange = computed(() => {
-  const start = addDays(selectedWeekStart.value, settings.value.shoppingDay)
-  return { start, end: addDays(start, DAYS_PER_WEEK - 1) }
-})
-
 const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
 /** Parts du repas cliqué : la fiche recalcule les quantités d'ingrédients pour ce nombre de parts. */
@@ -310,7 +299,7 @@ const runEntryAction = (action: (entryId: string) => void) => {
 
 /** Flèches ← / → du clavier : semaine précédente / suivante, sauf pendant une saisie ou quand une fenêtre est ouverte. */
 const isOverlayOpen = computed(() =>
-  addModalOpen.value || clearDialogOpen.value || copyWeekOpen.value || shoppingListOpen.value
+  addModalOpen.value || clearDialogOpen.value || copyWeekOpen.value
   || slideoverOpen.value || actionsOpen.value || sendToStock.isOpen.value
 )
 
@@ -350,7 +339,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         @select-date="goToWeek"
         @clear="clearDialogOpen = true"
         @copy-week="copyWeekOpen = true"
-        @shopping-list="shoppingListOpen = true"
       />
     </template>
 
@@ -516,13 +504,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :existing-storage="sendToStock.surplus.value?.storage"
     :saving="sendToStock.isSaving.value"
     @confirm="sendToStock.confirm"
-  />
-
-  <ShoppingListSlideover
-    v-model:open="shoppingListOpen"
-    :recipes-by-id="recipesById"
-    :ingredients-by-id="ingredientsById"
-    :initial-range="shoppingListRange"
   />
 
   <RecipeDetailSlideover

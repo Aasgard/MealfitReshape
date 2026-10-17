@@ -1,4 +1,4 @@
-import { addDays, format, isSameMonth, isToday } from 'date-fns'
+import { addDays, differenceInCalendarDays, format, isSameMonth, isToday } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { MenuDayHeader } from '~/types/menu'
 
@@ -29,6 +29,15 @@ export const formatWeekLabel = (start: Date, end: Date, { short = false } = {}) 
     return `${format(start, 'd')} – ${format(end, 'd')} ${month(end)}${yearSuffix}`
   }
   return `${format(start, 'd')} ${month(start)} – ${format(end, 'd')} ${month(end)}${yearSuffix}`
+}
+
+/** Jour court d'une case de repas : « Aujourd'hui », « Hier », « Demain », sinon « Lun. 19 » (en-tête de la fenêtre d'ajout). */
+export const shortDayLabel = (date: Date, today = new Date()) => {
+  const offset = differenceInCalendarDays(date, today)
+  if (offset === 0) return "Aujourd'hui"
+  if (offset === -1) return 'Hier'
+  if (offset === 1) return 'Demain'
+  return `${capitalize(format(date, 'EEE', { locale: fr }))} ${format(date, 'd')}`
 }
 
 /** En-têtes de `weeks` semaines consécutives à partir du lundi `firstWeekStart` ; marque la colonne du jour courant. */

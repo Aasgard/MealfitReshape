@@ -15,7 +15,7 @@ import { COOKING_DAYS, recipesToCook, type RecipeToCookPortion } from '~/utils/r
 import type { DishStorage } from '~/types/preparedDish'
 import { findBatchSurplus, formatParts, PARTS_EPSILON, SURPLUS_MEAL_PREFIX } from '~/utils/preparedDishes'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
-import { WEEK_STARTS_ON } from '~/utils/menuWeek'
+import { shortDayLabel, WEEK_STARTS_ON } from '~/utils/menuWeek'
 
 useSeoMeta({
   title: 'Dashboard - Accueil - Mealfit',
@@ -544,7 +544,14 @@ const openEditModal = (entry: MenuEntry) => {
   addModalOpen.value = true
 }
 
-const addContextLabel = computed(() => addTarget.value ? `${selectedDayTitle.value} · ${addTarget.value.label}` : '')
+/** Même format court que la page Menus (« Lun. 19 · Petit déj », « Aujourd'hui », « Hier », « Demain »), pour tenir sur la ligne d'en-tête de la fenêtre. */
+const addContextLabel = computed(() => {
+  const target = addTarget.value
+  if (!target) return ''
+  const day = shortDayLabel(selectedDay.value, today)
+  const meal = MENU_MEAL_TYPES.find(m => m.key === target.mealType)?.label ?? target.label
+  return `${day} · ${meal}`
+})
 
 /** Contenu du jour affiché (hors repas modifié) et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
 const addDayBudget = computed(() => {

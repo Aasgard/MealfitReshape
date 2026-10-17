@@ -4,7 +4,7 @@ import type { Meal, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
-import { buildDays, DAYS_PER_WEEK, formatWeekLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
+import { buildDays, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
 import { buildEntriesByDay, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
@@ -149,7 +149,7 @@ const addContextLabel = computed(() => {
   if (!target) return ''
   const day = days.value.find(d => d.key === target.dayKey)
   const mealType = mealTypes.find(m => m.key === target.mealTypeKey)
-  return `${day?.dayLabel} ${day?.dateLabel} · ${mealType?.label}`
+  return `${day ? shortDayLabel(day.date) : ''} · ${mealType?.label}`
 })
 
 /** Colle le repas copié dans la case ; sans copie en cours, ouvre la modale d'ajout pour cette case. */

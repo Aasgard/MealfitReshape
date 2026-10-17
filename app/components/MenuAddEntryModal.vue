@@ -89,7 +89,9 @@ const onTouchEnd = (event: TouchEvent) => {
 }
 const submitted = ref(false)
 
-const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
+/** Libellé du type de recette, raccourci pour le petit-déjeuner comme dans le calendrier (« Petit déj »). */
+const shortRecipeTypeLabel = (type: string) => type === 'BREAKFAST' ? 'Petit déj' : recipeTypeLabel(type)
+const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: shortRecipeTypeLabel(t) }))
 
 /** Filtres cumulatifs de la liste des recettes : l'un des types choisis, et tous les ingrédients choisis. Vides = pas de filtre. */
 const recipeTypeFilter = ref<RecipeType[]>([])
@@ -453,7 +455,7 @@ const recipeOptions = computed(() =>
       return {
         id: r.id,
         label: r.title,
-        typeLabel: r.type ? recipeTypeLabel(r.type) : null,
+        typeLabel: r.type ? shortRecipeTypeLabel(r.type) : null,
         prepTime: r.prepTime ?? null,
         cookTime: r.cookTime ?? null,
         kcal,
@@ -474,6 +476,20 @@ const RECIPE_MACROS = [
   { key: 'protein', short: 'P', label: 'Protéines', dot: 'bg-red-700' },
   { key: 'fat', short: 'L', label: 'Lipides', dot: 'bg-amber-500' },
 ] as const
+
+/** Liste des recettes affichées, pour faire défiler jusqu'à un tirage aléatoire. */
+const recipeListEl = ref<HTMLElement>()
+/** Tire au sort une recette parmi celles affichées (filtres et recherche compris), en évitant de retomber sur la recette déjà choisie. */
+const pickRandomRecipe = async () => {
+  const candidates = recipeOptions.value.length > 1
+    ? recipeOptions.value.filter(o => o.id !== recipeId.value)
+    : recipeOptions.value
+  const picked = candidates[Math.floor(Math.random() * candidates.length)]
+  if (!picked) return
+  recipeId.value = picked.id
+  await nextTick()
+  recipeListEl.value?.querySelector<HTMLElement>(`[data-recipe-id="${picked.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
 
 /** Les filtres réduisent la liste ; une recette déjà choisie qui n'y correspond plus est désélectionnée. */
 const onRecipeFilterChange = () => {
@@ -678,6 +694,8 @@ const ingredientError = computed(() => submitted.value && !ingredientId.value ? 
 const quantityError = computed(() => numberError(quantity.value, parsePositiveNumber, true))
 const productQuantityError = computed(() => numberError(productQuantity.value, parsePositiveNumber, true))
 const labelError =computed(() => submitted.value && !label.value.trim() ? 'Requis' : undefined)
+/** Aperçu de ce qui sera ajouté (mode Macros saisi à la main : la saisie elle-même fait foi). */
+const showDraftPreview = computed(() => !!draft.value && (mode.value !== 'macros' || !!product.value))
 const kcalError = computed(() => numberError(kcal.value, parseNonNegativeNumber, true))
 const proteinError = computed(() => numberError(protein.value, parseNonNegativeNumber, false))
 const fatError = computed(() => numberError(fat.value, parseNonNegativeNumber, false))
@@ -702,15 +720,34 @@ const onSubmit = () => {
     :description="contextLabel"
     :ui="{
       content: 'sm:max-w-md',
+      wrapper: 'flex-1 min-w-0',
+      footer: 'gap-2',
       body: hasOwnScroll ? 'flex flex-col overflow-hidden' : 'flex flex-col',
     }"
   >
+    <!-- Jour et repas, puis ce qui reste dans les objectifs du jour (les boutons du filtre n'affichent plus que la macro). -->
+    <template #description>
+      <!-- Une seule ligne : les restes alignés à droite ; le jour et le repas se tronquent si la place manque. -->
+      <span class="flex items-baseline gap-2 whitespace-nowrap">
+        <span class="min-w-0 truncate">{{ contextLabel }}</span>
+        <span v-if="dayBudget" class="ml-auto shrink-0 flex items-baseline gap-1.5 text-xs tabular-nums">
+          <span class="text-dimmed">Reste</span>
+          <span
+            v-for="target in TARGET_FILTERS"
+            :key="target.key"
+            :class="isExceeded(target.key) ? 'text-warning' : 'text-toned'"
+            :title="`${target.label} : reste ${remainingOf(target.key)} ${target.unit}${isExceeded(target.key) ? ', objectif déjà dépassé' : ''}`"
+          >{{ target.key === 'calories' ? '' : `${target.short} ` }}{{ remainingOf(target.key) }}{{ target.unit }}</span>
+        </span>
+      </span>
+    </template>
+
     <template #body>
-      <!-- En modes Stock et Recette, le corps ne défile pas : la liste prend la hauteur restante et défile seule. -->
+      <!-- En modes Stock et Recette, le corps ne défile pas : la liste prend la hauteur restante et défile seule. Sans hauteur minimale, pour qu'elle rétrécisse au lieu de passer sous le bandeau de stock quand la place manque. -->
       <!-- Toujours sur toute la hauteur du corps : le balayage entre onglets marche aussi dans la zone vide sous les champs. -->
       <div
-        class="flex-1 flex flex-col gap-5"
-        :class="hasOwnScroll && 'min-h-0'"
+        class="flex-1 flex flex-col"
+        :class="hasOwnScroll ? 'min-h-0 gap-3' : 'gap-5'"
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
       >
@@ -743,7 +780,7 @@ const onSubmit = () => {
           <div
             role="radiogroup"
             aria-label="Plats du stock"
-            class="flex-1 min-h-32 overflow-y-auto overscroll-contain rounded-lg border border-default divide-y divide-default"
+            class="flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-lg border border-default divide-y divide-default"
           >
             <button
               v-for="option in stockOptions"
@@ -811,13 +848,17 @@ const onSubmit = () => {
                 <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 transition-transform" :class="!filtersOpen && '-rotate-90'" aria-hidden="true" />
                 Filtres
               </button>
-              <UTooltip v-if="hasRecipeFilters" text="Réinitialiser les filtres">
+              <!-- Toujours rendu, seulement masqué sans filtre actif : sa hauteur est réservée et la mise en page ne bouge pas quand il apparaît. -->
+              <UTooltip text="Réinitialiser les filtres" :disabled="!hasRecipeFilters">
                 <UButton
                   icon="i-lucide-funnel-x"
                   aria-label="Réinitialiser les filtres"
                   color="neutral"
                   variant="ghost"
                   size="xs"
+                  :class="!hasRecipeFilters && 'invisible'"
+                  :disabled="!hasRecipeFilters"
+                  :aria-hidden="!hasRecipeFilters"
                   @click="resetRecipeFilters"
                 />
               </UTooltip>
@@ -836,16 +877,16 @@ const onSubmit = () => {
                     v-for="target in TARGET_FILTERS"
                     :key="target.key"
                     :color="activeTargets.includes(target.key) ? 'primary' : 'neutral'"
-                    :variant="activeTargets.includes(target.key) ? 'solid' : 'outline'"
+                    :variant="activeTargets.includes(target.key) ? 'subtle' : 'outline'"
                     size="xs"
                     :aria-pressed="activeTargets.includes(target.key)"
                     :aria-label="`${target.label} : reste ${remainingOf(target.key)} ${target.unit}${isExceeded(target.key) ? ', objectif déjà dépassé' : ''}`"
                     class="h-8 justify-center gap-0.5 sm:gap-1 px-1 sm:px-1.5 text-[10px] sm:text-xs tabular-nums whitespace-nowrap"
                     @click="toggleTarget(target.key)"
                   >
-                    <!-- « cible + macro : reste unité » ; la cible devient une alerte quand l'objectif est déjà dépassé. -->
-                    <UIcon :name="isExceeded(target.key) ? 'i-lucide-triangle-alert' : 'i-lucide-target'" class="size-3 shrink-0" :class="isExceeded(target.key) && 'text-warning'" aria-hidden="true" />
-                    <span>{{ target.short }} : {{ remainingOf(target.key) }} {{ target.unit }}</span>
+                    <!-- Nom de la macro (les restes sont dans l'en-tête), précédé d'une alerte quand l'objectif est déjà dépassé. -->
+                    <UIcon v-if="isExceeded(target.key)" name="i-lucide-triangle-alert" class="size-3 shrink-0 text-warning" aria-hidden="true" />
+                    {{ target.label }}
                   </UButton>
                 </div>
                 <!-- Plusieurs types peuvent être actifs à la fois. -->
@@ -856,7 +897,7 @@ const onSubmit = () => {
                     :key="option.value"
                     :label="option.label"
                     :color="recipeTypeFilter.includes(option.value) ? 'primary' : 'neutral'"
-                    :variant="recipeTypeFilter.includes(option.value) ? 'solid' : 'outline'"
+                    :variant="recipeTypeFilter.includes(option.value) ? 'subtle' : 'outline'"
                     size="xs"
                     :aria-pressed="recipeTypeFilter.includes(option.value)"
                     class="h-8 justify-center px-1 sm:px-1.5 text-[10px] sm:text-xs whitespace-nowrap"
@@ -882,7 +923,7 @@ const onSubmit = () => {
                     <UTooltip text="Uniquement les recettes de saison">
                       <UButton
                         :color="seasonOnly ? 'primary' : 'neutral'"
-                        :variant="seasonOnly ? 'solid' : 'outline'"
+                        :variant="seasonOnly ? 'subtle' : 'outline'"
                         icon="i-lucide-leaf"
                         aria-label="Uniquement les recettes sans aliment hors saison"
                         :aria-pressed="seasonOnly"
@@ -902,23 +943,38 @@ const onSubmit = () => {
           >
             <!-- Recherche textuelle seule (pas de liste déroulante), puis les résultats en liste, comme la vue liste des recettes. -->
             <div class="flex-1 min-h-0 flex flex-col gap-2">
-              <UInput
-                v-model="recipeSearch"
-                icon="i-lucide-search"
-                placeholder="Rechercher une recette..."
-                aria-label="Rechercher une recette"
-                size="md"
-                variant="outline"
-                class="w-full"
-              />
+              <div class="flex items-center gap-2">
+                <UInput
+                  v-model="recipeSearch"
+                  icon="i-lucide-search"
+                  placeholder="Rechercher une recette..."
+                  aria-label="Rechercher une recette"
+                  size="md"
+                  variant="outline"
+                  class="flex-1 min-w-0"
+                />
+                <UTooltip text="Recette au hasard">
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    size="md"
+                    icon="i-lucide-dices"
+                    aria-label="Choisir une recette au hasard parmi celles affichées"
+                    :disabled="!recipeOptions.length"
+                    @click="pickRandomRecipe"
+                  />
+                </UTooltip>
+              </div>
               <div
+                ref="recipeListEl"
                 role="radiogroup"
                 aria-label="Recettes"
-                class="flex-1 min-h-32 overflow-y-auto overscroll-contain rounded-lg border border-default divide-y divide-default"
+                class="flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-lg border border-default divide-y divide-default"
               >
                 <button
                   v-for="option in recipeOptions"
                   :key="option.id"
+                  :data-recipe-id="option.id"
                   type="button"
                   role="radio"
                   :aria-checked="recipeId === option.id"
@@ -990,17 +1046,27 @@ const onSubmit = () => {
           </UFormField>
 
           <!-- La recette choisie a des parts prêtes dans le stock : les prendre plutôt que la recuisiner. -->
-          <UAlert
+          <!-- Bandeau compact sur une ligne, pour laisser le plus de hauteur possible à la liste. -->
+          <div
             v-if="selectedRecipeStock"
-            color="primary"
-            variant="subtle"
-            icon="i-lucide-archive"
-            :title="`${formatParts(selectedRecipeStock.parts)} déjà en stock`"
-            :description="selectedRecipeStock.dishes > 1 ? `Dans ${selectedRecipeStock.dishes} plats préparés.` : `Préparé le ${formatDishDay(selectedRecipeStock.oldest.dish.preparedOn)}.`"
-            :actions="[{ label: 'Prendre dans le stock', color: 'primary', variant: 'solid', size: 'xs', onClick: takeFromStock }]"
-            orientation="horizontal"
-            class="shrink-0"
-          />
+            role="status"
+            class="shrink-0 flex items-center gap-2 rounded-md bg-primary/10 ring ring-inset ring-primary/25 py-1.5 pl-2.5 pr-1.5 text-xs text-primary"
+          >
+            <UIcon name="i-lucide-archive" class="size-4 shrink-0" aria-hidden="true" />
+            <span class="min-w-0 truncate">
+              <span class="font-semibold">{{ formatParts(selectedRecipeStock.parts) }} en stock</span>
+              · {{ selectedRecipeStock.dishes > 1 ? `${selectedRecipeStock.dishes} plats` : `préparé le ${formatDishDay(selectedRecipeStock.oldest.dish.preparedOn)}` }}
+            </span>
+            <UButton
+              color="primary"
+              variant="solid"
+              size="xs"
+              label="Prendre"
+              aria-label="Prendre dans le stock"
+              class="ml-auto shrink-0"
+              @click="takeFromStock"
+            />
+          </div>
         </template>
 
         <template v-else-if="mode === 'ingredient'">
@@ -1152,13 +1218,6 @@ const onSubmit = () => {
           </div>
         </template>
 
-        <!-- Aperçu de ce qui sera ajouté (mode Macros saisi à la main : la saisie elle-même fait foi). -->
-        <p v-if="draft && (mode !== 'macros' || product)" class="rounded-md bg-elevated px-3 py-2 text-sm text-muted tabular-nums">
-          <span class="font-semibold text-highlighted">{{ draft.kcal }} kcal</span>
-          -
-          <MenuMacroLabels :carbohydrates="draft.carbohydrates" :protein="draft.protein" :fat="draft.fat" />
-        </p>
-
         <div v-if="mode === 'macros' && product" class="flex flex-wrap items-center justify-center gap-x-1 text-xs text-muted">
           <UButton color="neutral" variant="link" size="xs" class="px-0.5 font-medium text-toned" @click="detachProduct">
             Saisir à la main
@@ -1172,19 +1231,25 @@ const onSubmit = () => {
     </template>
 
     <template #footer>
-      <UButton label="Annuler" color="neutral" variant="ghost" @click="closeSlideover" />
-      <UButton
-        :label="isEditMode ? 'Enregistrer' : 'Ajouter'"
-        color="primary"
-        :icon="isEditMode ? 'i-lucide-check' : 'i-lucide-plus'"
-        @click="onSubmit"
-      />
+      <!-- Aperçu de ce qui sera ajouté (mode Macros saisi à la main : la saisie elle-même fait foi), sur la même ligne que les parts et l'ajout ; la fermeture passe par la croix de l'en-tête. -->
+      <!--
+        Sur deux lignes (kcal, puis macros) pour rester étroit et entièrement lisible à côté des parts et de l'ajout.
+        Toujours rendu, seulement masqué sans aperçu, et de largeur fixe : la barre ne bouge pas quand il apparaît ou que les valeurs changent.
+      -->
+      <p
+        class="w-28 shrink-0 flex flex-col rounded-md bg-elevated px-2 py-1 leading-tight whitespace-nowrap tabular-nums"
+        :class="!showDraftPreview && 'invisible'"
+        :aria-hidden="!showDraftPreview"
+      >
+        <span class="text-sm font-semibold text-highlighted">{{ draft?.kcal ?? 0 }} kcal</span>
+        <MenuMacroLabels :carbohydrates="draft?.carbohydrates ?? 0" :protein="draft?.protein ?? 0" :fat="draft?.fat ?? 0" class="text-xs" />
+      </p>
       <!-- Parts prises dans le plat du stock, sans dépasser ce qui reste. -->
       <div
         v-if="mode === 'stock' && selectedStock"
         role="group"
         aria-label="Nombre de parts"
-        class="ml-auto flex items-center gap-1 rounded-md ring ring-inset ring-accented"
+        class="ml-auto shrink-0 flex items-center gap-1 rounded-md ring ring-inset ring-accented"
         :title="`Reste ${formatParts(selectedStock.available)} en stock`"
       >
         <UButton
@@ -1196,7 +1261,7 @@ const onSubmit = () => {
           :disabled="stockParts <= PARTS_STEP"
           @click="stepStockParts(-1)"
         />
-        <span class="min-w-14 text-center text-sm font-medium text-highlighted tabular-nums whitespace-nowrap" aria-live="polite">
+        <span class="w-18 text-center text-sm font-medium text-highlighted tabular-nums whitespace-nowrap" aria-live="polite">
           {{ formatParts(stockParts) }}
         </span>
         <UButton
@@ -1209,12 +1274,12 @@ const onSubmit = () => {
           @click="stepStockParts(1)"
         />
       </div>
-      <!-- Nombre de parts (mode Recette), aligné à droite de la barre d'ajout ; sans champ de saisie, aucun clavier ne s'ouvre sur mobile. -->
+      <!-- Nombre de parts (mode Recette), juste avant le bouton d'ajout ; sans champ de saisie, aucun clavier ne s'ouvre sur mobile. -->
       <div
         v-else-if="mode === 'recipe'"
         role="group"
         aria-label="Nombre de parts"
-        class="ml-auto flex items-center gap-1 rounded-md ring ring-inset ring-accented"
+        class="ml-auto shrink-0 flex items-center gap-1 rounded-md ring ring-inset ring-accented"
         :title="selectedRecipe ? `La recette fait ${selectedRecipe.persons ?? 1} part(s)` : undefined"
       >
         <UButton
@@ -1226,7 +1291,7 @@ const onSubmit = () => {
           :disabled="parts <= PARTS_STEP"
           @click="stepParts(-1)"
         />
-        <span class="min-w-14 text-center text-sm font-medium text-highlighted tabular-nums whitespace-nowrap" aria-live="polite">
+        <span class="w-18 text-center text-sm font-medium text-highlighted tabular-nums whitespace-nowrap" aria-live="polite">
           {{ parts.toLocaleString('fr-FR') }} part{{ parts > 1 ? 's' : '' }}
         </span>
         <UButton
@@ -1238,6 +1303,14 @@ const onSubmit = () => {
           @click="stepParts(1)"
         />
       </div>
+      <UButton
+        :label="isEditMode ? 'Enregistrer' : 'Ajouter'"
+        color="primary"
+        :icon="isEditMode ? 'i-lucide-check' : 'i-lucide-plus'"
+        class="shrink-0"
+        :class="!((mode === 'stock' && selectedStock) || mode === 'recipe') && 'ml-auto'"
+        @click="onSubmit"
+      />
     </template>
   </USlideover>
 

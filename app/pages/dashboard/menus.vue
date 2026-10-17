@@ -312,6 +312,79 @@ const onKeydown = (event: KeyboardEvent) => {
   else goToNextWeek()
 }
 
+/**
+ * PC : un balayage horizontal change aussi de semaine (en mode continu, le calendrier défile déjà sous le doigt). Il ne
+ * compte pas quand il fait défiler un élément qui peut encore aller dans ce sens (grille plus large que l'écran).
+ */
+const SWIPE_MIN_DISTANCE = 60
+
+const canScrollHorizontally = (target: EventTarget | null, boundary: EventTarget | null, deltaX: number) => {
+  for (let el = target instanceof Element ? target : null; el && el !== boundary; el = el.parentElement) {
+    if (el.scrollWidth <= el.clientWidth || !/auto|scroll/.test(getComputedStyle(el).overflowX)) continue
+    if (deltaX > 0 ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1 : el.scrollLeft > 0) return true
+  }
+  return false
+}
+
+/**
+ * Écran tactile : comme le balayage des jours de l'accueil. Annulé si le geste devient un glisser-déposer de repas, et
+ * ignoré là où le doigt glisse pour autre chose (`data-no-week-swipe` : survol des barres du graphique des semaines).
+ */
+let swipeStart: { x: number, y: number } | null = null
+const cancelSwipe = () => { swipeStart = null }
+
+const onTouchStart = (event: TouchEvent) => {
+  const touch = event.touches[0]
+  const isExcluded = event.target instanceof Element && event.target.closest('[data-no-week-swipe]')
+  swipeStart = !isContinuous.value && !isExcluded && event.touches.length === 1 && touch
+    ? { x: touch.clientX, y: touch.clientY }
+    : null
+}
+
+const onTouchEnd = (event: TouchEvent) => {
+  const touch = event.changedTouches[0]
+  if (!swipeStart || !touch) return
+  const dx = touch.clientX - swipeStart.x
+  const dy = touch.clientY - swipeStart.y
+  swipeStart = null
+  // Un geste surtout vertical est un défilement de la page, pas un changement de semaine.
+  if (Math.abs(dx) < SWIPE_MIN_DISTANCE || Math.abs(dx) < Math.abs(dy) * 2) return
+  if (canScrollHorizontally(event.target, event.currentTarget, -dx)) return
+  if (dx < 0) goToNextWeek()
+  else goToPreviousWeek()
+}
+
+/**
+ * Pavé tactile (deux doigts) : les `wheel` horizontaux s'additionnent jusqu'au seuil. Un geste ne change qu'une
+ * semaine : la suite et l'inertie sont ignorées jusqu'à un court silence, après lequel un nouveau geste est accepté.
+ */
+const WHEEL_GESTURE_END_MS = 200
+const WHEEL_LINE_HEIGHT = 16
+let wheelDeltaX = 0
+let wheelSwipeDone = false
+let wheelGestureTimeout: ReturnType<typeof setTimeout> | undefined
+
+const onWheel = (event: WheelEvent) => {
+  if (isContinuous.value || event.ctrlKey || isOverlayOpen.value) return
+  const deltaX = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaX * WHEEL_LINE_HEIGHT : event.deltaX
+  if (Math.abs(deltaX) <= Math.abs(event.deltaY)) return
+  if (canScrollHorizontally(event.target, event.currentTarget, deltaX)) return
+  // Sinon le navigateur peut y voir un « page précédente / suivante ».
+  event.preventDefault()
+  clearTimeout(wheelGestureTimeout)
+  wheelGestureTimeout = setTimeout(() => {
+    wheelDeltaX = 0
+    wheelSwipeDone = false
+  }, WHEEL_GESTURE_END_MS)
+  if (wheelSwipeDone) return
+  wheelDeltaX += deltaX
+  if (Math.abs(wheelDeltaX) < SWIPE_MIN_DISTANCE) return
+  wheelSwipeDone = true
+  if (wheelDeltaX > 0) goToNextWeek()
+  else goToPreviousWeek()
+}
+onBeforeUnmount(() => clearTimeout(wheelGestureTimeout))
+
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
@@ -347,7 +420,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         Mobile, tablette : la ligne des jours du calendrier remonte avec la page puis se colle sous l'en-tête du panneau.
         PC : tout défile avec la page.
       -->
-      <div class="flex flex-1 flex-col gap-4 overflow-x-clip p-4 sm:gap-6 sm:p-6">
+      <div
+        class="flex flex-1 flex-col gap-4 overflow-x-clip p-4 sm:gap-6 sm:p-6"
+        @touchstart.passive="onTouchStart"
+        @touchend.passive="onTouchEnd"
+        @wheel="onWheel"
+      >
         <!-- Moyenne par jour complet de la semaine, dans la forme du résumé de l'accueil ; ouverte par défaut. -->
         <CalorieSummary
           class="shrink-0"
@@ -391,6 +469,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             @move-entry="moveEntry"
             @add="addEntry"
             @visible-week="selectedWeekStart = $event"
+            @drag-start="cancelSwipe"
           />
         </Transition>
       </div>

@@ -272,6 +272,7 @@ const ariaLabel = computed(() =>
             tabindex="0"
             role="img"
             :aria-label="ariaLabel"
+            data-no-week-swipe
             @pointermove="onPointerMove"
             @pointerleave="activeIndex = null"
             @click="onClick"

@@ -35,6 +35,8 @@ const emit = defineEmits<{
   'move-entry': [entryId: string, dayKey: string, mealTypeKey: MealType]
   /** Mode continu : le défilement s'est arrêté sur une autre semaine (son lundi). */
   'visible-week': [weekStart: Date]
+  /** Une carte commence à être déplacée : le geste en cours n'est pas un balayage de semaine. */
+  'drag-start': []
 }>()
 
 const scrollContainer = useTemplateRef<HTMLElement>('scrollContainer')
@@ -352,7 +354,7 @@ defineExpose({
               @copy-entry="emit('copy-entry', $event)"
               @delete-entry="emit('delete-entry', $event)"
               @move-entry="emit('move-entry', $event, day.key, mealType.key)"
-              @drag-start="isDragging = true"
+              @drag-start="isDragging = true; emit('drag-start')"
               @drag-end="onDragEnd"
             />
           </template>

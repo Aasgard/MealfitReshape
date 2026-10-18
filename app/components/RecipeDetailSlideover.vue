@@ -18,6 +18,26 @@ useOverlayBackClose(open)
 // On cuisine avec la recette sous les yeux : l'écran ne doit pas se verrouiller.
 useScreenWakeLock(open)
 
+/** Minuteurs de cuisine : lancés depuis l'en-tête, affichés en haut de la fiche tant qu'ils tournent. */
+const { timers, openRecipeId, isRinging } = useKitchenTimers()
+const timerLauncherOpen = ref(false)
+
+/** Au-delà de deux minuteurs, les suivants se déplient à la demande : la recette garde la place. */
+const TIMERS_SHOWN = 2
+const timersExpanded = ref(false)
+watch(() => timers.value.length, (count) => { if (count <= TIMERS_SHOWN) timersExpanded.value = false })
+const shownTimers = computed(() => (timersExpanded.value ? timers.value : timers.value.slice(0, TIMERS_SHOWN)))
+const hiddenTimers = computed(() => timers.value.length - TIMERS_SHOWN)
+/** Minuteurs terminés parmi ceux repliés : signalés sur le bouton pour ne pas les rater. */
+const hiddenRinging = computed(() => timers.value.slice(TIMERS_SHOWN).filter(isRinging).length)
+watch([open, () => props.recipe?.id], ([isOpen, id], [, previousId]) => {
+  if (isOpen && id) openRecipeId.value = id
+  else if (openRecipeId.value === (id ?? previousId)) openRecipeId.value = null
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (open.value && openRecipeId.value === props.recipe?.id) openRecipeId.value = null
+})
+
 const { formatDate } = useDateFormat()
 
 const persons = computed(() => props.recipe?.persons ?? 1)
@@ -135,6 +155,26 @@ const editRecipe = async () => {
     }"
   >
     <template #actions>
+      <UPopover v-if="recipe" v-model:open="timerLauncherOpen" :content="{ align: 'end', sideOffset: 6 }">
+        <!-- Le nombre de minuteurs en cours suit l'icône. -->
+        <UButton
+          icon="i-lucide-timer"
+          :label="timers.length ? String(timers.length) : undefined"
+          :color="timers.length ? 'primary' : 'neutral'"
+          variant="ghost"
+          aria-label="Lancer un minuteur"
+          title="Lancer un minuteur"
+          class="shrink-0 tabular-nums"
+        />
+        <template #content>
+          <div class="w-[min(20rem,calc(100vw-2rem))] p-4">
+            <KitchenTimerLauncher
+              :recipe="{ id: recipe.id, title: recipe.title, parts: displayedParts }"
+              @started="timerLauncherOpen = false"
+            />
+          </div>
+        </template>
+      </UPopover>
       <UButton
         v-if="recipe"
         icon="i-lucide-pencil"
@@ -168,6 +208,39 @@ const editRecipe = async () => {
       />
 
       <div class="flex flex-col gap-6">
+        <!-- Minuteurs en cours, toujours visibles pendant qu'on fait défiler la recette. -->
+        <section
+          v-if="timers.length"
+          aria-label="Minuteurs en cours"
+          class="sticky -top-4 sm:-top-6 z-10 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 max-h-[45dvh] overflow-y-auto overscroll-contain border-b border-default bg-default"
+        >
+          <ul id="recipe-timers" class="divide-y divide-default">
+            <li v-for="timer in shownTimers" :key="timer.id">
+              <KitchenTimerRow :timer="timer" inset />
+            </li>
+          </ul>
+          <button
+            v-if="hiddenTimers > 0"
+            type="button"
+            class="flex min-h-11 w-full items-center justify-center gap-1.5 border-t border-default px-4 text-sm font-medium transition-colors hover:bg-elevated focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+            :class="!timersExpanded && hiddenRinging ? 'bg-inverted text-inverted hover:bg-inverted/90' : 'text-muted'"
+            aria-controls="recipe-timers"
+            :aria-expanded="timersExpanded"
+            @click="timersExpanded = !timersExpanded"
+          >
+            <template v-if="timersExpanded">Replier</template>
+            <template v-else>
+              {{ hiddenTimers }} autre{{ hiddenTimers > 1 ? 's' : '' }} minuteur{{ hiddenTimers > 1 ? 's' : '' }}
+              <template v-if="hiddenRinging">· {{ hiddenRinging }} terminé{{ hiddenRinging > 1 ? 's' : '' }}</template>
+            </template>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="size-4 shrink-0 transition-transform motion-reduce:transition-none"
+              :class="timersExpanded && 'rotate-180'"
+            />
+          </button>
+        </section>
+
         <img
           v-if="recipe?.imageUrl"
           :src="recipe.imageUrl"

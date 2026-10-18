@@ -186,42 +186,20 @@ const roundBars = computed(() => {
 
 // --- Sons et vibrations ---
 
-let audio: AudioContext | null = null
-function beep(frequency: number, durationMs: number) {
-  if (!audio) return
-  const oscillator = audio.createOscillator()
-  const gain = audio.createGain()
-  oscillator.type = 'sine'
-  oscillator.frequency.value = frequency
-  gain.gain.setValueAtTime(0.25, audio.currentTime)
-  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + durationMs / 1000)
-  oscillator.connect(gain).connect(audio.destination)
-  oscillator.start()
-  oscillator.stop(audio.currentTime + durationMs / 1000)
-}
-const vibrate = (pattern: number | number[]) => {
-  try {
-    navigator.vibrate?.(pattern)
-  }
-  catch {
-    // Vibration indisponible (ordinateur, iOS) : le bip suffit.
-  }
-}
-
 /** Signal d'une nouvelle étape : aigu et double vibration pour l'effort, grave pour un repos. */
 function cueStep(kind: CircuitStep['kind'] | 'end') {
   if (kind === 'work') {
-    beep(1320, 400)
-    vibrate([120, 60, 120])
+    timerBeep(1320, 400)
+    timerVibrate([120, 60, 120])
   }
   else if (kind === 'end') {
-    beep(1320, 250)
-    setTimeout(() => beep(1760, 600), 300)
-    vibrate([200, 100, 200, 100, 400])
+    timerBeep(1320, 250)
+    setTimeout(() => timerBeep(1760, 600), 300)
+    timerVibrate([200, 100, 200, 100, 400])
   }
   else {
-    beep(660, 400)
-    vibrate(250)
+    timerBeep(660, 400)
+    timerVibrate(250)
   }
 }
 
@@ -240,13 +218,7 @@ function begin() {
   // Réglages changés depuis l'ouverture : on repart du circuit tel qu'il est.
   steps.value = circuitSteps(props.circuit)
   if (!steps.value.length) return
-  try {
-    audio ??= new AudioContext()
-    void audio.resume()
-  }
-  catch {
-    audio = null
-  }
+  unlockTimerSound()
   phase.value = 'ready'
   endAt.value = Date.now() + READY_SEC * 1000
   lastCueSec = READY_SEC + 1
@@ -263,7 +235,7 @@ function tick() {
   if (pausedRemaining.value !== null) return
   // Trois bips courts sur les 3 dernières secondes de l'étape.
   const sec = remainingSec.value
-  if (sec <= 3 && sec >= 1 && sec < lastCueSec) beep(880, 120)
+  if (sec <= 3 && sec >= 1 && sec < lastCueSec) timerBeep(880, 120)
   lastCueSec = sec
   // Rattrape toutes les étapes écoulées (page restée en arrière-plan), sans rejouer leurs signaux.
   let advanced = false
@@ -351,10 +323,8 @@ function skip() {
   if (wasPaused && (phase.value as Phase) !== 'finished') togglePause()
 }
 
-onBeforeUnmount(() => {
-  stop()
-  void audio?.close().catch(() => undefined)
-})
+// Le son est partagé avec les minuteurs de cuisine : on ne le ferme pas.
+onBeforeUnmount(stop)
 
 // --- Résultats ---
 

@@ -88,6 +88,10 @@ const links = [{
     label: 'Scanner produit',
     icon: 'i-lucide-scan-barcode',
     to: '/dashboard/scanner-produit',
+  }, {
+    label: 'Minuteurs',
+    icon: 'i-lucide-timer',
+    to: '/dashboard/minuteurs',
   }]
 }] satisfies NavigationMenuItem[]
 
@@ -151,5 +155,6 @@ const navItems = links.map(item => ('children' in item ? { ...item, ui: { linkLa
 
     <slot />
 
+    <KitchenTimerDock />
   </UDashboardGroup>
 </template>

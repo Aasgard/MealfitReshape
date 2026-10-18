@@ -10,6 +10,8 @@ const props = defineProps<{
   recipe?: KitchenTimer['recipe']
   /** Page Minuteurs : durées sur une ligne dès la tablette. */
   wide?: boolean
+  /** Fiche recette : cuissons d'œufs (coque, poché, mollet, dur) en plus des durées. */
+  eggs?: boolean
 }>()
 
 const emit = defineEmits<{ started: [] }>()
@@ -17,6 +19,8 @@ const emit = defineEmits<{ started: [] }>()
 const { start, nextDefaultLabel } = useKitchenTimers()
 
 const PRESET_MINUTES = [1, 3, 5, 10, 15, 20]
+/** Fiche recette : œufs en coquille seulement, sur une ligne de trois comme les durées. */
+const RECIPE_EGGS = EGG_COOKINGS.filter(egg => egg.label !== 'Poché')
 
 const label = ref('')
 const minutes = ref<number | null>(null)
@@ -24,8 +28,9 @@ const seconds = ref<number | null>(null)
 
 const customMs = computed(() => ((minutes.value ?? 0) * 60 + (seconds.value ?? 0)) * 1000)
 
-function launch(durationMs: number) {
-  start({ durationMs, label: label.value, recipe: props.recipe })
+/** `fallbackLabel` : nom d'une cuisson d'œuf, quand aucun nom n'a été saisi. */
+function launch(durationMs: number, fallbackLabel?: string) {
+  start({ durationMs, label: label.value.trim() || fallbackLabel, recipe: props.recipe })
   label.value = ''
   minutes.value = null
   seconds.value = null
@@ -65,6 +70,25 @@ const clampField = (value: unknown, max: number) => {
         @click="launch(m * 60_000)"
       >
         <span>{{ m }} <span class="text-sm font-normal text-muted">min</span></span>
+      </UButton>
+    </div>
+
+    <div v-if="eggs" role="group" aria-label="Œufs" class="grid grid-cols-3 gap-2">
+      <UButton
+        v-for="egg in RECIPE_EGGS"
+        :key="egg.label"
+        color="neutral"
+        variant="outline"
+        size="lg"
+        block
+        icon="i-lucide-egg"
+        class="h-12 justify-center text-sm font-normal text-muted"
+        :ui="{ leadingIcon: 'size-4 text-dimmed' }"
+        :aria-label="`Lancer œuf ${egg.label.toLowerCase()}, ${egg.minutes} minutes`"
+        :title="`${egg.minutes} min`"
+        @click="launch(egg.minutes * 60_000, eggTimerLabel(egg))"
+      >
+        {{ egg.label }}
       </UButton>
     </div>
 

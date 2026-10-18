@@ -169,6 +169,7 @@ const editRecipe = async () => {
         <template #content>
           <div class="w-[min(20rem,calc(100vw-2rem))] p-4">
             <KitchenTimerLauncher
+              eggs
               :recipe="{ id: recipe.id, title: recipe.title, parts: displayedParts }"
               @started="timerLauncherOpen = false"
             />

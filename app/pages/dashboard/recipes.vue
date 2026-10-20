@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
-import { collection, or, query, where, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
+import { collection, query, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
@@ -38,17 +38,17 @@ await recipes.promise.value
 /** Vrai tant que l'utilisateur n'est pas résolu (requête non lancée) ou que la première lecture Firestore n'est pas revenue. */
 const recipesLoading = computed(() => !user.value || recipes.pending.value)
 
-/** Catalogue d'ingrédients (privés de l'utilisateur + publics) pour résoudre les macros affichées sur les cartes. */
+/** Catalogue d'ingrédients pour résoudre les macros affichées sur les cartes et les lignes des fiches recette. */
 const ingredients = useCollection<Ingredient>(() => {
   const uid = user.value?.uid
   if (!uid) return null
 
   return query(
     collection(db, 'ingredients'),
-    or(
-      where('owner', '==', uid),
-      where('owner', '==', null)
-    )
+    // or(
+    //   where('owner', '==', uid),
+    //   where('owner', '==', null)
+    // )
   )
 })
 const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))

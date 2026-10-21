@@ -9,7 +9,8 @@ import { useIngredientDefaultUnitsStore } from '~/stores/ingredientDefaultUnits'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
-import type { IngredientPrefill } from '~/utils/offNutrition'
+import { ingredientPrefillFromOff } from '~/utils/offNutrition'
+import type { IngredientPrefill, OffProductDetails } from '~/utils/offNutrition'
 
 /**
  * Slideover d'ajout/modification d'ingrédient — un seul composant pour les deux modes.
@@ -81,6 +82,7 @@ function resetForm() {
     : []
   comment.value = ing?.comment ?? ''
   submitted.value = false
+  scannedPrefill.value = null
 
   if (prefill.value) {
     label.value = prefill.value.label
@@ -95,9 +97,33 @@ function resetForm() {
 
 const prefill = computed(() => (isEditMode.value ? null : props.prefill))
 
+/** Scan proposé en création, sauf si le panneau s'ouvre déjà sur un produit scanné. */
+const canScan = computed(() => !isEditMode.value && !props.prefill)
+
+/** Produit scanné depuis le panneau : il remplace les valeurs Open Food Facts éventuellement reçues à l'ouverture. */
+const scannedPrefill = shallowRef<IngredientPrefill | null>(null)
+const offPrefill = computed(() => scannedPrefill.value ?? prefill.value)
+
+/**
+ * Remplit le nom, la densité et les valeurs pour 100 depuis la fiche ; la catégorie, les mois et les unités restent.
+ * Un nom absent de la fiche garde la saisie ; le commentaire libre garde son texte, l'EAN s'y ajoute.
+ */
+function applyScannedProduct(code: string, product: OffProductDetails) {
+  const scanned = ingredientPrefillFromOff(code, product)
+  scannedPrefill.value = scanned
+  if (scanned.label) label.value = scanned.label
+  density.value = scanned.density
+  calories.value = scanned.calories
+  protein.value = scanned.protein
+  carbohydrates.value = scanned.carbohydrates
+  fat.value = scanned.fat
+  const currentComment = comment.value.trim()
+  comment.value = !currentComment || /^EAN \d+$/.test(currentComment) ? scanned.comment : `${currentComment}\n${scanned.comment}`
+}
+
 const valuesHint = computed(() => {
-  if (!prefill.value) return 'Valeurs pour 100 g (optionnel)'
-  return prefill.value.density
+  if (!offPrefill.value) return 'Valeurs pour 100 g (optionnel)'
+  return offPrefill.value.density
     ? 'Valeurs pour 100 ml d’après Open Food Facts, comptées pour 100 g avec une densité de 1'
     : 'Valeurs pour 100 g d’après Open Food Facts'
 })
@@ -286,12 +312,17 @@ async function handleSubmit() {
   >
     <template #body>
       <div class="flex flex-col gap-6">
+        <div v-if="canScan" class="flex flex-col gap-4">
+          <ProductBarcodeLookup @found="applyScannedProduct" />
+          <USeparator label="ou saisissez les valeurs" :ui="{ label: 'text-xs text-dimmed font-normal' }" />
+        </div>
+
         <div class="flex flex-col gap-4">
           <UFormField label="Nom" :error="labelError">
             <UInput v-model="label" placeholder="ex : Tomate" size="md" variant="outline" class="w-full" />
           </UFormField>
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField label="Catégorie" :error="categoryError">
+          <div class="grid grid-cols-3 gap-4">
+            <UFormField label="Catégorie" :error="categoryError" class="col-span-2">
               <USelectMenu
                 v-model="categoryId"
                 :items="categoryOptions"
@@ -302,13 +333,16 @@ async function handleSubmit() {
                 class="w-full"
               />
             </UFormField>
-            <UFormField label="Densité (g/ml)" :error="densityError">
+            <UFormField :error="densityError">
+              <template #label>
+                <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                  Densité <span class="text-xs font-normal text-dimmed">(g/ml)</span>
+                  <IngredientDensityInfo />
+                </span>
+              </template>
               <UInput v-model="density" type="text" inputmode="decimal" placeholder="ex : 0.92" size="md" variant="outline" class="w-full" />
             </UFormField>
           </div>
-          <p class="text-xs text-dimmed -mt-2">
-            La densité sert à convertir une unité exprimée en ml vers des grammes ; utile seulement si une unité ci-dessous est en ml.
-          </p>
         </div>
 
         <!-- Valeurs nutritionnelles -->

@@ -11,7 +11,7 @@ import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeTy
 import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
 import { matchesSearch } from '~/utils/search'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
-import { isCompletePer100, readingsForQuantity, scannedProductLabel, type ScannedProductDraft } from '~/utils/offNutrition'
+import { isCompletePer100, readingsForQuantity, scannedProductFromOff, scannedProductLabel, type OffProductDetails, type ScannedProductDraft } from '~/utils/offNutrition'
 
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
@@ -598,7 +598,8 @@ const setProductQuantity = (value: number) => {
   productQuantity.value = String(value)
 }
 
-const onProductFound = (scanned: ScannedProductDraft) => {
+const onProductFound = (code: string, offProduct: OffProductDetails) => {
+  const scanned = scannedProductFromOff(code, offProduct)
   product.value = scanned
   label.value = scannedProductLabel(scanned)
   productQuantity.value = String(scanned.serving ?? 100)
@@ -1199,7 +1200,7 @@ const onSubmit = () => {
         </template>
 
         <template v-else>
-          <MenuProductScan ref="productScan" @found="onProductFound" />
+          <ProductBarcodeLookup ref="productScan" @found="onProductFound" />
           <USeparator label="ou saisissez les valeurs" :ui="{ label: 'text-xs text-dimmed font-normal' }" />
           <UFormField label="Libellé" :error="labelError">
             <UInput v-model="label" placeholder="ex : Restaurant, barre protéinée..." size="md" variant="outline" class="w-full" />

@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { detectBarcodeInFile, SCANNER_ERROR_MESSAGES } from '~/composables/useBarcodeScanner'
 import type { ScannerErrorKind } from '~/composables/useBarcodeScanner'
-import { scannedProductFromOff } from '~/utils/offNutrition'
-import type { ScannedProductDraft } from '~/utils/offNutrition'
+import type { OffProductDetails } from '~/utils/offNutrition'
 
 /**
- * Lecture d'un code-barres dans l'onglet Macros de la modale d'ajout de repas : caméra, photo importée ou code saisi,
- * puis recherche Open Food Facts. Émet le produit trouvé ; le parent en tire les macros selon la quantité mangée.
+ * Lecture d'un code-barres : caméra, photo importée ou code saisi, puis recherche Open Food Facts.
+ * Émet la fiche trouvée ; le parent en tire ce qu'il lui faut (macros d'un repas, champs d'un ingrédient).
  */
 const emit = defineEmits<{
-  found: [product: ScannedProductDraft]
+  found: [code: string, product: OffProductDetails]
 }>()
 
 const { state, lookup, retry, reset } = useOffProduct()
@@ -36,8 +35,8 @@ defineExpose({ openScanner })
 // --- Code saisi ---
 
 const manualOpen = ref(false)
-const openManual = () => {
-  manualOpen.value = true
+const toggleManual = () => {
+  manualOpen.value = !manualOpen.value
 }
 const manualCode = ref('')
 const manualError = ref<string>()
@@ -86,7 +85,7 @@ async function onPhotoSelected(event: Event) {
 /** Produit trouvé : remis au parent, et le bloc revient à son état initial pour un prochain scan. */
 watch(state, (current) => {
   if (current.kind !== 'done' || current.data.status !== 1 || !current.data.product) return
-  emit('found', scannedProductFromOff(current.code, current.data.product))
+  emit('found', current.code, current.data.product)
   reset()
   manualOpen.value = false
   manualCode.value = ''
@@ -107,41 +106,37 @@ const notFoundCode = computed(() =>
     />
 
     <template v-else>
-      <UButton
-        color="neutral"
-        variant="outline"
-        icon="i-lucide-scan-barcode"
-        block
-        class="justify-center"
-        :disabled="cameraUnavailable"
-        @click="openScanner"
-      >
-        Scanner un produit
-      </UButton>
-
-      <div class="flex flex-wrap items-center justify-center gap-x-1 text-xs text-muted">
+      <div class="flex gap-2">
         <UButton
           color="neutral"
-          variant="link"
-          size="xs"
-          class="px-0.5 font-medium text-toned"
-          :loading="photoDecoding"
-          @click="fileInput?.click()"
+          variant="outline"
+          icon="i-lucide-scan-barcode"
+          class="flex-1 justify-center"
+          :disabled="cameraUnavailable"
+          @click="openScanner"
         >
-          {{ photoDecoding ? 'Lecture de la photo…' : 'Importer une photo' }}
+          Scanner un produit
         </UButton>
-        <template v-if="!manualOpen">
-          <span aria-hidden="true" class="text-dimmed">·</span>
+        <UTooltip :text="photoDecoding ? 'Lecture de la photo…' : 'Importer une photo'">
           <UButton
             color="neutral"
-            variant="link"
-            size="xs"
-            class="px-0.5 font-medium text-toned"
-            @click="openManual"
-          >
-            Saisir le code
-          </UButton>
-        </template>
+            variant="outline"
+            icon="i-lucide-image-up"
+            :loading="photoDecoding"
+            :aria-label="photoDecoding ? 'Lecture de la photo…' : 'Importer une photo'"
+            @click="fileInput?.click()"
+          />
+        </UTooltip>
+        <UTooltip text="Saisir le code">
+          <UButton
+            color="neutral"
+            :variant="manualOpen ? 'soft' : 'outline'"
+            icon="i-lucide-keyboard"
+            aria-label="Saisir le code"
+            :aria-pressed="manualOpen"
+            @click="toggleManual"
+          />
+        </UTooltip>
         <input
           ref="fileInput"
           type="file"

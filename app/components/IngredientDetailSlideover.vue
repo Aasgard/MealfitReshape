@@ -55,19 +55,22 @@ const isAllYear = computed(() => (props.ingredient?.activeMonths?.length ?? 0) =
 
     <template #body>
       <div class="flex flex-col gap-6">
-        <!-- Catégorie -->
-        <div v-if="ingredient?.category?.label">
-          <p class="text-xs text-dimmed mb-1">Catégorie</p>
-          <p class="text-sm text-muted flex items-center gap-1.5">
-            <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-3.5 shrink-0" />
-            {{ ingredient.category.label }}
-          </p>
-        </div>
-
-        <!-- Densité -->
-        <div v-if="ingredient?.density != null">
-          <p class="text-xs text-dimmed mb-1">Densité</p>
-          <p class="text-sm text-muted">{{ ingredient.density }} g/ml</p>
+        <!-- Catégorie et densité -->
+        <div v-if="ingredient?.category?.label || ingredient?.density != null" class="grid grid-cols-3 gap-4">
+          <div v-if="ingredient?.category?.label" class="col-span-2">
+            <p class="text-xs text-dimmed mb-1">Catégorie</p>
+            <p class="text-sm text-muted flex items-center gap-1.5">
+              <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-3.5 shrink-0" />
+              {{ ingredient.category.label }}
+            </p>
+          </div>
+          <div v-if="ingredient?.density != null">
+            <p class="text-xs text-dimmed mb-1 flex items-center gap-1">
+              Densité
+              <IngredientDensityInfo />
+            </p>
+            <p class="text-sm text-muted">{{ ingredient.density }} g/ml</p>
+          </div>
         </div>
 
         <!-- Valeurs nutritionnelles -->

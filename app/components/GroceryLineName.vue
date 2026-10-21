@@ -58,6 +58,20 @@ function removeFromList() {
   list.removeManual(props.line)
 }
 
+/**
+ * En rayon (mode Acheter) : ouvrir le comparateur du scanner, l'ingrédient du catalogue d'où vient l'article déjà en A.
+ * Un ajout manuel sans ingrédient (ni complément) ouvre le comparateur vide.
+ */
+const compareLink = computed(() => ({
+  path: '/dashboard/scanner-produit',
+  query: { compare: props.line.item.ingredientId ?? props.line.item.complementOf?.ingredientId ?? '', from: 'courses' },
+}))
+
+function closeDetail() {
+  popoverOpen.value = false
+  drawerOpen.value = false
+}
+
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 </script>
 
@@ -125,6 +139,19 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
         :model-value="line.isMarkedUrgent"
         label="Marquer urgent"
         @update:model-value="list.toggleUrgent(line)"
+      />
+
+      <UButton
+        v-if="variant === 'store'"
+        :to="compareLink"
+        label="Comparer"
+        icon="i-lucide-columns-2"
+        color="neutral"
+        variant="outline"
+        :size="inDrawer ? 'lg' : 'sm'"
+        :block="inDrawer"
+        class="justify-center"
+        @click="closeDetail"
       />
 
       <UButton

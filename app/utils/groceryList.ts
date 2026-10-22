@@ -67,6 +67,8 @@ export interface GroceryLine {
   hasTooEarlyNeed: boolean
   /** Membre du foyer qui l'a ajouté à la main, quand ce n'est pas le compte connecté (renseigné par la page). */
   addedBy?: HouseholdMember
+  /** Magasins existants où l'acheter, dans leur ordre (renseigné par la page) ; vide : partout. */
+  storeIds?: string[]
   item: ShoppingItem
 }
 

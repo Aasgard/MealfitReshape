@@ -1,4 +1,4 @@
-import { collection, deleteField, doc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch, type Firestore, type QueryFieldFilterConstraint, type WriteBatch } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, collection, deleteField, doc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch, type Firestore, type QueryFieldFilterConstraint, type WriteBatch } from 'firebase/firestore'
 import { useLocalStorage } from '@vueuse/core'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { ShoppingItem, ShoppingItemStatus, ShoppingMealInclusion } from '~/types/shoppingList'
@@ -60,6 +60,8 @@ export const useShoppingList = () => {
   const { householdId, loading: householdLoading } = useHousehold()
   const shoppingListRef = collection(db, 'shoppingList')
   const shoppingMealsRef = collection(db, 'shoppingMeals')
+  /** Magasins du foyer : un article venu d'un ingrédient reprend ceux qu'on a retenus pour lui. */
+  const shoppingStores = useStores()
 
   /** Liste lue et écrite : celle du foyer, sinon celle du compte ; `null` tant que le foyer n'est pas connu. */
   const scope = computed(() => {
@@ -122,6 +124,7 @@ export const useShoppingList = () => {
           case 'create': {
             const ingredient = catalog.ingredientsById.get(write.ingredientId)
             const pieceGrams = ingredient ? gramsPerPiece(ingredient) : null
+            const storeIds = shoppingStores.storesForIngredient(write.ingredientId)
             return (batch: WriteBatch) => batch.set(doc(shoppingListRef), {
               scope,
               label: ingredient?.label ?? 'Ingrédient introuvable',
@@ -129,6 +132,7 @@ export const useShoppingList = () => {
               ingredientId: write.ingredientId,
               ...(ingredient?.category?.id ? { categoryId: ingredient.category.id } : {}),
               ...(pieceGrams ? { gramsPerPiece: pieceGrams } : {}),
+              ...(storeIds.length ? { storeIds } : {}),
               contributions: write.contributions,
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
@@ -141,9 +145,13 @@ export const useShoppingList = () => {
     return skipped
   }
 
-  /** Ajoute un article saisi à la main, à acheter, avec quantité libre, marquage urgent et échéance facultatifs. */
-  function addManual(label: string, options: { categoryId?: string, quantity?: string, urgent?: boolean, neededBy?: string, linkedIngredientId?: string } = {}) {
+  /**
+   * Ajoute un article saisi à la main, à acheter, avec quantité libre, marquage urgent, échéance et magasins facultatifs
+   * (vides : partout).
+   */
+  function addManual(label: string, options: { categoryId?: string, quantity?: string, urgent?: boolean, neededBy?: string, linkedIngredientId?: string, storeIds?: string[] } = {}) {
     const { categoryId, quantity, urgent, neededBy, linkedIngredientId } = options
+    const storeIds = shoppingStores.knownStoreIds(options.storeIds)
     const scope = requireScope()
     const batch = writeBatch(db)
     batch.set(doc(shoppingListRef), {
@@ -156,6 +164,7 @@ export const useShoppingList = () => {
       ...(urgent ? { urgent } : {}),
       ...(neededBy ? { neededBy } : {}),
       ...(linkedIngredientId ? { linkedIngredientId } : {}),
+      ...(storeIds.length ? { storeIds } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -187,6 +196,7 @@ export const useShoppingList = () => {
         updatedAt: serverTimestamp(),
       })
     }
+    const storeIds = shoppingStores.storesForIngredient(ingredient.id)
     const batch = writeBatch(db)
     batch.set(doc(shoppingListRef), {
       scope,
@@ -198,14 +208,39 @@ export const useShoppingList = () => {
       neededBy: options.neededBy,
       ...(options.urgent ? { urgent: true } : {}),
       complementOf: { ingredientId: ingredient.id, ...amount },
+      ...(storeIds.length ? { storeIds } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
     return batch.commit()
   }
 
-  const setStatus = (item: ShoppingItem, status: ShoppingItemStatus) =>
-    updateDoc(doc(shoppingListRef, item.id), { status, updatedAt: serverTimestamp() })
+  /** `storeId` : magasin où l'article est mis au panier (`inCart`) ; absent, ou autre statut, le champ est retiré. */
+  const setStatus = (item: ShoppingItem, status: ShoppingItemStatus, storeId?: string | null) =>
+    updateDoc(doc(shoppingListRef, item.id), {
+      status,
+      inCartAt: status === 'inCart' && storeId ? storeId : deleteField(),
+      updatedAt: serverTimestamp(),
+    })
+
+  /**
+   * Ajoute (`on`) ou retire un magasin de plusieurs articles, en une écriture. Ajouter un magasin à un article
+   * « partout » le restreint à ce magasin ; retirer le dernier le rend « partout ».
+   */
+  function setItemsStore(targets: ShoppingItem[], storeId: string, on: boolean) {
+    return commit(targets.map(item => (batch: WriteBatch) => batch.update(doc(shoppingListRef, item.id), {
+      storeIds: on ? arrayUnion(storeId) : arrayRemove(storeId),
+      updatedAt: serverTimestamp(),
+    })))
+  }
+
+  /** Remplace les magasins de plusieurs articles, en une écriture ; vide : partout. */
+  function setItemsStores(changes: { item: ShoppingItem, storeIds: string[] }[]) {
+    return commit(changes.map(({ item, storeIds }) => (batch: WriteBatch) => batch.update(doc(shoppingListRef, item.id), {
+      storeIds: storeIds.length ? storeIds : deleteField(),
+      updatedAt: serverTimestamp(),
+    })))
+  }
 
   /** Marquage urgent à la main ; `false` retire le champ (l'urgence calculée depuis les besoins reste). */
   const setUrgent = (item: ShoppingItem, urgent: boolean) =>
@@ -229,9 +264,10 @@ export const useShoppingList = () => {
   /**
    * Fin des courses : supprime ce qui est dans le panier et ce qui était déjà à la maison, et marque « achetés » les
    * repas correspondants (ils ne pourront plus être décochés ni rachetés). Renvoie le nombre d'articles supprimés.
+   * `storeId` : seul le panier de ce magasin est soldé ; les paniers en cours ailleurs restent.
    */
-  async function finishShopping(catalog: ShoppingCatalog) {
-    const { removed, bought } = planFinish(items.value, inclusions.value, catalog)
+  async function finishShopping(catalog: ShoppingCatalog, storeId?: string | null) {
+    const { removed, bought } = planFinish(items.value, inclusions.value, catalog, storeId)
     await commit([
       ...removed.map(item => (batch: WriteBatch) => batch.delete(doc(shoppingListRef, item.id))),
       ...bought.map(inclusion => (batch: WriteBatch) => batch.update(doc(shoppingMealsRef, inclusion.id), { state: 'bought', updatedAt: serverTimestamp() })),
@@ -282,6 +318,7 @@ export const useShoppingList = () => {
 
   return {
     scope,
+    stores: shoppingStores,
     items,
     inclusions,
     applyInclusions,
@@ -289,6 +326,8 @@ export const useShoppingList = () => {
     addManual,
     addComplement,
     setStatus,
+    setItemsStore,
+    setItemsStores,
     setUrgent,
     setNeededBy,
     setQuantity,

@@ -173,7 +173,10 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 12 : 0 
             </td>
 
             <td class="px-3 py-2">
-              <IngredientSeasonMark :ingredient="ingredient" />
+              <span class="flex items-center gap-2">
+                <IngredientSeasonMark :ingredient="ingredient" />
+                <IngredientStoresMark :ingredient-id="ingredient.id" />
+              </span>
             </td>
 
             <td class="pl-1 pr-2 py-2" @click.stop>
@@ -237,6 +240,7 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 12 : 0 
             </span>
 
             <span class="ml-auto flex items-center gap-2 shrink-0">
+              <IngredientStoresMark :ingredient-id="ingredient.id" />
               <IngredientSeasonMark :ingredient="ingredient" compact />
               <template v-if="ingredient.valuesBy100">
                 <span

@@ -5,6 +5,7 @@
  * marquage urgent (sauf besoin aujourd'hui ou demain, déjà urgent) ; pour un ajout manuel, le jour où il est nécessaire. Souris et clavier : popover ; toucher : panneau en bas d'écran.
  */
 import { createReusableTemplate } from '@vueuse/core'
+import type { Store } from '~/types/store'
 import type { GroceryLine } from '~/utils/groceryList'
 
 const props = withDefaults(defineProps<{
@@ -17,7 +18,11 @@ const props = withDefaults(defineProps<{
   bare?: boolean
   /** Toute la ligne est cliquable : bouton pleine largeur, avec ses marges et son survol. */
   block?: boolean
-}>(), { variant: 'prepare', done: false, bare: false, block: false })
+  /** Magasins rappelés par leurs pastilles, à la suite du nom ; leurs noms en infobulle. */
+  stores?: Pick<Store, 'id' | 'name' | 'color'>[]
+  /** Précède les magasins : « Aussi chez ». */
+  storesPrefix?: string
+}>(), { variant: 'prepare', done: false, bare: false, block: false, stores: () => [], storesPrefix: '' })
 
 const list = useInjectedGroceryLineActions()
 const [DefineDetail, ReuseDetail] = createReusableTemplate()
@@ -45,7 +50,8 @@ const tooEarlyDays = computed(() => props.line.needs.filter(need => need.isTooEa
 
 const ariaLabel = computed(() => [
   props.line.label,
-  props.line.addedBy ? `ajouté par ${props.line.addedBy.name}` : null,
+  props.stores.length ? [props.storesPrefix, props.stores.map(store => store.name).join(', ')].filter(Boolean).join(' ') : null,
+  props.line.addedBy ?`ajouté par ${props.line.addedBy.name}` : null,
   props.line.isUrgent ? 'urgent' : null,
   props.line.hasTooEarlyNeed ? 'à acheter plus tard' : null,
   'voir les besoins',
@@ -192,6 +198,7 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
           <UAvatar v-if="line.addedBy && !bare" :src="line.addedBy.photoUrl" :alt="line.addedBy.name" size="3xs" class="shrink-0" />
           <UIcon v-if="line.isUrgent && !done && !bare" name="i-lucide-zap" class="size-3.5 shrink-0 text-error" aria-hidden="true" />
           <UIcon v-if="line.hasTooEarlyNeed && !done && !bare" name="i-lucide-clock" class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+          <StoreDots v-if="!done" :stores="stores" :label="storesPrefix || 'Magasins'" class="ms-0.5" />
         </span>
       </button>
     </template>

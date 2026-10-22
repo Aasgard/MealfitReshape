@@ -19,6 +19,11 @@ export interface Store {
   order: number
   /** Compte qui l'a ajouté. */
   createdBy: string
+  /**
+   * Ingrédients (Firestore `ingredients`) que le foyer achète ici : mémoire reprise par un article quand l'ingrédient
+   * arrive dans la liste de courses. Propre au foyer, jamais dans le catalogue (partagé avec tous).
+   */
+  ingredientIds?: string[]
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

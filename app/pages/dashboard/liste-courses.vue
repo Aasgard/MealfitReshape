@@ -44,7 +44,7 @@ const modeItems = computed<TabsItem[]>(() => [
     label: 'Acheter',
     value: 'store',
     icon: 'i-lucide-shopping-cart',
-    badge: list.toBuy.length ? { label: `${list.doneCount}/${list.toBuy.length}`, color: 'neutral' as const, variant: 'subtle' as const } : undefined,
+    badge: list.shopLines.length ? { label: `${list.doneCount}/${list.shopLines.length}`, color: 'neutral' as const, variant: 'subtle' as const } : undefined,
   },
 ])
 
@@ -53,7 +53,8 @@ const slideName = computed(() => (list.mode === 'store' ? 'to-store' : 'to-prepa
 
 /**
  * Balayage horizontal au doigt pour changer de mode : vers la gauche « Acheter », vers la droite « Lister ».
- * Ignoré s'il part d'un champ de saisie (sélection de texte) ; un geste plutôt vertical reste un défilement.
+ * Ignoré s'il part d'un champ de saisie (sélection de texte) ou d'une zone qui défile elle-même à l'horizontale
+ * (`data-no-swipe`, ex. le rail des magasins) ; un geste plutôt vertical reste un défilement.
  */
 const swipeArea = useTemplateRef('swipeArea')
 let swipeFromField = false
@@ -61,7 +62,7 @@ useSwipe(swipeArea, {
   threshold: 60,
   passive: true,
   onSwipeStart: (event) => {
-    swipeFromField = event.target instanceof Element && !!event.target.closest('input, textarea, select, [contenteditable]')
+    swipeFromField = event.target instanceof Element && !!event.target.closest('input, textarea, select, [contenteditable], [data-no-swipe]')
   },
   onSwipeEnd: (_event, direction) => {
     if (swipeFromField) return
@@ -96,18 +97,25 @@ function onFinish() {
 
 const isFinishing = ref(false)
 const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? 's' : ''}`
+const finishTitle = computed(() => (list.shopStore ? `Terminer les courses chez ${list.shopStore.name} ?` : 'Terminer les courses ?'))
+
 const finishDescription = computed(() => {
   const inCart = list.doneCount
   const atHome = list.atHomeLines.length
+  // Dans un magasin, ce qui n'est pas dans son panier reste dans la liste, ici ou ailleurs.
   const left = list.toBuy.length - inCart
   // Ex. : « 12 articles du panier et 3 déjà à la maison quitteront la liste… 4 articles non cochés restent à acheter. »
   const removed = [
-    inCart ? `${plural(inCart, 'article')} du panier` : null,
+    inCart ? `${plural(inCart, 'article')} du panier${list.shopStore ? ` ${list.shopStore.name}` : ''}` : null,
     atHome ? `${atHome} déjà à la maison` : null,
   ].filter(Boolean).join(' et ')
   const sentences: string[] = []
   if (removed) sentences.push(`${removed} quitter${inCart + atHome > 1 ? 'ont' : 'a'} la liste, leurs repas seront marqués achetés.`)
-  if (left) sentences.push(`${plural(left, 'article')} non coché${left > 1 ? 's' : ''} rest${left > 1 ? 'ent' : 'e'} à acheter.`)
+  if (left) {
+    sentences.push(list.shopStore
+      ? `${plural(left, 'article')} rest${left > 1 ? 'ent' : 'e'} à acheter, ici ou ailleurs.`
+      : `${plural(left, 'article')} non coché${left > 1 ? 's' : ''} rest${left > 1 ? 'ent' : 'e'} à acheter.`)
+  }
   return sentences.join(' ')
 })
 
@@ -222,7 +230,7 @@ async function onConfirmFinish() {
 
   <ConfirmDialog
     v-model:open="finishOpen"
-    title="Terminer les courses ?"
+    :title="finishTitle"
     :description="finishDescription"
     confirm-label="Terminer les courses"
     confirm-icon="i-lucide-check-check"

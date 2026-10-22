@@ -4,7 +4,7 @@ import type { Store } from '~/types/store'
 import { STORE_COLORS, STORE_NAME_MAX, storeColor, type StoreColor } from '~/utils/stores'
 
 /**
- * Magasins des réglages : liste à règles fines où chaque nom s'écrit dans sa couleur. Tout se modifie sur place (nom,
+ * Magasins des réglages : liste à règles fines où chaque nom suit sa pastille de couleur. Tout se modifie sur place (nom,
  * couleur, rang) et s'enregistre aussitôt ; `saved` est émis après chaque écriture réussie.
  */
 const emit = defineEmits<{ saved: [] }>()
@@ -186,24 +186,23 @@ function removeStore(store: Store) {
               <button
                 type="button"
                 class="flex size-7 shrink-0 items-center justify-center rounded-sm hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
-                :class="storeColor(store.color).text"
                 :aria-label="`Couleur de ${store.name} : ${storeColor(store.color).label}. Changer`"
               >
-                <span class="size-3.5 rounded-full bg-current" />
+                <span class="size-3.5 rounded-full outline -outline-offset-1" :class="storeColor(store.color).dot" />
               </button>
 
               <template #content>
                 <div class="flex flex-col gap-2 p-2.5">
                   <p :id="`store-${store.id}-colors`" class="text-xs font-semibold uppercase tracking-wide text-dimmed">
-                    Couleur du nom
+                    Couleur
                   </p>
-                  <div role="radiogroup" :aria-labelledby="`store-${store.id}-colors`" class="grid grid-cols-5 gap-1">
+                  <div role="radiogroup" :aria-labelledby="`store-${store.id}-colors`" class="grid grid-cols-6 gap-1">
                     <button
                       v-for="color in STORE_COLORS"
                       :key="color.key"
                       type="button"
                       role="radio"
-                      :aria-checked="store.color === color.key"
+                      :aria-checked="storeColor(store.color).key === color.key"
                       :aria-label="color.label"
                       :title="color.label"
                       class="flex size-8 items-center justify-center rounded-sm hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
@@ -211,8 +210,8 @@ function removeStore(store: Store) {
                       @click="pickColor(store, color.key)"
                     >
                       <span
-                        class="flex size-5 items-center justify-center rounded-full bg-current"
-                        :class="store.color === color.key && 'ring-2 ring-current ring-offset-2 ring-offset-(--ui-bg)'"
+                        class="flex size-5 items-center justify-center rounded-full outline -outline-offset-1"
+                        :class="[color.dot, storeColor(store.color).key === color.key && 'ring-2 ring-current ring-offset-2 ring-offset-(--ui-bg)']"
                       />
                     </button>
                   </div>
@@ -226,8 +225,7 @@ function removeStore(store: Store) {
               :maxlength="STORE_NAME_MAX"
               autocomplete="off"
               spellcheck="false"
-              class="min-w-0 flex-1 rounded-sm bg-transparent px-1.5 py-1 text-sm font-semibold outline-none transition-colors hover:bg-elevated/60 focus-visible:bg-default focus-visible:outline-2 focus-visible:outline-primary"
-              :class="storeColor(store.color).text"
+              class="min-w-0 flex-1 rounded-sm bg-transparent px-1.5 py-1 text-sm font-semibold text-highlighted outline-none transition-colors hover:bg-elevated/60 focus-visible:bg-default focus-visible:outline-2 focus-visible:outline-primary"
               :aria-label="`Nom du magasin ${store.name}`"
               :aria-invalid="!!renameErrors[store.id]"
               :aria-describedby="renameErrors[store.id] ? `store-${store.id}-error` : undefined"

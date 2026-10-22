@@ -75,13 +75,18 @@ const actionItems = computed(() => [
       <IngredientMacroSummary :macros="macros" class="mt-1" />
 
       <div class="flex items-center gap-2 mt-auto pt-2 border-t border-default">
-        <UBadge
-          icon="i-lucide-git-branch"
-          :label="unitLabel"
-          :color="unitCount ? 'primary' : 'neutral'"
-          variant="subtle"
-          size="sm"
-        />
+        <!-- Unités : l'icône seule, le nombre en infobulle. -->
+        <UTooltip :text="unitLabel">
+          <UBadge
+            icon="i-lucide-git-branch"
+            :color="unitCount ? 'primary' : 'neutral'"
+            variant="subtle"
+            size="sm"
+            role="img"
+            :aria-label="unitLabel"
+          />
+        </UTooltip>
+        <IngredientStoresMark :ingredient-id="ingredient.id" />
         <IngredientSeasonMark :ingredient="ingredient" class="ml-auto" />
       </div>
     </div>

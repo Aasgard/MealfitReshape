@@ -14,6 +14,9 @@ const emit = defineEmits<{
   finish: []
 }>()
 
+import { ALL_STORES } from '~/composables/useGroceryList'
+import type { GroceryLine } from '~/utils/groceryList'
+
 const list = useInjectedGroceryList()
 
 const openCarts = ref(new Set<string>())
@@ -32,11 +35,39 @@ function openAddItem() {
   list.isAddItemOpen = true
 }
 
-const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy.length : 0))
+const progress = computed(() => (list.shopLines.length ? list.doneCount / list.shopLines.length : 0))
+
+/**
+ * Pastilles à la suite du nom d'un article : dans un magasin, les autres où il se trouve aussi (pour savoir qu'on peut
+ * le laisser ; « Aussi chez Picard » en infobulle) ; dans « Tous », ses magasins.
+ */
+function lineStores(line: GroceryLine) {
+  const here = list.shopStore?.id
+  const ids = here ? (line.storeIds ?? []).filter(id => id !== here) : line.storeIds
+  return { stores: list.storesOf(ids), prefix: here ? 'Aussi chez' : '' }
+}
+
+/** Autres magasins où il reste quelque chose : proposés quand celui-ci est vide ou fini. */
+const otherChoices = computed(() => list.shopChoices.filter(choice =>
+  choice.value !== ALL_STORES && choice.value !== list.shopSelection && choice.count > 0))
+
+function goToStore(value: string) {
+  list.shopSelection = value
+}
 </script>
 
 <template>
   <div class="mx-auto flex w-full max-w-2xl flex-col gap-5">
+    <!-- Le magasin où l'on est : la liste ne montre que ce qui s'y achète. -->
+    <StoreChoiceBar
+      v-if="!list.isLoading && list.hasStores && list.toBuy.length"
+      v-model="list.shopSelection"
+      :choices="list.shopChoices"
+      label="Magasin"
+      size="md"
+      class="self-start"
+    />
+
     <p v-if="list.isLoading" class="py-12 text-center text-sm text-muted">
       Chargement de la liste…
     </p>
@@ -52,6 +83,31 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
       <UButton label="Faire la liste" color="neutral" variant="outline" icon="i-lucide-list-checks" @click="backToList" />
     </div>
 
+    <!-- Rien pour ce magasin, mais il en reste ailleurs. -->
+    <div v-else-if="!list.shopLines.length" class="flex flex-col items-center gap-3 rounded-xl border border-dashed border-default px-6 py-12 text-center">
+      <UIcon name="i-lucide-store" class="size-8 text-dimmed" aria-hidden="true" />
+      <p class="text-base font-semibold text-highlighted">
+        Rien à acheter chez <StoreName v-if="list.shopStore" :store="list.shopStore" :dot="false" />
+      </p>
+      <template v-if="otherChoices.length">
+        <p class="max-w-xs text-sm text-muted">
+          Il reste des articles ailleurs.
+        </p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <UButton
+            v-for="choice in otherChoices"
+            :key="choice.value"
+            color="neutral"
+            variant="outline"
+            @click="goToStore(choice.value)"
+          >
+            <StoreName :store="{ name: choice.label, color: choice.color! }" />
+            <span class="tabular-nums text-dimmed">{{ choice.count }}</span>
+          </UButton>
+        </div>
+      </template>
+    </div>
+
     <template v-else>
       <!-- Progression : reprend la barre des macros. -->
       <div class="flex flex-col gap-2" aria-live="polite">
@@ -59,7 +115,7 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
           <span class="text-sm text-muted">Dans le panier</span>
           <span class="tabular-nums">
             <span class="text-2xl font-bold text-highlighted">{{ list.doneCount }}</span>
-            <span class="text-sm text-muted"> / {{ list.toBuy.length }} articles</span>
+            <span class="text-sm text-muted"> / {{ list.shopLines.length }} articles</span>
           </span>
         </p>
         <div
@@ -67,7 +123,7 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
           role="progressbar"
           :aria-valuenow="list.doneCount"
           aria-valuemin="0"
-          :aria-valuemax="list.toBuy.length"
+          :aria-valuemax="list.shopLines.length"
           aria-label="Articles dans le panier"
         >
           <div class="h-full rounded-full bg-primary transition-all duration-500" :style="{ width: `${progress * 100}%` }" />
@@ -89,10 +145,18 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
           </span>
           <div class="flex-1">
             <p class="text-base font-semibold text-highlighted">
-              Courses terminées
+              <template v-if="list.shopStore">
+                Fini chez <StoreName :store="list.shopStore" :dot="false" />
+              </template>
+              <template v-else>
+                Courses terminées
+              </template>
             </p>
             <p class="text-sm tabular-nums text-muted">
-              {{ list.toBuy.length }} articles dans le panier.
+              {{ list.shopLines.length }} article{{ list.shopLines.length > 1 ? 's' : '' }} dans le panier.
+              <template v-if="list.shopStore && otherChoices.length">
+                Reste : {{ otherChoices.map(choice => `${choice.label} ${choice.count}`).join(' · ') }}.
+              </template>
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -141,7 +205,12 @@ const progress = computed(() => (list.toBuy.length ? list.doneCount / list.toBuy
               <span class="size-6 rounded-full border-2 border-accented transition-colors group-hover/check:border-primary group-active/check:bg-primary/15" aria-hidden="true" />
             </button>
             <div class="flex min-w-0 flex-1">
-              <GroceryLineName :line="line" variant="store" />
+              <GroceryLineName
+                :line="line"
+                variant="store"
+                :stores="lineStores(line).stores"
+                :stores-prefix="lineStores(line).prefix"
+              />
             </div>
             <GroceryQuantityEditor :line="line" variant="store" />
           </li>

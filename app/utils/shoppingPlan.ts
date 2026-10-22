@@ -184,9 +184,11 @@ export function planItemWrites(
 /**
  * Fin des courses : les articles du panier et ceux déjà à la maison sont supprimés ; les inclusions listées dont la
  * fournée (ou le jour) avait un apport dans ces articles passent à « acheté ».
+ * `storeId` : seul le panier de ce magasin est soldé, ceux en cours dans d'autres magasins restent.
  */
-export function planFinish(items: ShoppingItem[], inclusions: ShoppingMealInclusion[], catalog: ShoppingCatalog) {
-  const removed = items.filter(item => item.status !== 'toBuy')
+export function planFinish(items: ShoppingItem[], inclusions: ShoppingMealInclusion[], catalog: ShoppingCatalog, storeId?: string | null) {
+  const removed = items.filter(item => item.status === 'atHome'
+    || (item.status === 'inCart' && (!storeId || item.inCartAt === storeId)))
   const acquired = new Set(removed.flatMap(item => (item.contributions ?? []).map(c => `${c.key}|${c.date}`)))
 
   const dayOf = new Map<string, string>()

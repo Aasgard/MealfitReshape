@@ -68,6 +68,13 @@ export interface ShoppingItem {
    * d'`ingredientId`), mais reprend son rayon et se compare comme lui.
    */
   linkedIngredientId?: string
+  /**
+   * Magasins (Firestore `stores`) où l'acheter ; absent ou vide : partout, visible dans chaque magasin. Repris de la
+   * mémoire du foyer (`Store.ingredientIds`) quand l'article arrive d'un ingrédient.
+   */
+  storeIds?: string[]
+  /** Magasin où l'article a été mis au panier ; absent : panier de la vue « Tous ». */
+  inCartAt?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

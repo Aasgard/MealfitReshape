@@ -22,6 +22,9 @@ const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
 
+/** Magasins du foyer, lus une fois pour toute la page : chaque carte et ligne marque ceux de son ingrédient. */
+provide(STORES_KEY, useStores())
+
 const ingredients = useCollection<Ingredient>(() => {
   const uid = user.value?.uid
   if (!uid) return null

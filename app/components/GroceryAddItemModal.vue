@@ -2,7 +2,8 @@
 /**
  * Ajout manuel d'un article : nom, rayon et quantité (facultative, texte libre), puis, facultatifs, le jour où il est
  * nécessaire et le marquage urgent.
- * Le nom propose les ingrédients du catalogue : en choisir un reprend son rayon et y rattache l'article.
+ * Le nom propose les ingrédients du catalogue : en choisir un reprend son rayon et ses magasins, et y rattache l'article.
+ * Magasins proposés d'office : celui où l'on est (Acheter) ou celui que filtre la liste (Lister) ; aucun : partout.
  * Le rayon choisi est gardé d'un ajout à l'autre : on ajoute souvent plusieurs articles du même rayon.
  * Écran tactile : panneau du bas, remonté au-dessus du clavier, pour tout voir sans défiler ; sinon une modale.
  */
@@ -25,7 +26,11 @@ const quantity = ref('')
 /** `yyyy-MM-dd`, vide si aucun jour. */
 const neededBy = ref('')
 const urgent = ref(false)
+/** Magasins de l'article ; vide : partout. */
+const storeIds = ref<string[]>([])
 const submitted = ref(false)
+
+const storeItems = computed(() => list.stores.map(store => ({ label: store.name, value: store.id, store })))
 /** Ingrédient du catalogue choisi parmi les suggestions ; retiré dès que le nom ne lui correspond plus. */
 const linked = shallowRef<Ingredient | null>(null)
 
@@ -40,12 +45,14 @@ const suggestions = computed(() => {
     .slice(0, 5)
 })
 
-/** Reprend le nom et le rayon de l'ingrédient. */
+/** Reprend le nom, le rayon et, s'il y en a, les magasins retenus par le foyer pour l'ingrédient. */
 function pick(ingredient: Ingredient) {
   linked.value = ingredient
   label.value = ingredient.label
   const categoryId = ingredient.category?.id
   aisleId.value = list.aisleOptions.some(a => a.id === categoryId) ? categoryId! : MISC_AISLE.id
+  const remembered = list.storesForIngredient(ingredient.id)
+  if (remembered.length) storeIds.value = remembered
 }
 
 watch(label, (value) => {
@@ -63,6 +70,7 @@ watch(open, (isOpen) => {
   quantity.value = ''
   neededBy.value = ''
   urgent.value = false
+  storeIds.value = [...list.addItemStoreIds]
   linked.value = null
   submitted.value = false
 })
@@ -73,7 +81,7 @@ function onSubmit() {
   submitted.value = true
   if (labelError.value) return
   const aisle = list.aisleOptions.find(a => a.id === aisleId.value)
-  if (list.addManual(label.value, aisle, quantity.value, urgent.value, neededBy.value, linked.value?.id)) {
+  if (list.addManual(label.value, aisle, quantity.value, urgent.value, neededBy.value, linked.value?.id, storeIds.value)) {
     open.value = false
   }
 }
@@ -143,6 +151,23 @@ function close() {
           />
         </UFormField>
       </div>
+
+      <UFormField v-if="list.hasStores" label="Magasins">
+        <USelectMenu
+          v-model="storeIds"
+          :items="storeItems"
+          value-key="value"
+          multiple
+          :search-input="false"
+          placeholder="Partout"
+          icon="i-lucide-store"
+          class="w-full"
+        >
+          <template #item-label="{ item }">
+            <StoreName :store="item.store" />
+          </template>
+        </USelectMenu>
+      </UFormField>
 
       <div class="grid grid-cols-2 items-end gap-3">
         <UFormField label="Pour le" class="min-w-0">

@@ -3,7 +3,7 @@ import type { Ingredient } from '~/types/ingredient'
 import { categoryIconName } from '~/utils/categoryIcon'
 import { ingredientUnitEntries, macrosForUnit } from '~/utils/ingredientNutrition'
 
-/** Fiche d'un ingrédient : catégorie, valeurs pour 100 g, saisonnalité, unités équivalentes. */
+/** Fiche d'un ingrédient : catégorie, valeurs pour 100 g, unités équivalentes, saisonnalité, magasins du foyer. */
 const props = withDefaults(defineProps<{
   ingredient: Ingredient | null
   /** Affiche le bouton "Modifier" (ingrédient privé de l'utilisateur). */
@@ -34,6 +34,9 @@ const unitRows = computed(() => {
 })
 
 const isAllYear = computed(() => (props.ingredient?.activeMonths?.length ?? 0) === 12)
+
+/** Titre de section, le même partout dans la fiche (et dans `IngredientStoresField`). */
+const sectionTitle = 'text-sm font-semibold text-highlighted'
 </script>
 
 <template>
@@ -54,69 +57,42 @@ const isAllYear = computed(() => (props.ingredient?.activeMonths?.length ?? 0) =
     </template>
 
     <template #body>
-      <div class="flex flex-col gap-6">
-        <!-- Catégorie et densité -->
-        <div v-if="ingredient?.category?.label || ingredient?.density != null" class="grid grid-cols-3 gap-4">
-          <div v-if="ingredient?.category?.label" class="col-span-2">
-            <p class="text-xs text-dimmed mb-1">Catégorie</p>
-            <p class="text-sm text-muted flex items-center gap-1.5">
-              <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-3.5 shrink-0" />
-              {{ ingredient.category.label }}
-            </p>
-          </div>
-          <div v-if="ingredient?.density != null">
-            <p class="text-xs text-dimmed mb-1 flex items-center gap-1">
-              Densité
-              <IngredientDensityInfo />
-            </p>
-            <p class="text-sm text-muted">{{ ingredient.density }} g/ml</p>
-          </div>
-        </div>
+      <!-- Sections séparées par un filet, chacune sous un titre au même style. -->
+      <div class="flex flex-col divide-y divide-default [&>section]:py-5 [&>section:first-child]:pt-0">
+        <!-- Catégorie -->
+        <section v-if="ingredient?.category?.label" class="flex flex-col gap-1.5">
+          <h3 :class="sectionTitle">
+            Catégorie
+          </h3>
+          <p class="flex items-center gap-1.5 text-sm text-default">
+            <UIcon v-if="categoryIconName(ingredient.category.icon)" :name="categoryIconName(ingredient.category.icon)!" class="size-4 shrink-0 text-muted" />
+            {{ ingredient.category.label }}
+          </p>
+        </section>
 
         <!-- Valeurs nutritionnelles -->
-        <div v-if="ingredient?.valuesBy100">
-          <p class="text-xs text-dimmed mb-2">Pour 100 g</p>
+        <section v-if="ingredient?.valuesBy100" class="flex flex-col gap-2.5">
+          <h3 :class="sectionTitle">
+            Macros aux 100 g
+          </h3>
           <IngredientMacroSummary :macros="ingredient.valuesBy100" />
-        </div>
+        </section>
 
-        <!-- Disponibilité par mois -->
-        <div>
-          <p class="text-xs text-dimmed mb-2">Disponibilité</p>
-          <p v-if="isAllYear" class="text-sm text-muted">
-            Toute l'année
+        <!-- Unités / équivalents, et la densité qui convertit les ml en grammes -->
+        <section v-if="unitRows.length || ingredient?.density != null" class="flex flex-col gap-2.5">
+          <h3 :class="sectionTitle">
+            Unités
+          </h3>
+          <p v-if="ingredient?.density != null" class="flex items-center justify-between gap-3 text-sm">
+            <span class="flex items-center gap-1 text-default">
+              Densité
+              <IngredientDensityInfo />
+            </span>
+            <span class="tabular-nums text-highlighted">
+              {{ ingredient.density }} <span class="text-muted">g/ml</span>
+            </span>
           </p>
-          <div
-            v-else
-            class="grid grid-cols-12 gap-1"
-            role="group"
-            :aria-label="`Disponibilité : ${ingredient?.activeMonths?.length ?? 0} mois sur 12`"
-          >
-            <div
-              v-for="(label, idx) in monthAbbreviations"
-              :key="idx"
-              role="img"
-              :aria-label="`${monthNames[idx]} — ${ingredient?.activeMonths?.includes(idx + 1) ? 'en saison' : 'hors saison'}`"
-              :title="monthNames[idx]"
-              class="flex items-center justify-center rounded text-xs font-medium h-6 transition-colors"
-              :class="ingredient?.activeMonths?.includes(idx + 1)
-                ? 'bg-primary text-white'
-                : 'bg-accented text-dimmed'"
-            >
-              {{ label }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Unités / équivalents -->
-        <div v-if="unitRows.length">
-          <div class="flex items-center gap-2 mb-3">
-            <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
-            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Unités</p>
-          </div>
-          <p class="text-xs text-dimmed mb-3">
-            Autres portions équivalentes.
-          </p>
-          <ul class="flex flex-col gap-3">
+          <ul v-if="unitRows.length" class="flex flex-col gap-3">
             <li
               v-for="v in unitRows"
               :key="v.id"
@@ -142,19 +118,59 @@ const isAllYear = computed(() => (props.ingredient?.activeMonths?.length ?? 0) =
               </div>
             </li>
           </ul>
-        </div>
+        </section>
+
+        <!-- Disponibilité par mois -->
+        <section class="flex flex-col gap-2.5">
+          <h3 :class="sectionTitle">
+            Disponibilité
+          </h3>
+          <p v-if="isAllYear" class="text-sm text-default">
+            Toute l'année
+          </p>
+          <div
+            v-else
+            class="grid grid-cols-12 gap-1"
+            role="group"
+            :aria-label="`Disponibilité : ${ingredient?.activeMonths?.length ?? 0} mois sur 12`"
+          >
+            <div
+              v-for="(label, idx) in monthAbbreviations"
+              :key="idx"
+              role="img"
+              :aria-label="`${monthNames[idx]} — ${ingredient?.activeMonths?.includes(idx + 1) ? 'en saison' : 'hors saison'}`"
+              :title="monthNames[idx]"
+              class="flex items-center justify-center rounded text-xs font-medium h-6 transition-colors"
+              :class="ingredient?.activeMonths?.includes(idx + 1)
+                ? 'bg-primary text-white'
+                : 'bg-accented text-dimmed'"
+            >
+              {{ label }}
+            </div>
+          </div>
+        </section>
+
+        <!-- Magasins du foyer -->
+        <section v-if="ingredient?.id">
+          <IngredientStoresField :ingredient-id="ingredient.id" :title-class="sectionTitle" />
+        </section>
 
         <!-- Commentaire -->
-        <div v-if="ingredient?.comment">
-          <p class="text-xs text-dimmed mb-1">Commentaire</p>
-          <p class="text-sm text-muted">{{ ingredient.comment }}</p>
-        </div>
+        <section v-if="ingredient?.comment" class="flex flex-col gap-1.5">
+          <h3 :class="sectionTitle">
+            Commentaire
+          </h3>
+          <p class="text-sm text-default">
+            {{ ingredient.comment }}
+          </p>
+        </section>
 
-        <!-- Modifié le -->
-        <div v-if="ingredient">
-          <p class="text-xs text-dimmed mb-1">Modifié le</p>
-          <p class="text-sm text-muted">{{ formatDate(ingredient.updatedAt) }}</p>
-        </div>
+        <!-- Modifié le : pied de fiche, en méta. -->
+        <section v-if="ingredient">
+          <p class="text-xs text-dimmed">
+            Modifié le {{ formatDate(ingredient.updatedAt) }}
+          </p>
+        </section>
       </div>
     </template>
   </USlideover>

@@ -1,6 +1,6 @@
 import type { InjectionKey } from 'vue'
 import { getLocalTimeZone, parseDate, type DateValue } from '@internationalized/date'
-import { useDocumentVisibility } from '@vueuse/core'
+import { useDocumentVisibility, useLocalStorage } from '@vueuse/core'
 import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import type { IngredientCategory } from '~/types/ingredientCategory'
@@ -15,6 +15,7 @@ import { groupPlannedMeals, isPlannedMeal, plannedMealKey, type PlannedMealRow }
 import { surplusMeals } from '~/utils/preparedDishes'
 import { mealDay } from '~/utils/shoppingList'
 import type { ShoppingCatalog } from '~/utils/shoppingPlan'
+import { storeNameKey, type StoreColor } from '~/utils/stores'
 
 export type GroceryMode = 'prepare' | 'store'
 
@@ -54,6 +55,25 @@ export interface GroceryAisleGroup {
   done: GroceryLine[]
 }
 
+/** Une option du choix de magasin : « Tous » ou un magasin. */
+export interface GroceryStoreChoice {
+  value: string
+  label: string
+  /** Couleur d'enseigne d'un magasin (`STORE_COLORS`) ; absente pour « Tous ». */
+  color?: StoreColor
+  /** Articles qui restent à acheter dans ce choix. */
+  count: number
+}
+
+/** Filtre du mode Lister et choix du mode Acheter : tous les articles. */
+export const ALL_STORES = 'all'
+
+/** Un article sans magasin s'achète partout : il est visible dans chaque magasin. */
+export const isSoldAt = (line: GroceryLine, storeId: string) => !line.storeIds?.length || line.storeIds.includes(storeId)
+
+/** État d'un magasin pour une sélection d'articles : tous l'ont, certains, ou aucun. */
+export type StoreCheckState = boolean | 'indeterminate'
+
 const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? 's' : ''}`
 
 /**
@@ -66,6 +86,7 @@ export function useGroceryList() {
   const toast = useToast()
   const user = useCurrentUser()
   const shoppingList = useShoppingList()
+  const stores = shoppingList.stores
   const personal = usePersonalShoppingItems()
   const { household } = useHousehold()
 
@@ -343,15 +364,192 @@ export function useGroceryList() {
 
   const isLoading = computed(() => !shoppingList.scope.value || (shoppingList.items.pending.value && !shoppingList.items.value.length))
   const lines = computed(() => shoppingList.items.value
-    .map(item => ({ ...groceryLineFromItem(item, aisleOf, today.value), addedBy: item.addedBy ? othersById.value.get(item.addedBy) : undefined }))
+    .map(item => ({
+      ...groceryLineFromItem(item, aisleOf, today.value),
+      addedBy: item.addedBy ? othersById.value.get(item.addedBy) : undefined,
+      storeIds: stores.knownStoreIds(item.storeIds),
+    }))
     .sort(compareGroceryLines))
   /** À acheter, panier compris : les articles cochés en magasin restent dans la liste jusqu'à la fin des courses. */
   const toBuy = computed(() => lines.value.filter(line => line.status !== 'atHome'))
   const atHomeLines = computed(() => lines.value.filter(line => line.status === 'atHome'))
 
+  // --- Magasins ---
+
+  /** Sans magasin (Réglages › Magasins), la liste reste unique : ni filtre, ni choix de magasin, ni rattachement. */
+  const hasStores = computed(() => stores.stores.value.length > 0)
+  /** Magasins d'une liste d'ids, dans leur ordre ; les ids inconnus sont ignorés. */
+  const storesOf = (ids: readonly string[] | undefined) => (ids ?? []).flatMap(id => stores.storesById.value.get(id) ?? [])
+  /** « Biocoop, Picard » : pour les lecteurs d'écran et les messages. */
+  const storeLabel = (ids: readonly string[] | undefined) => storesOf(ids).map(store => store.name).join(', ')
+
+  /** Mode Lister : `ALL_STORES` ou l'id d'un magasin. */
+  const listFilter = ref(ALL_STORES)
+  const listFilterStoreId = computed(() => stores.storesById.value.has(listFilter.value) ? listFilter.value : null)
+
+  /** Mode Lister : les articles à acheter que montre le filtre. */
+  const filteredToBuy = computed(() => {
+    const storeId = listFilterStoreId.value
+    return storeId ? toBuy.value.filter(line => isSoldAt(line, storeId)) : toBuy.value
+  })
+
+  /** « Tous », puis les magasins où il y a quelque chose à acheter : un magasin sans article n'est pas proposé. */
+  const listFilterChoices = computed<GroceryStoreChoice[]>(() => [
+    { value: ALL_STORES, label: 'Tous', count: toBuy.value.length },
+    ...stores.stores.value
+      .map(store => ({ value: store.id, label: store.name, color: store.color, count: toBuy.value.filter(line => isSoldAt(line, store.id)).length }))
+      .filter(choice => choice.count > 0),
+  ])
+
+  /** Le magasin filtré a été supprimé, ou n'a plus d'article : retour à « Tous ». */
+  watch(listFilterChoices, (choices) => {
+    if (!choices.some(choice => choice.value === listFilter.value)) listFilter.value = ALL_STORES
+  })
+
+  /**
+   * Mode Acheter : le magasin où l'on est, retenu sur l'appareil ; vide (ou magasin supprimé) : « Tous », la liste
+   * entière comme avant les magasins.
+   */
+  const shopChoice = useLocalStorage('grocery-shop-store', '')
+  const shopStoreId = computed(() => stores.storesById.value.has(shopChoice.value) ? shopChoice.value : null)
+  const shopStore = computed(() => (shopStoreId.value ? stores.storesById.value.get(shopStoreId.value) ?? null : null))
+  const shopSelection = computed({
+    get: () => shopStoreId.value ?? ALL_STORES,
+    set: (value: string) => {
+      shopChoice.value = value === ALL_STORES ? '' : value
+      completionDismissed.value = false
+    },
+  })
+
+  /**
+   * Mode Acheter, dans le magasin `storeId` : ce qui s'y achète et n'est pas déjà dans un panier ailleurs, plus son
+   * propre panier. `null` : tout, paniers compris.
+   */
+  function shopLinesAt(storeId: string | null) {
+    if (!storeId) return toBuy.value
+    return toBuy.value.filter(line => line.status === 'inCart'
+      ? line.item.inCartAt === storeId
+      : isSoldAt(line, storeId))
+  }
+  const shopLines = computed(() => shopLinesAt(shopStoreId.value))
+
+  /**
+   * Reste à acheter par magasin : choix du mode Acheter, et magasins proposés quand celui-ci est vide ou fini. Un
+   * magasin sans rien à acheter n'est pas proposé, sauf celui où l'on est (il ne disparaît pas une fois fini).
+   */
+  const shopChoices = computed<GroceryStoreChoice[]>(() => {
+    const pendingCount = (storeId: string | null) => shopLinesAt(storeId).filter(line => line.status === 'toBuy').length
+    return [
+      { value: ALL_STORES, label: 'Tous', count: pendingCount(null) },
+      ...stores.stores.value
+        .map(store => ({ value: store.id, label: store.name, color: store.color, count: pendingCount(store.id) }))
+        .filter(choice => choice.count > 0 || choice.value === shopStoreId.value),
+    ]
+  })
+
+  /** Mémoire du foyer touchée par un rattachement : cochée par défaut, retenue le temps de la page. */
+  const rememberStores = ref(true)
+
+  const ingredientIdOf = (line: GroceryLine) =>
+    line.item.ingredientId ?? line.item.complementOf?.ingredientId ?? line.item.linkedIngredientId
+
+  /** Pour chaque magasin, coché si tous les articles `targets` l'ont, en partie si certains seulement. */
+  function storeStatesFor(targets: GroceryLine[]) {
+    const states = new Map<string, StoreCheckState>()
+    for (const store of stores.stores.value) {
+      const count = targets.filter(line => line.storeIds?.includes(store.id)).length
+      states.set(store.id, count === 0 ? false : count === targets.length ? true : 'indeterminate')
+    }
+    return states
+  }
+
+  /**
+   * Ajoute (`on`) ou retire le magasin `storeId` des articles `targets`, et, si `rememberStores`, retient le résultat
+   * pour leurs ingrédients. `announce` : message de confirmation (rattachement de plusieurs articles).
+   */
+  async function setStoreOn(targets: GroceryLine[], storeId: string, on: boolean, { announce = false } = {}) {
+    const changed = targets.filter(line => !!line.storeIds?.includes(storeId) !== on)
+    if (!changed.length) return
+    const memory = new Map<string, string[]>()
+    if (rememberStores.value) {
+      for (const line of changed) {
+        const ingredientId = ingredientIdOf(line)
+        if (!ingredientId) continue
+        const current = line.storeIds ?? []
+        memory.set(ingredientId, on ? [...current, storeId] : current.filter(id => id !== storeId))
+      }
+    }
+    try {
+      await Promise.all([
+        shoppingList.setItemsStore(changed.map(line => line.item), storeId, on),
+        stores.setIngredientStores(memory),
+      ])
+      if (announce) {
+        const name = stores.storesById.value.get(storeId)?.name ?? 'ce magasin'
+        toast.add({
+          title: on ? `Rattaché${changed.length > 1 ? 's' : ''} à ${name}` : `Retiré${changed.length > 1 ? 's' : ''} de ${name}`,
+          description: plural(changed.length, 'article'),
+          color: 'success',
+          icon: 'i-lucide-store',
+        })
+      }
+    }
+    catch (error) {
+      fail('Les magasins n\'ont pas pu être modifiés')(error)
+    }
+  }
+
+  /** Crée un magasin (ou reprend celui du même nom) et y rattache `targets`. */
+  async function createStoreFor(targets: GroceryLine[], name: string, options?: { announce?: boolean }) {
+    const twin = stores.stores.value.find(store => storeNameKey(store.name) === storeNameKey(name))
+    const error = twin ? undefined : stores.nameError(name)
+    if (error) {
+      toast.add({ title: 'Magasin non créé', description: error, color: 'error', icon: 'i-lucide-circle-alert' })
+      return null
+    }
+    try {
+      const id = twin?.id ?? await stores.add(name)
+      await setStoreOn(targets, id, true, options)
+      return id
+    }
+    catch (error) {
+      fail('Le magasin n\'a pas pu être créé')(error)
+      return null
+    }
+  }
+
+  // --- Sélection de plusieurs articles (mode Lister) ---
+
+  const selecting = ref(false)
+  const selectedIds = ref(new Set<string>())
+  /** Articles sélectionnés encore à acheter (un article sorti de la liste entre-temps n'en fait plus partie). */
+  const selectedLines = computed(() => toBuy.value.filter(line => selectedIds.value.has(line.id)))
+
+  function startSelection(line?: GroceryLine) {
+    selecting.value = true
+    selectedIds.value = new Set(line ? [line.id] : [])
+  }
+
+  function stopSelection() {
+    selecting.value = false
+    selectedIds.value = new Set()
+  }
+
+  /** Sélectionne (`on`) ou désélectionne des articles ; sans `on`, inverse chacun. */
+  function setSelected(targets: GroceryLine[], on?: boolean) {
+    const next = new Set(selectedIds.value)
+    for (const line of targets) {
+      if (on ?? !next.has(line.id)) next.add(line.id)
+      else next.delete(line.id)
+    }
+    selectedIds.value = next
+  }
+
+  watch(mode, () => stopSelection())
+
   const aisles = computed(() => {
     const groups: GroceryAisleGroup[] = []
-    for (const line of toBuy.value) {
+    for (const line of shopLines.value) {
       let group = groups.at(-1)
       if (group?.aisle.id !== line.aisle.id) {
         group = { aisle: line.aisle, pending: [], done: [] }
@@ -363,8 +561,9 @@ export function useGroceryList() {
     return groups
   })
 
-  const doneCount = computed(() => toBuy.value.filter(line => line.status === 'inCart').length)
-  const isComplete = computed(() => toBuy.value.length > 0 && doneCount.value === toBuy.value.length)
+  /** Mode Acheter : dans le panier, sur ce que montre le magasin choisi. */
+  const doneCount = computed(() => shopLines.value.filter(line => line.status === 'inCart').length)
+  const isComplete = computed(() => shopLines.value.length > 0 && doneCount.value === shopLines.value.length)
 
   function toggleAtHome(line: GroceryLine) {
     shoppingList.setStatus(line.item, line.status === 'atHome' ? 'toBuy' : 'atHome')
@@ -373,7 +572,7 @@ export function useGroceryList() {
 
   function toggleInCart(line: GroceryLine) {
     completionDismissed.value = false
-    shoppingList.setStatus(line.item, line.status === 'inCart' ? 'toBuy' : 'inCart')
+    shoppingList.setStatus(line.item, line.status === 'inCart' ? 'toBuy' : 'inCart', shopStoreId.value)
       .catch(fail(`« ${line.label} » n'a pas pu être modifié`))
   }
 
@@ -394,9 +593,9 @@ export function useGroceryList() {
 
   /**
    * `neededBy` : jour où l'article est nécessaire (`yyyy-MM-dd`), vide si aucun ; `linkedIngredientId` : ingrédient du
-   * catalogue choisi à la saisie.
+   * catalogue choisi à la saisie ; `storeIds` vide : partout.
    */
-  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '', urgent = false, neededBy = '', linkedIngredientId?: string) {
+  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '', urgent = false, neededBy = '', linkedIngredientId?: string, storeIds: string[] = []) {
     const trimmed = label.trim()
     if (!trimmed) return false
     shoppingList.addManual(trimmed.charAt(0).toUpperCase() + trimmed.slice(1), {
@@ -405,9 +604,16 @@ export function useGroceryList() {
       urgent,
       neededBy: neededBy || undefined,
       linkedIngredientId,
+      storeIds,
     }).catch(fail(`« ${trimmed} » n'a pas pu être ajouté`))
     return true
   }
+
+  /** Magasins proposés d'office pour un ajout manuel : celui où l'on est (Acheter), ou celui que filtre la liste (Lister). */
+  const addItemStoreIds = computed(() => {
+    const storeId = mode.value === 'store' ? shopStoreId.value : listFilterStoreId.value
+    return storeId ? [storeId] : []
+  })
 
   function toggleUrgent(line: GroceryLine) {
     shoppingList.setUrgent(line.item, !line.isMarkedUrgent).catch(fail(`« ${line.label} » n'a pas pu être modifié`))
@@ -435,16 +641,18 @@ export function useGroceryList() {
 
   /**
    * Fin des courses : les articles du panier et ceux déjà à la maison quittent la liste, leurs repas sont marqués
-   * achetés. Passe par la file des gestes, pour ne pas croiser un recalcul en cours.
+   * achetés. Dans un magasin, seul son panier est soldé. Passe par la file des gestes, pour ne pas croiser un recalcul
+   * en cours.
    */
   async function finishShopping() {
+    const store = shopStore.value
     try {
-      const count = await enqueue(() => shoppingList.finishShopping(catalog()))
+      const count = await enqueue(() => shoppingList.finishShopping(catalog(), store?.id))
       completionDismissed.value = false
       mode.value = 'prepare'
       const left = toBuy.value.length
       toast.add({
-        title: 'Courses terminées',
+        title: store ? `Courses terminées chez ${store.name}` : 'Courses terminées',
         description: `${plural(count, 'article')} retiré${count > 1 ? 's' : ''} de la liste${left ? `, ${plural(left, 'article')} encore à acheter` : ''}.`,
         color: 'success',
         icon: 'i-lucide-check',
@@ -501,6 +709,32 @@ export function useGroceryList() {
     toBuy,
     atHomeLines,
     ingredients,
+    hasStores,
+    stores: stores.stores,
+    storesById: stores.storesById,
+    storesOf,
+    storeLabel,
+    listFilter,
+    listFilterStoreId,
+    filteredToBuy,
+    listFilterChoices,
+    shopSelection,
+    shopStore,
+    shopLines,
+    shopChoices,
+    rememberStores,
+    ingredientIdOf,
+    storeStatesFor,
+    setStoreOn,
+    createStoreFor,
+    storesForIngredient: stores.storesForIngredient,
+    selecting,
+    selectedIds,
+    selectedLines,
+    startSelection,
+    stopSelection,
+    setSelected,
+    addItemStoreIds,
     aisles,
     doneCount,
     isComplete,

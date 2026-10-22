@@ -10,6 +10,7 @@ import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
 import { matchesSearch } from '~/utils/search'
+import { recipeTagKey, recipeTagVocabulary } from '~/utils/recipeTags'
 import { isIngredientInSeason } from '~/utils/ingredientSeason'
 import { isCompletePer100, readingsForQuantity, scannedProductFromOff, scannedProductLabel, type OffProductDetails, type ScannedProductDraft } from '~/utils/offNutrition'
 
@@ -93,9 +94,11 @@ const submitted = ref(false)
 const shortRecipeTypeLabel = (type: string) => type === 'BREAKFAST' ? 'Petit déj' : recipeTypeLabel(type)
 const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: shortRecipeTypeLabel(t) }))
 
-/** Filtres cumulatifs de la liste des recettes : l'un des types choisis, et tous les ingrédients choisis. Vides = pas de filtre. */
+/** Filtres cumulatifs de la liste des recettes : l'un des types choisis, tous les ingrédients et tous les tags choisis. Vides = pas de filtre. */
 const recipeTypeFilter = ref<RecipeType[]>([])
 const recipeIngredientFilter = ref<string[]>([])
+/** Clés des tags choisis (voir `recipeTagKey`). */
+const recipeTagFilter = ref<string[]>([])
 /** Objectifs du jour vérifiés par le filtre « Dans mes objectifs » (un bouton chacun, tous actifs par défaut). */
 type TargetKey = 'calories' | 'carbohydrates' | 'protein' | 'fat'
 const TARGET_FILTERS: { key: TargetKey, short: string, unit: string, label: string }[] = [
@@ -311,6 +314,7 @@ watch(open, (isOpen) => {
   stockParts.value = 1
   recipeTypeFilter.value = []
   recipeIngredientFilter.value = []
+  recipeTagFilter.value = []
   activeTargets.value = [...ALL_TARGET_KEYS]
   recipeId.value = undefined
   recipeSearch.value = ''
@@ -369,6 +373,36 @@ const recipeIngredientFilterOptions = computed(() => {
     .sort(byLabel)
 })
 
+/**
+ * Ingrédients et tags dans un même menu : deux groupes titrés, les tags du foyer en tête (du plus au moins utilisé),
+ * puis les ingrédients. Les valeurs sont préfixées pour qu'un tag et un ingrédient de même nom ne se confondent pas.
+ */
+const TAG_VALUE_PREFIX = 'tag:'
+const INGREDIENT_VALUE_PREFIX = 'ingredient:'
+
+const recipeContentFilterItems = computed(() => {
+  const tags = recipeTagVocabulary(props.recipes)
+    .map(t => ({ value: TAG_VALUE_PREFIX + t.key, label: t.label, icon: 'i-lucide-tag', count: t.count }))
+  const ingredients = recipeIngredientFilterOptions.value
+    .map(i => ({ value: INGREDIENT_VALUE_PREFIX + i.id, label: i.label, icon: 'i-lucide-carrot' }))
+  return [
+    ...(tags.length ? [[{ type: 'label' as const, label: 'Tags' }, ...tags]] : []),
+    ...(ingredients.length ? [[{ type: 'label' as const, label: 'Ingrédients' }, ...ingredients]] : []),
+  ]
+})
+
+/** Sélection du menu commun, répartie entre les filtres par tag et par ingrédient. */
+const recipeContentFilter = computed<string[]>({
+  get: () => [
+    ...recipeTagFilter.value.map(key => TAG_VALUE_PREFIX + key),
+    ...recipeIngredientFilter.value.map(id => INGREDIENT_VALUE_PREFIX + id),
+  ],
+  set: (values) => {
+    recipeTagFilter.value = values.filter(v => v.startsWith(TAG_VALUE_PREFIX)).map(v => v.slice(TAG_VALUE_PREFIX.length))
+    recipeIngredientFilter.value = values.filter(v => v.startsWith(INGREDIENT_VALUE_PREFIX)).map(v => v.slice(INGREDIENT_VALUE_PREFIX.length))
+  },
+})
+
 /** Reste disponible avant chaque objectif du jour (négatif = déjà dépassé) ; `null` sans budget. */
 const remaining = computed(() => {
   const budget = props.dayBudget
@@ -420,15 +454,20 @@ const matchesRecipeFilters = (recipe: Recipe) => {
   if (recipeTypeFilter.value.length && !(recipe.type && recipeTypeFilter.value.includes(recipe.type))) return false
   if (seasonOnly.value && !isRecipeInSeason(recipe)) return false
   if (!fitsRemaining(recipe)) return false
+  if (recipeTagFilter.value.length) {
+    const recipeTagKeys = new Set((recipe.tags ?? []).map(recipeTagKey))
+    if (!recipeTagFilter.value.every(key => recipeTagKeys.has(key))) return false
+  }
   if (!recipeIngredientFilter.value.length) return true
   const recipeIngredientIds = new Set((recipe.ingredients ?? []).map(line => line.ingredientRef?.id))
   return recipeIngredientFilter.value.every(id => recipeIngredientIds.has(id))
 }
 
-/** Écart à l'état par défaut (aucun type ni ingrédient, saison et objectifs actifs) : « Réinitialiser » y revient. */
+/** Écart à l'état par défaut (aucun type, ingrédient ni tag, saison et objectifs actifs) : « Réinitialiser » y revient. */
 const hasRecipeFilters = computed(() =>
   recipeTypeFilter.value.length > 0
   || recipeIngredientFilter.value.length > 0
+  || recipeTagFilter.value.length > 0
   || !seasonOnly.value
   || (!!props.dayBudget && activeTargets.value.length !== ALL_TARGET_KEYS.length)
 )
@@ -448,7 +487,8 @@ const isExceeded = (key: TargetKey) => (remaining.value?.[key] ?? 0) < 0
 const recipeOptions = computed(() =>
   props.recipes
     .filter(matchesRecipeFilters)
-    .filter(r => matchesSearch(r.title, recipeSearch.value))
+    // Comme sur la page Recettes, la recherche porte aussi sur les tags.
+    .filter(r => matchesSearch(r.title, recipeSearch.value) || (r.tags ?? []).some(t => matchesSearch(t, recipeSearch.value)))
     .map((r) => {
       const { kcal, carbohydrates, protein, fat } = buildRecipeDraft(r, 1, props.ingredientsById)
       const hasMacros = kcal > 0 || carbohydrates > 0 || protein > 0 || fat > 0
@@ -507,6 +547,7 @@ const toggleRecipeTypeFilter = (type: RecipeType) => {
 const resetRecipeFilters = () => {
   recipeTypeFilter.value = []
   recipeIngredientFilter.value = []
+  recipeTagFilter.value = []
   activeTargets.value = [...ALL_TARGET_KEYS]
   seasonOnly.value = true
 }
@@ -868,7 +909,7 @@ const onSubmit = () => {
             </div>
             <div v-show="filtersOpen" id="recipe-filters" class="flex flex-col gap-3">
               <!--
-                Objectifs du jour puis types de plat, dans une même grille : une colonne d'icônes (cible, repas, ingrédient),
+                Objectifs du jour puis types de plat, dans une même grille : une colonne d'icônes (cible, repas, ingrédients et tags),
                 puis 4 colonnes qui prennent chacune la largeur de leur bouton le plus large (puis partagent le reste),
                 pour que les deux rangées s'alignent verticalement. En mobile, boutons plus compacts pour tenir sur 343 px.
               -->
@@ -907,21 +948,26 @@ const onSubmit = () => {
                     @click="toggleRecipeTypeFilter(option.value)"
                   />
                 </div>
-                <!-- Ingrédients et saison : l'icône dans la colonne des libellés, le champ et la saison alignés sur les 4 colonnes de boutons. -->
+                <!-- Ingrédients et tags (un seul menu), puis saison : l'icône dans la colonne des libellés, le champ et la saison alignés sur les 4 colonnes de boutons.
+                     Une recette doit contenir tous les ingrédients et porter tous les tags choisis. -->
                 <div class="col-span-5 grid grid-cols-subgrid">
-                  <span class="flex items-center justify-center px-0.5 text-muted" title="Ingrédient"><UIcon name="i-lucide-carrot" class="size-4" aria-hidden="true" /></span>
+                  <span class="flex items-center justify-center px-0.5 text-muted" title="Ingrédients et tags"><UIcon name="i-lucide-list-filter" class="size-4" aria-hidden="true" /></span>
                   <div class="col-span-4 flex items-center gap-1">
                     <USelectMenu
-                      v-model="recipeIngredientFilter"
-                      :items="recipeIngredientFilterOptions"
-                      value-key="id"
+                      v-model="recipeContentFilter"
+                      :items="recipeContentFilterItems"
+                      value-key="value"
                       multiple
-                      placeholder="Tous les ingrédients"
-                      :search-input="{ placeholder: 'Rechercher un ingrédient...' }"
-                      aria-label="Filtrer par ingrédient"
+                      placeholder="Tous les ingrédients et tags"
+                      :search-input="{ placeholder: 'Rechercher un ingrédient ou un tag...' }"
+                      aria-label="Filtrer par ingrédient ou par tag"
                       class="flex-1 min-w-0"
                       @update:model-value="onRecipeFilterChange"
-                    />
+                    >
+                      <template #item-trailing="{ item }">
+                        <span v-if="(item as { count?: number }).count" class="text-xs text-dimmed tabular-nums">{{ (item as { count?: number }).count }}</span>
+                      </template>
+                    </USelectMenu>
                     <!-- Saison, actif par défaut : même bouton que sur la page Ingrédients. -->
                     <UTooltip text="Uniquement les recettes de saison">
                       <UButton

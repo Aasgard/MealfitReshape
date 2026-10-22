@@ -8,6 +8,7 @@ import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeTy
 import { RECIPE_DIFFICULTIES, recipeDifficultyLabel, type RecipeDifficulty } from '~/utils/recipeDifficulty'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
+import { canonicalRecipeTag, dedupeRecipeTags } from '~/utils/recipeTags'
 
 /**
  * Slideover d'ajout/modification de recette — un seul composant pour les deux modes,
@@ -30,6 +31,12 @@ const photos = useRecipePhotos()
 
 const isEditMode = computed(() => props.recipe !== null)
 const title = computed(() => isEditMode.value ? `Modifier ${props.recipe?.title}` : 'Ajouter une recette')
+
+/** Libellé des rubriques Instructions, Tags et Description : même titre que la rubrique Ingrédients. */
+const SECTION_FIELD_UI = {
+  label: 'flex items-center gap-2 text-xs text-dimmed font-medium uppercase tracking-wide',
+  container: 'mt-3',
+}
 
 const typeItems = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
 
@@ -75,6 +82,18 @@ const source = ref('')
 const description = ref('')
 const instructions = ref('')
 const tags = ref<string[]>([])
+const tagSearch = ref('')
+
+/** Tags déjà utilisés par le foyer, du plus fréquent au moins fréquent : on les propose pour garder un vocabulaire commun. */
+const { vocabulary: tagVocabulary } = useRecipeTags()
+const tagSuggestions = computed(() => tagVocabulary.value.map(t => t.label))
+const tagCounts = computed(() => new Map(tagVocabulary.value.map(t => [t.label, t.count])))
+
+/** Un tag créé reprend l'orthographe d'un tag existant équivalent (« Vege » → « végé »). */
+function createTag(input: string) {
+  tags.value = dedupeRecipeTags([...tags.value, canonicalRecipeTag(input, tagVocabulary.value)])
+  tagSearch.value = ''
+}
 const ingredientRows = ref<IngredientRow[]>([])
 const saving = ref(false)
 const submitted = ref(false)
@@ -127,6 +146,7 @@ function resetForm() {
   description.value = r?.description ?? ''
   instructions.value = r?.instructions ?? ''
   tags.value = r?.tags ? [...r.tags] : []
+  tagSearch.value = ''
   ingredientRows.value = r?.ingredients
     ? r.ingredients.map(line => ({
         key: generateFirestoreId(),
@@ -296,7 +316,7 @@ async function handleSubmit() {
     const payload: Record<string, unknown> = {
       title: trimmedTitle,
       persons: parsePositiveNumber(persons.value)!,
-      tags: tags.value,
+      tags: dedupeRecipeTags(tags.value.map(t => canonicalRecipeTag(t, tagVocabulary.value))),
       ingredients: ingredientLines,
       updatedAt: now,
     }
@@ -519,16 +539,45 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <UFormField label="Tags (optionnel)">
-          <UInputTags v-model="tags" placeholder="Ajouter un tag..." variant="outline" class="w-full" />
-        </UFormField>
-
-        <UFormField label="Description (optionnel)">
-          <UTextarea v-model="description" :rows="2" autoresize :ui="{ base: 'overflow-hidden' }" placeholder="Note libre..." variant="outline" class="w-full" />
-        </UFormField>
-
-        <UFormField label="Instructions (optionnel)">
+        <UFormField label="Instructions (optionnel)" :ui="SECTION_FIELD_UI">
+          <template #label="{ label }">
+            <UIcon name="i-lucide-list-ordered" class="size-3.5 text-muted shrink-0" />
+            {{ label }}
+          </template>
           <UTextarea v-model="instructions" :rows="4" autoresize :ui="{ base: 'overflow-hidden' }" placeholder="Étapes de préparation..." variant="outline" class="w-full" />
+        </UFormField>
+
+        <UFormField label="Tags (optionnel)" :ui="SECTION_FIELD_UI">
+          <template #label="{ label }">
+            <UIcon name="i-lucide-tag" class="size-3.5 text-muted shrink-0" />
+            {{ label }}
+          </template>
+          <UInputMenu
+            v-model="tags"
+            v-model:search-term="tagSearch"
+            :items="tagSuggestions"
+            multiple
+            create-item="always"
+            placeholder="Ajouter un tag..."
+            variant="outline"
+            class="w-full"
+            @create="createTag"
+          >
+            <template #item-trailing="{ item }">
+              <span class="text-xs text-dimmed tabular-nums">{{ tagCounts.get(String(item)) }}</span>
+            </template>
+            <template #create-item-label="{ item }">
+              Créer « {{ item }} »
+            </template>
+          </UInputMenu>
+        </UFormField>
+
+        <UFormField label="Description (optionnel)" :ui="SECTION_FIELD_UI">
+          <template #label="{ label }">
+            <UIcon name="i-lucide-text" class="size-3.5 text-muted shrink-0" />
+            {{ label }}
+          </template>
+          <UTextarea v-model="description" :rows="2" autoresize :ui="{ base: 'overflow-hidden' }" placeholder="Note libre..." variant="outline" class="w-full" />
         </UFormField>
 
         <UFormField label="Source (optionnel)">

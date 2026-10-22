@@ -11,6 +11,8 @@ const props = defineProps<{
   ingredientsById: Map<string, Ingredient>
   /** Parts à préparer (ex. celles d'un repas) : les quantités d'ingrédients sont recalculées. Absent = parts de la recette. */
   parts?: number | null
+  /** Clic sur un tag (page Recettes : la fiche se ferme et la liste se filtre sur ce tag). Absent = tags non cliquables. */
+  onSelectTag?: (tag: string) => void
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
@@ -146,56 +148,67 @@ const editRecipe = async () => {
   <USlideover
     v-model:open="open"
     :title="recipe?.title"
+    :close="false"
     :ui="{
       content: 'sm:max-w-xl',
-      // Croix dans le flux (et non en absolu) : un titre long passe à la ligne au lieu de pousser l'export sous la croix.
       wrapper: 'min-w-0 flex-1',
       title: 'line-clamp-2',
-      close: 'static shrink-0',
     }"
   >
     <template #actions>
-      <UPopover v-if="recipe" v-model:open="timerLauncherOpen" :content="{ align: 'end', sideOffset: 6 }">
-        <!-- Le nombre de minuteurs en cours suit l'icône. -->
+      <!-- Actions et croix dans un même groupe cerné d'un liseret ; dans le flux, un titre long passe à la ligne. -->
+      <div class="flex shrink-0 items-center rounded-md ring ring-inset ring-default">
+        <UPopover v-if="recipe" v-model:open="timerLauncherOpen" :content="{ align: 'end', sideOffset: 6 }">
+          <!-- Le nombre de minuteurs en cours suit l'icône. -->
+          <UButton
+            icon="i-lucide-timer"
+            :label="timers.length ? String(timers.length) : undefined"
+            :color="timers.length ? 'primary' : 'neutral'"
+            variant="ghost"
+            aria-label="Lancer un minuteur"
+            title="Lancer un minuteur"
+            class="shrink-0 tabular-nums"
+          />
+          <template #content>
+            <div class="w-[min(20rem,calc(100vw-2rem))] p-4">
+              <KitchenTimerLauncher
+                eggs
+                :recipe="{ id: recipe.id, title: recipe.title, parts: displayedParts }"
+                @started="timerLauncherOpen = false"
+              />
+            </div>
+          </template>
+        </UPopover>
         <UButton
-          icon="i-lucide-timer"
-          :label="timers.length ? String(timers.length) : undefined"
-          :color="timers.length ? 'primary' : 'neutral'"
+          v-if="recipe"
+          icon="i-lucide-pencil"
+          color="neutral"
           variant="ghost"
-          aria-label="Lancer un minuteur"
-          title="Lancer un minuteur"
-          class="shrink-0 tabular-nums"
+          aria-label="Modifier la recette"
+          title="Modifier la recette"
+          class="shrink-0"
+          @click="editRecipe"
         />
-        <template #content>
-          <div class="w-[min(20rem,calc(100vw-2rem))] p-4">
-            <KitchenTimerLauncher
-              eggs
-              :recipe="{ id: recipe.id, title: recipe.title, parts: displayedParts }"
-              @started="timerLauncherOpen = false"
-            />
-          </div>
-        </template>
-      </UPopover>
-      <UButton
-        v-if="recipe"
-        icon="i-lucide-pencil"
-        color="neutral"
-        variant="ghost"
-        aria-label="Modifier la recette"
-        title="Modifier la recette"
-        class="shrink-0"
-        @click="editRecipe"
-      />
-      <UButton
-        v-if="recipe"
-        icon="i-lucide-file-down"
-        color="neutral"
-        variant="ghost"
-        aria-label="Exporter en PDF"
-        title="Exporter en PDF"
-        class="shrink-0"
-        @click="printRecipe"
-      />
+        <UButton
+          v-if="recipe"
+          icon="i-lucide-file-down"
+          color="neutral"
+          variant="ghost"
+          aria-label="Exporter en PDF"
+          title="Exporter en PDF"
+          class="shrink-0"
+          @click="printRecipe"
+        />
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          aria-label="Fermer"
+          title="Fermer"
+          class="shrink-0"
+          @click="() => { open = false }"
+        />
+      </div>
     </template>
 
     <template #body>
@@ -371,31 +384,55 @@ const editRecipe = async () => {
           </p>
         </div>
 
+        <!-- Instructions -->
+        <div v-if="recipe?.instructions">
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-lucide-list-ordered" class="size-3.5 text-muted shrink-0" />
+            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Instructions</p>
+          </div>
+          <p class="text-sm text-muted whitespace-pre-line">{{ recipe.instructions }}</p>
+        </div>
+
         <!-- Tags -->
         <div v-if="recipe?.tags?.length">
-          <p class="text-xs text-dimmed mb-2">Tags</p>
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-lucide-tag" class="size-3.5 text-muted shrink-0" />
+            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Tags</p>
+          </div>
           <div class="flex flex-wrap gap-1.5">
-            <UBadge
-              v-for="tag in recipe.tags"
-              :key="tag"
-              :label="tag"
-              color="neutral"
-              variant="subtle"
-              size="sm"
-            />
+            <template v-if="onSelectTag">
+              <UButton
+                v-for="tag in recipe.tags"
+                :key="tag"
+                :label="tag"
+                color="neutral"
+                variant="subtle"
+                size="xs"
+                :aria-label="`Voir les recettes « ${tag} »`"
+                :title="`Voir les recettes « ${tag} »`"
+                @click="() => { open = false; onSelectTag?.(tag) }"
+              />
+            </template>
+            <template v-else>
+              <UBadge
+                v-for="tag in recipe.tags"
+                :key="tag"
+                :label="tag"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+              />
+            </template>
           </div>
         </div>
 
         <!-- Description -->
         <div v-if="recipe?.description">
-          <p class="text-xs text-dimmed mb-1">Description</p>
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon name="i-lucide-text" class="size-3.5 text-muted shrink-0" />
+            <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Description</p>
+          </div>
           <p class="text-sm text-muted whitespace-pre-line">{{ recipe.description }}</p>
-        </div>
-
-        <!-- Instructions -->
-        <div v-if="recipe?.instructions">
-          <p class="text-xs text-dimmed mb-1">Instructions</p>
-          <p class="text-sm text-muted whitespace-pre-line">{{ recipe.instructions }}</p>
         </div>
 
         <!-- Source -->

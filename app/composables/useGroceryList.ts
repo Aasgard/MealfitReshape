@@ -392,8 +392,11 @@ export function useGroceryList() {
     })
   }
 
-  /** `neededBy` : jour où l'article est nécessaire (`yyyy-MM-dd`), vide si aucun. */
-  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '', urgent = false, neededBy = '') {
+  /**
+   * `neededBy` : jour où l'article est nécessaire (`yyyy-MM-dd`), vide si aucun ; `linkedIngredientId` : ingrédient du
+   * catalogue choisi à la saisie.
+   */
+  function addManual(label: string, aisle: IngredientCategory = MISC_AISLE, quantity = '', urgent = false, neededBy = '', linkedIngredientId?: string) {
     const trimmed = label.trim()
     if (!trimmed) return false
     shoppingList.addManual(trimmed.charAt(0).toUpperCase() + trimmed.slice(1), {
@@ -401,6 +404,7 @@ export function useGroceryList() {
       quantity: quantity.trim() || undefined,
       urgent,
       neededBy: neededBy || undefined,
+      linkedIngredientId,
     }).catch(fail(`« ${trimmed} » n'a pas pu être ajouté`))
     return true
   }
@@ -496,6 +500,7 @@ export function useGroceryList() {
     lines,
     toBuy,
     atHomeLines,
+    ingredients,
     aisles,
     doneCount,
     isComplete,

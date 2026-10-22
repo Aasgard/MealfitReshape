@@ -63,6 +63,11 @@ export interface ShoppingItem {
    * manquera. Sa quantité compte comme déjà à acheter lors d'une prochaine vérification.
    */
   complementOf?: ShoppingComplement
+  /**
+   * Ajout manuel rattaché à un ingrédient du catalogue, choisi à la saisie : reste hors du calcul des menus (pas
+   * d'`ingredientId`), mais reprend son rayon et se compare comme lui.
+   */
+  linkedIngredientId?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

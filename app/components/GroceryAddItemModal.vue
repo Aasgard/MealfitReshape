@@ -2,11 +2,13 @@
 /**
  * Ajout manuel d'un article : nom, rayon et quantité (facultative, texte libre), puis, facultatifs, le jour où il est
  * nécessaire et le marquage urgent.
+ * Le nom propose les ingrédients du catalogue : en choisir un reprend son rayon et y rattache l'article.
  * Le rayon choisi est gardé d'un ajout à l'autre : on ajoute souvent plusieurs articles du même rayon.
  * Écran tactile : panneau du bas, remonté au-dessus du clavier, pour tout voir sans défiler ; sinon une modale.
  */
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
 import { format } from 'date-fns'
+import type { Ingredient } from '~/types/ingredient'
 
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
@@ -24,6 +26,31 @@ const quantity = ref('')
 const neededBy = ref('')
 const urgent = ref(false)
 const submitted = ref(false)
+/** Ingrédient du catalogue choisi parmi les suggestions ; retiré dès que le nom ne lui correspond plus. */
+const linked = shallowRef<Ingredient | null>(null)
+
+/** Suggestions du catalogue pour le nom saisi : ceux qui commencent par la saisie d'abord. */
+const suggestions = computed(() => {
+  const query = normalizeForSearch(label.value)
+  if (query.length < 2 || linked.value) return []
+  const starts = (i: Ingredient) => normalizeForSearch(i.label).startsWith(query)
+  return list.ingredients
+    .filter(i => matchesSearch(i.label, query))
+    .sort((a, b) => Number(starts(b)) - Number(starts(a)) || a.label.localeCompare(b.label, 'fr'))
+    .slice(0, 5)
+})
+
+/** Reprend le nom et le rayon de l'ingrédient. */
+function pick(ingredient: Ingredient) {
+  linked.value = ingredient
+  label.value = ingredient.label
+  const categoryId = ingredient.category?.id
+  aisleId.value = list.aisleOptions.some(a => a.id === categoryId) ? categoryId! : MISC_AISLE.id
+}
+
+watch(label, (value) => {
+  if (linked.value && value.trim() !== linked.value.label) linked.value = null
+})
 
 const today = () => format(new Date(), 'yyyy-MM-dd')
 
@@ -36,6 +63,7 @@ watch(open, (isOpen) => {
   quantity.value = ''
   neededBy.value = ''
   urgent.value = false
+  linked.value = null
   submitted.value = false
 })
 
@@ -45,7 +73,9 @@ function onSubmit() {
   submitted.value = true
   if (labelError.value) return
   const aisle = list.aisleOptions.find(a => a.id === aisleId.value)
-  if (list.addManual(label.value, aisle, quantity.value, urgent.value, neededBy.value)) open.value = false
+  if (list.addManual(label.value, aisle, quantity.value, urgent.value, neededBy.value, linked.value?.id)) {
+    open.value = false
+  }
 }
 
 function close() {
@@ -60,12 +90,36 @@ function close() {
         <UInput
           v-model="label"
           placeholder="Ex. : éponges, café moulu"
+          name="grocery-item-label"
+          type="search"
           autocomplete="off"
+          autocapitalize="sentences"
+          spellcheck="false"
+          data-form-type="other"
+          data-lpignore="true"
+          :ui="{ base: NAME_FIELD_BASE }"
           autofocus
           enterkeyhint="done"
           maxlength="80"
           class="w-full"
         />
+        <ul v-if="suggestions.length" class="mt-1 divide-y divide-default overflow-hidden rounded-md border border-default">
+          <li v-for="ingredient in suggestions" :key="ingredient.id">
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm hover:bg-elevated focus-visible:bg-elevated focus-visible:outline-none"
+              @click="pick(ingredient)"
+            >
+              <UIcon :name="categoryIconName(ingredient.category?.icon) ?? 'i-lucide-tag'" class="size-4 shrink-0 text-muted" aria-hidden="true" />
+              <span class="min-w-0 flex-1 truncate">{{ ingredient.label }}</span>
+              <span v-if="ingredient.category?.label" class="shrink-0 text-xs text-muted">{{ ingredient.category.label }}</span>
+            </button>
+          </li>
+        </ul>
+        <p v-else-if="linked" class="mt-1 flex items-center gap-1 text-xs text-muted">
+          <UIcon name="i-lucide-link" class="size-3.5" />
+          Ingrédient du catalogue
+        </p>
       </UFormField>
 
       <div class="grid grid-cols-2 gap-3">
@@ -79,7 +133,7 @@ function close() {
         </UFormField>
 
         <UFormField label="Quantité" class="min-w-0">
-          <UInput
+          <QuantityInput
             v-model="quantity"
             placeholder="Facultatif"
             autocomplete="off"

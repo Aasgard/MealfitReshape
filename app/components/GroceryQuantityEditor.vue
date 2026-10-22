@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Quantité d'un article, modifiable en texte libre ("3 pièces", "2 paquets").
+ * Quantité d'un article, modifiable en texte libre ("3 pièces", "2 paquets") ; clavier numérique d'abord sur mobile.
  * Vider le champ, ou « Revenir au calcul », rétablit la quantité calculée depuis les menus.
  * - Souris : un clic ouvre l'édition dans un popover.
  * - Toucher : un appui long ouvre l'édition dans un panneau en bas d'écran (stable quand le clavier s'ouvre) ;
@@ -26,6 +26,7 @@ const draft = ref('')
 
 function edit(byTouch: boolean) {
   draft.value = props.line.quantityLabel
+  selectedOnOpen = false
   if (byTouch) drawerOpen.value = true
   else popoverOpen.value = true
 }
@@ -36,8 +37,14 @@ const { onPointerDown, onClick } = usePressToEdit(trigger, edit)
 /** Remonte le panneau du bas au-dessus du clavier (iOS). */
 useKeyboardInset(drawerOpen)
 
-/** Quantité présélectionnée à l'ouverture : on tape directement la nouvelle. Différé, sinon iOS annule la sélection au focus. */
+/**
+ * Quantité présélectionnée à l'ouverture : on tape directement la nouvelle. Différé, sinon iOS annule la sélection au
+ * focus. Une fois par ouverture : basculer le clavier reprend le focus, et l'on complète alors la saisie (« 2 » → « 2 paquets »).
+ */
+let selectedOnOpen = false
 function selectAll(event: FocusEvent) {
+  if (selectedOnOpen) return
+  selectedOnOpen = true
   const input = event.target as HTMLInputElement
   requestAnimationFrame(() => input.select())
 }
@@ -66,11 +73,11 @@ function resetToComputed() {
       @submit.prevent="save"
     >
       <UFormField :label="isDrawer ? undefined : `Quantité · ${line.label}`" :ui="{ label: 'truncate' }">
-        <UInput
+        <QuantityInput
           v-model="draft"
           autofocus
           :size="isDrawer ? 'xl' : 'md'"
-          :placeholder="line.computedQuantityLabel || 'ex. 2 paquets'"
+          :placeholder="line.computedQuantityLabel || 'ex. 2'"
           :aria-label="`Quantité de ${line.label}`"
           enterkeyhint="done"
           autocomplete="off"

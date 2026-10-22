@@ -142,8 +142,8 @@ export const useShoppingList = () => {
   }
 
   /** Ajoute un article saisi à la main, à acheter, avec quantité libre, marquage urgent et échéance facultatifs. */
-  function addManual(label: string, options: { categoryId?: string, quantity?: string, urgent?: boolean, neededBy?: string } = {}) {
-    const { categoryId, quantity, urgent, neededBy } = options
+  function addManual(label: string, options: { categoryId?: string, quantity?: string, urgent?: boolean, neededBy?: string, linkedIngredientId?: string } = {}) {
+    const { categoryId, quantity, urgent, neededBy, linkedIngredientId } = options
     const scope = requireScope()
     const batch = writeBatch(db)
     batch.set(doc(shoppingListRef), {
@@ -155,6 +155,7 @@ export const useShoppingList = () => {
       ...(quantity ? { quantity } : {}),
       ...(urgent ? { urgent } : {}),
       ...(neededBy ? { neededBy } : {}),
+      ...(linkedIngredientId ? { linkedIngredientId } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })

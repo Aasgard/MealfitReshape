@@ -64,7 +64,7 @@ function removeFromList() {
  */
 const compareLink = computed(() => ({
   path: '/dashboard/scanner-produit',
-  query: { compare: props.line.item.ingredientId ?? props.line.item.complementOf?.ingredientId ?? '', from: 'courses' },
+  query: { compare: props.line.item.ingredientId ?? props.line.item.complementOf?.ingredientId ?? props.line.item.linkedIngredientId ?? '', from: 'courses' },
 }))
 
 function closeDetail() {

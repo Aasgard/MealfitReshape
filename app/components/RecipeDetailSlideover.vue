@@ -249,12 +249,14 @@ const editRecipe = async () => {
           class="w-full h-40 object-cover rounded-lg"
         />
 
-        <!-- Repas / difficulté / parts / temps -->
-        <div class="flex flex-wrap items-center gap-2">
+        <!-- Repas / difficulté / parts / temps : une seule ligne étirée sur toute la largeur ; un libellé trop long se tronque.
+             Le badge des parts part d'une base fixe pour que le variateur ne décale pas ses voisins. -->
+        <div class="flex items-center gap-1.5 *:min-w-0 *:grow *:justify-center">
           <UBadge
             v-if="recipe?.type"
             icon="i-lucide-utensils"
             :label="recipeTypeLabel(recipe.type)"
+            :title="recipeTypeLabel(recipe.type)"
             color="neutral"
             variant="subtle"
             size="sm"
@@ -262,6 +264,7 @@ const editRecipe = async () => {
           <UBadge
             icon="i-lucide-gauge"
             :label="recipeDifficultyLabel(recipe?.difficulty)"
+            :title="recipeDifficultyLabel(recipe?.difficulty)"
             :color="recipeDifficultyColor(recipe?.difficulty)"
             variant="subtle"
             size="sm"
@@ -272,11 +275,14 @@ const editRecipe = async () => {
             :color="isScaled ? 'primary' : 'neutral'"
             variant="subtle"
             size="sm"
+            class="basis-22 shrink-0 tabular-nums"
           />
           <UBadge
             v-if="recipe?.prepTime != null"
             icon="i-lucide-clock"
-            :label="`${recipe.prepTime} min prép.`"
+            :label="`${recipe.prepTime} min`"
+            :title="`Préparation : ${recipe.prepTime} min`"
+            :aria-label="`Préparation : ${recipe.prepTime} min`"
             color="neutral"
             variant="subtle"
             size="sm"
@@ -284,7 +290,9 @@ const editRecipe = async () => {
           <UBadge
             v-if="recipe?.cookTime != null"
             icon="i-lucide-cooking-pot"
-            :label="`${recipe.cookTime} min cuisson`"
+            :label="`${recipe.cookTime} min`"
+            :title="`Cuisson : ${recipe.cookTime} min`"
+            :aria-label="`Cuisson : ${recipe.cookTime} min`"
             color="neutral"
             variant="subtle"
             size="sm"
@@ -308,15 +316,16 @@ const editRecipe = async () => {
               <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
               <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients</p>
             </div>
-            <!-- Recalcule seulement les quantités affichées : le repas, la recette et le stock ne changent pas. -->
+            <!-- Recalcule seulement les quantités affichées : le repas, la recette et le stock ne changent pas.
+                 Le lien de retour garde sa place une fois masqué pour que le variateur ne bouge pas sous le doigt. -->
             <div class="flex items-center gap-2">
               <UButton
-                v-if="isAdjusted"
                 :label="`Revenir à ${formatParts(initialParts)}`"
                 color="neutral"
                 variant="link"
                 size="xs"
                 class="tabular-nums"
+                :class="{ invisible: !isAdjusted }"
                 @click="resetParts"
               />
               <div role="group" aria-label="Parts pour le calcul des quantités" class="flex items-center rounded-md ring ring-inset ring-accented">
@@ -329,7 +338,7 @@ const editRecipe = async () => {
                   :disabled="displayedParts <= PARTS_STEP"
                   @click="stepParts(-1)"
                 />
-                <span class="min-w-16 text-center text-sm font-semibold text-highlighted tabular-nums" aria-live="polite">
+                <span class="w-20 text-center text-sm font-semibold text-highlighted tabular-nums" aria-live="polite">
                   {{ formatParts(displayedParts) }}
                 </span>
                 <UButton
@@ -343,7 +352,6 @@ const editRecipe = async () => {
               </div>
             </div>
           </div>
-          <p v-if="scaledNote" class="mb-3 text-xs text-muted">{{ scaledNote }}</p>
           <ul v-if="lines.length" class="rounded-lg border border-default bg-elevated overflow-hidden">
             <li
               v-for="line in lines"

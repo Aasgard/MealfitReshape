@@ -199,6 +199,8 @@ Applied only where a value is compared with a target: the calorie gauge, meal ri
 
 **The Regulatory Label Exception.** The Nutri-Score scale on the product scanner keeps its official colors (A `#038141`, B `#85bb2f`, C `#fecb02`, D `#ee8100`, E `#e63e11`). It is a regulatory mark people recognize by its colors, not a fourth territory: those hues never leave that scale.
 
+**The Store Identity Exception.** Each store (Réglages → Magasins) carries one hue from a fixed ten-color palette (`STORE_COLORS` in `app/utils/stores.ts`: rouge, orange, ambre, vert, sarcelle, cyan, bleu, violet, rose, ardoise; no indigo, so a store name never reads as a link). It colors only that store's name and its swatch dot, set as `-700` in light mode and `-400` in dark so it holds 4.5:1 on `bg-default`. Firestore stores the palette key, never a raw color. Like the Nutri-Score, it is an identity mark, not a fourth territory: store hues never mark interaction, macros or verdicts.
+
 **Known debt.** Sprout Green (glucides) and On-Target Green (reached) are the same hue. They rarely share a component, but in the daily summary a green carb bar can sit beside a green "reached" value. Don't add more places where the two meet.
 
 ## Typography

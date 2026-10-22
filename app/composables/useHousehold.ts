@@ -234,9 +234,13 @@ export function useHousehold() {
     })
     pointer.value = ref.id
     demo.value = null
-    // Seul membre, le créateur garde sa liste de courses : elle devient celle du foyer.
-    await moveShoppingList(db, where('scope', '==', uid), ref.id)
-      .catch(error => console.error('Liste de courses non reprise dans le foyer :', error))
+    // Seul membre, le créateur garde sa liste de courses et ses magasins : ils deviennent ceux du foyer.
+    await Promise.all([
+      moveShoppingList(db, where('scope', '==', uid), ref.id)
+        .catch(error => console.error('Liste de courses non reprise dans le foyer :', error)),
+      moveStores(db, uid, ref.id)
+        .catch(error => console.error('Magasins non repris dans le foyer :', error)),
+    ])
   }
 
   /**
@@ -264,6 +268,9 @@ export function useHousehold() {
     }
     pointer.value = ref.id
     demo.value = null
+    // Ses magasins rejoignent ceux du foyer ; un nom que le foyer a déjà n'est pas repris.
+    await moveStores(db, uid, ref.id)
+      .catch(error => console.error('Magasins non repris dans le foyer :', error))
     return ((await getDoc(ref)).data() as HouseholdDoc | undefined)?.name ?? ''
   }
 
@@ -308,7 +315,7 @@ export function useHousehold() {
 
   /**
    * Si le propriétaire part, le plus ancien des autres membres le devient ; seul, il supprime le foyer et son code, et
-   * reprend sa liste de courses. Sinon la liste reste au foyer. Dans la démo, le foyer disparaît pour ce compte.
+   * reprend sa liste de courses et ses magasins. Sinon ils restent au foyer. Dans la démo, le foyer disparaît pour ce compte.
    */
   async function leave() {
     if (isDemo.value) {
@@ -318,7 +325,9 @@ export function useHousehold() {
     const current = storedHousehold.value
     const uid = requireUid()
     if (!current) return
-    if (current.memberIds.length <= 1) await moveShoppingList(db, where('scope', '==', current.id), uid)
+    if (current.memberIds.length <= 1) {
+      await Promise.all([moveShoppingList(db, where('scope', '==', current.id), uid), moveStores(db, current.id, uid)])
+    }
     const batch = writeBatch(db)
     batch.set(userRef(uid), pointerData(null), { merge: true })
     if (current.memberIds.length <= 1) {

@@ -18,6 +18,7 @@ const SECTIONS = [
   { id: 'repas', label: 'Repas & objectifs', icon: 'i-lucide-utensils' },
   { id: 'menus', label: 'Menus', icon: 'i-lucide-calendar-days' },
   { id: 'courses', label: 'Liste de courses', icon: 'i-lucide-shopping-cart' },
+  { id: 'magasins', label: 'Magasins', icon: 'i-lucide-store' },
   { id: 'suivi', label: 'Suivi', icon: 'i-lucide-ruler' },
 ] as const
 
@@ -25,7 +26,8 @@ type SectionId = typeof SECTIONS[number]['id']
 
 // --- Enregistrement automatique : chaque section affiche « Enregistré » après un changement ---
 
-const saved = reactive<Record<SectionId, number>>({ repas: 0, menus: 0, courses: 0, suivi: 0 })
+/** Les magasins, enregistrés dans Firestore, comptent leurs écritures eux-mêmes (`StoreSettingsList`). */
+const saved = reactive<Record<SectionId, number>>({ repas: 0, menus: 0, courses: 0, magasins: 0, suivi: 0 })
 let resetting = false
 
 /** `valid` : pas de « Enregistré » tant que la section affiche une erreur. */
@@ -51,7 +53,7 @@ function resetAll() {
   withoutTracking(reset)
   toast.add({
     title: 'Réglages rétablis',
-    description: 'Les valeurs par défaut sont de retour, y compris l\'ordre des rayons et le garde-manger.',
+    description: 'Les valeurs par défaut sont de retour, y compris l\'ordre des rayons et le garde-manger. Vos magasins ne changent pas.',
     color: 'neutral',
     icon: 'i-lucide-rotate-ccw',
     actions: [{ label: 'Annuler', color: 'neutral', variant: 'outline', onClick: () => withoutTracking(() => (settings.value = snapshot)) }],
@@ -560,6 +562,19 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
                   <pre class="overflow-x-auto rounded-lg border border-default bg-elevated px-3 py-2.5 font-mono text-xs leading-relaxed text-default">{{ exportPreview }}</pre>
                 </figure>
               </div>
+            </div>
+          </section>
+
+          <!-- Magasins -->
+          <section id="magasins" aria-labelledby="magasins-title" class="flex scroll-mt-4 flex-col rounded-xl border border-default bg-default">
+            <header class="flex items-baseline justify-between gap-3 px-4 pt-4 pb-3 sm:px-5 sm:pt-5">
+              <h2 id="magasins-title" class="text-lg font-bold tracking-tight text-highlighted">
+                Magasins
+              </h2>
+              <SavedHint :stamp="saved.magasins" />
+            </header>
+            <div class="border-t border-default">
+              <StoreSettingsList @saved="saved.magasins++" />
             </div>
           </section>
 

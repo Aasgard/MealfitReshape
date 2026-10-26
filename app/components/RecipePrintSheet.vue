@@ -15,6 +15,8 @@ defineProps<{
   macros: IngredientMacros | null
   partsLabel: string
   scaledNote?: string | null
+  /** Ingrédients remplacés sur la fiche, ex. « Variante : Riz au lieu de Pommes de terre ». */
+  variantNote?: string | null
 }>()
 </script>
 
@@ -40,7 +42,7 @@ defineProps<{
       />
 
       <section v-if="macros" class="recipe-print__section">
-        <h2>Valeurs nutritionnelles pour une part</h2>
+        <h2>Valeurs nutritionnelles pour une part{{ variantNote ? ' (avec variante)' : '' }}</h2>
         <table class="recipe-print__macros">
           <thead>
             <tr>
@@ -64,6 +66,7 @@ defineProps<{
       <section class="recipe-print__section">
         <h2>Ingrédients</h2>
         <p v-if="scaledNote" class="recipe-print__note">{{ scaledNote }}</p>
+        <p v-if="variantNote" class="recipe-print__note">{{ variantNote }}</p>
         <ul v-if="lines.length" class="recipe-print__ingredients">
           <li v-for="line in lines" :key="line.key">
             <span>{{ line.label }}</span>

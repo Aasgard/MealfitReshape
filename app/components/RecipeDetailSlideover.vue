@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { Recipe } from '~/types/recipe'
+import { useMediaQuery } from '@vueuse/core'
+import type { DocumentReference } from 'firebase/firestore'
+import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { recipeTypeLabel } from '~/utils/recipeType'
 import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
 import { describeRecipeLine, macrosForRecipe } from '~/utils/recipeNutrition'
+import { formatKitchenGrams, nearestUnitLabel, swapForLine } from '~/utils/ingredientSwap'
 
 const props = defineProps<{
   recipe: Recipe | null
@@ -67,26 +70,140 @@ const isScaled = computed(() => displayedParts.value !== persons.value)
 const formatParts = (parts: number) =>
   `${parts.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} part${parts > 1 ? 's' : ''}`
 
-const macros = computed(() => macrosForRecipe(props.recipe?.ingredients, props.ingredientsById, persons.value))
+const factor = computed(() => displayedParts.value / persons.value)
+
+/**
+ * Variantes de la fiche : index de ligne → ingrédient remplaçant, pesé pour apporter les mêmes kcal. Comme le
+ * variateur de parts, elles ne changent que l'affichage (et l'impression) et disparaissent à chaque ouverture.
+ */
+const swaps = ref<Record<number, string>>({})
+watch(open, (isOpen) => {
+  if (isOpen) swaps.value = {}
+})
+watch([() => props.recipe?.id, () => props.recipe?.ingredients], () => {
+  swaps.value = {}
+})
+const hasSwaps = computed(() => Object.keys(swaps.value).length > 0)
+
+/** Remplacement résolu d'une ligne, `null` sans variante (ou si elle n'est plus calculable). */
+const swapOf = (line: RecipeIngredientLine, idx: number) => {
+  const replacementId = swaps.value[idx]
+  const replacement = replacementId ? props.ingredientsById.get(replacementId) : undefined
+  if (!replacement) return null
+  const original = line.ingredientRef ? props.ingredientsById.get(line.ingredientRef.id) : undefined
+  const result = swapForLine(line, original, replacement)
+  return result ? { replacement, ...result } : null
+}
+
+/** Lignes de la recette telles que cuisinées : un remplaçant compte pour son poids en grammes. */
+const effectiveLines = computed<RecipeIngredientLine[]>(() =>
+  (props.recipe?.ingredients ?? []).map((line, idx) => {
+    const swap = swapOf(line, idx)
+    if (!swap) return line
+    return { ingredientRef: { id: swap.replacement.id } as DocumentReference, quantity: swap.grams }
+  })
+)
+
+const macros = computed(() => macrosForRecipe(effectiveLines.value, props.ingredientsById, persons.value))
 const hasMacros = computed(() => {
   const m = macros.value
   return m.calories > 0 || m.protein > 0 || m.carbohydrates > 0 || m.fat > 0
 })
 
-/** Lignes d'ingrédients résolues (nom + quantité affichable). */
+/** Lignes d'ingrédients résolues (nom + quantité affichable), avec l'original d'une ligne remplacée. */
 const lines = computed(() => {
   const recipe = props.recipe
   if (!recipe?.ingredients?.length) return []
   return recipe.ingredients.map((line, idx) => {
-    const described = describeRecipeLine(line, props.ingredientsById, displayedParts.value / persons.value)
-    return {
-      key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`,
+    const described = describeRecipeLine(line, props.ingredientsById, factor.value)
+    const original = {
       label: described?.label ?? 'Ingrédient introuvable',
       quantityLabel: described?.quantityLabel ?? `${line.quantity}`,
       equivalentLabel: described?.equivalentLabel,
     }
+    const swap = swapOf(line, idx)
+    if (!swap) return { key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`, idx, ...original, original: null }
+
+    const grams = swap.grams * factor.value
+    return {
+      key: `${line.ingredientRef?.id ?? 'unknown'}-${idx}`,
+      idx,
+      label: swap.replacement.label,
+      quantityLabel: formatKitchenGrams(grams),
+      equivalentLabel: nearestUnitLabel(swap.replacement, grams) ?? undefined,
+      original: {
+        ...original,
+        delta: {
+          carbohydrates: swap.delta.carbohydrates * factor.value,
+          protein: swap.delta.protein * factor.value,
+          fat: swap.delta.fat * factor.value,
+        },
+      },
+    }
   })
 })
+
+const variantNote = computed(() => {
+  const replaced = lines.value.filter(line => line.original)
+  if (!replaced.length) return null
+  return `Variante : ${replaced.map(line => `${line.label} au lieu de ${line.original!.label}`).join(' ; ')}`
+})
+
+const unswap = (idx: number) => {
+  const { [idx]: _, ...rest } = swaps.value
+  swaps.value = rest
+}
+
+/** Ligne dont on choisit le remplaçant. */
+const swapIdx = ref<number | null>(null)
+const swapOpen = ref(false)
+const swapLine = computed(() => (swapIdx.value == null ? null : props.recipe?.ingredients?.[swapIdx.value] ?? null))
+const openSwap = (idx: number) => {
+  swapIdx.value = idx
+  swapOpen.value = true
+}
+const pickSwap = (ingredientId: string) => {
+  if (swapIdx.value == null) return
+  swaps.value = { ...swaps.value, [swapIdx.value]: ingredientId }
+}
+
+/**
+ * Accès au remplacement : appui long au doigt (un simple toucher ne fait rien, on fait défiler la fiche), clic à la
+ * souris, Entrée au clavier. Pendant l'appui, la ligne se remplit pour montrer que l'appui est pris en compte.
+ */
+const isTouch = useMediaQuery('(pointer: coarse)')
+const LONG_PRESS_MS = 450
+const pressedIdx = ref<number | null>(null)
+let pressTimer: ReturnType<typeof setTimeout> | undefined
+let pressOrigin: { x: number; y: number } | null = null
+let lastPointerType: string | null = null
+
+const cancelPress = () => {
+  clearTimeout(pressTimer)
+  pressedIdx.value = null
+  pressOrigin = null
+}
+const onLinePointerDown = (event: PointerEvent, idx: number) => {
+  lastPointerType = event.pointerType
+  if (event.pointerType !== 'touch') return
+  cancelPress()
+  pressedIdx.value = idx
+  pressOrigin = { x: event.clientX, y: event.clientY }
+  pressTimer = setTimeout(() => {
+    pressedIdx.value = null
+    navigator.vibrate?.(10)
+    openSwap(idx)
+  }, LONG_PRESS_MS)
+}
+const onLinePointerMove = (event: PointerEvent) => {
+  if (pressOrigin && Math.hypot(event.clientX - pressOrigin.x, event.clientY - pressOrigin.y) > 10) cancelPress()
+}
+const onLineClick = (idx: number) => {
+  const fromTouch = lastPointerType === 'touch'
+  lastPointerType = null
+  if (!fromTouch) openSwap(idx)
+}
+onBeforeUnmount(cancelPress)
 
 const scaledNote = computed(() =>
   isScaled.value ? `Quantités pour ${formatParts(displayedParts.value)} (recette prévue pour ${formatParts(persons.value)})` : null
@@ -219,6 +336,7 @@ const editRecipe = async () => {
         :macros="hasMacros ? macros : null"
         :parts-label="formatParts(displayedParts)"
         :scaled-note="scaledNote"
+        :variant-note="variantNote"
       />
 
       <div class="flex flex-col gap-6">
@@ -314,7 +432,9 @@ const editRecipe = async () => {
 
         <!-- Valeurs nutritionnelles -->
         <div v-if="hasMacros">
-          <p class="text-xs text-dimmed mb-2">Valeurs nutritionnelles pour une part</p>
+          <p class="text-xs text-dimmed mb-2">
+            Valeurs nutritionnelles pour une part<span v-if="hasSwaps" class="font-medium text-primary"> · avec variante</span>
+          </p>
           <IngredientMacroSummary :macros="macros" />
         </div>
         <p v-if="!hasMacros" class="flex items-center gap-1.5 text-xs text-dimmed">
@@ -365,17 +485,64 @@ const editRecipe = async () => {
               </div>
             </div>
           </div>
+          <p v-if="lines.length" class="-mt-1 mb-2 text-xs text-dimmed">
+            {{ isTouch ? 'Appui long' : 'Clic' }} sur un ingrédient pour le remplacer à kcal égales.
+          </p>
           <ul v-if="lines.length" class="rounded-lg border border-default bg-elevated overflow-hidden">
             <li
               v-for="line in lines"
               :key="line.key"
-              class="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-default last:border-b-0"
+              class="flex items-stretch border-b border-default last:border-b-0"
             >
-              <span class="text-sm font-medium text-highlighted truncate">{{ line.label }}</span>
-              <span class="text-sm tabular-nums text-muted shrink-0">
-                {{ line.quantityLabel }}
-                <span v-if="line.equivalentLabel" class="text-dimmed">{{ line.equivalentLabel }}</span>
-              </span>
+              <!-- Appui long au doigt, clic à la souris : pas de bouton dédié sur la ligne. -->
+              <button
+                type="button"
+                class="relative flex min-w-0 flex-1 cursor-pointer select-none flex-col gap-0.5 overflow-hidden px-3 py-2.5 text-start transition-colors [-webkit-touch-callout:none] hover:bg-accented/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                :aria-label="`Remplacer ${line.label}`"
+                :aria-haspopup="'dialog'"
+                @pointerdown="onLinePointerDown($event, line.idx)"
+                @pointermove="onLinePointerMove"
+                @pointerup="cancelPress"
+                @pointercancel="cancelPress"
+                @pointerleave="cancelPress"
+                @contextmenu.prevent
+                @click="onLineClick(line.idx)"
+              >
+                <span
+                  aria-hidden="true"
+                  class="pointer-events-none absolute inset-0 origin-left bg-primary/10 motion-reduce:transition-none"
+                  :class="pressedIdx === line.idx
+                    ? 'scale-x-100 transition-transform duration-[450ms] ease-linear'
+                    : 'scale-x-0 transition-none'"
+                />
+                <span class="relative flex items-center justify-between gap-3">
+                  <span class="flex min-w-0 items-center gap-1.5">
+                    <UIcon v-if="line.original" name="i-lucide-arrow-left-right" class="size-3.5 shrink-0 text-primary" />
+                    <span class="text-sm font-medium text-highlighted truncate">{{ line.label }}</span>
+                  </span>
+                  <span class="text-sm tabular-nums shrink-0" :class="line.original ? 'font-semibold text-highlighted' : 'text-muted'">
+                    {{ line.quantityLabel }}
+                    <span v-if="line.equivalentLabel" class="font-normal text-dimmed">{{ line.equivalentLabel }}</span>
+                  </span>
+                </span>
+                <span v-if="line.original" class="relative flex items-center justify-between gap-3 text-xs">
+                  <span class="min-w-0 truncate text-dimmed line-through">
+                    {{ line.original.label }} {{ line.original.quantityLabel }}
+                  </span>
+                  <MacroDeltaLabels :delta="line.original.delta" class="shrink-0" />
+                </span>
+              </button>
+              <UButton
+                v-if="line.original"
+                icon="i-lucide-undo-2"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :aria-label="`Revenir à ${line.original.label}`"
+                :title="`Revenir à ${line.original.label}`"
+                class="shrink-0 self-center me-1"
+                @click="unswap(line.idx)"
+              />
             </li>
           </ul>
           <p v-else class="flex items-center gap-1.5 text-xs text-dimmed">
@@ -449,6 +616,15 @@ const editRecipe = async () => {
       </div>
     </template>
   </USlideover>
+
+  <RecipeIngredientSwapModal
+    v-model:open="swapOpen"
+    :line="swapLine"
+    :ingredients-by-id="ingredientsById"
+    :factor="factor"
+    :current-id="swapIdx == null ? undefined : swaps[swapIdx]"
+    @pick="pickSwap"
+  />
 
   <RecipeFormSlideover v-if="editedRecipe" v-model:open="formOpen" :recipe="editedRecipe" />
 </template>

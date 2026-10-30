@@ -81,8 +81,9 @@ watch(meals.error, (error) => {
 const COOKING_HISTORY_DAYS = 21
 
 // Changent seulement avec la semaine : de 3 semaines avant celle du jour affiché à la fin de la suivante,
-// qui contient toujours les 6 jours après le jour affiché.
-const upcomingMeals = useMealsBetween(() => ({
+// qui contient toujours les 6 jours après le jour affiché. Ceux de tout le foyer, comme la liste de courses : une fournée
+// se cuisine pour tous ceux qui ont prévu la recette.
+const { meals: upcomingMeals } = useHouseholdMealsBetween(() => ({
   start: addDays(selectedWeekStart.value, -COOKING_HISTORY_DAYS),
   end: addDays(selectedWeekStart.value, 13),
 }))

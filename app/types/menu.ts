@@ -36,6 +36,16 @@ export interface MenuMealTypeRow {
 /** Repas par jour (date ISO) puis par type de repas : entries[dayKey][mealTypeKey]. */
 export type MenuWeekEntries = Record<string, Record<string, MenuEntry[]>>
 
+/** Bloc d'un autre membre du foyer, sous celui du compte connecté : ses repas, dans les mêmes lignes du calendrier. */
+export interface MenuMemberRow {
+  id: string
+  name: string
+  photoUrl?: string
+  entries: MenuWeekEntries
+  /** Kcal du jour par date ISO, « Non compté » exclu. */
+  kcalByDay: Record<string, number>
+}
+
 /** Un repas/aliment placé dans une case du calendrier. */
 export interface MenuEntry {
   id: string

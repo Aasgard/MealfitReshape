@@ -4,10 +4,10 @@ import type { MenuEntry } from '~/types/menu'
 import { dishStorageOf } from '~/utils/preparedDishes'
 
 /**
- * Une case du calendrier (un jour × une ligne de repas) : ses cartes, glissables vers les autres cases,
+ * Une case du calendrier (un jour × une ligne de repas) : ses cartes, glissables vers les autres cases du même `group`,
  * et le bouton "+". Le parent enregistre le déplacement (`move-entry`) ; la case n'écrit rien elle-même.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   entries: MenuEntry[]
   /** Repas actuellement copié : mis en évidence, et le bouton "+" indique qu'il va le coller. */
   copiedEntryId?: string
@@ -15,7 +15,11 @@ const props = defineProps<{
   isHighlighted?: boolean
   /** Ligne « Non compté » : hors totaux, la carte n'affiche que le nom et la quantité (sans kcal ni macros). */
   hideNutrition?: boolean
-}>()
+  /** Cases entre lesquelles les cartes se déplacent : le bloc de chaque membre du foyer a le sien. */
+  group?: string
+}>(), {
+  group: 'menu-meals',
+})
 
 const emit = defineEmits<{
   add: []
@@ -44,7 +48,7 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
 <template>
   <VueDraggable
     v-model="list"
-    group="menu-meals"
+    :group="group"
     draggable=".menu-meal-card"
     :sort="false"
     :animation="150"

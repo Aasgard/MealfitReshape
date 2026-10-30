@@ -1,7 +1,7 @@
 import { differenceInCalendarDays } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealSource, MealType, ScannedProduct, StockMealSource } from '~/types/meal'
-import type { MenuEntry, MenuMealTypeRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
+import type { MenuEntry, MenuMealTypeRow, MenuMemberRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { macrosForQuantity, scaleMacros, type IngredientMacros } from './ingredientNutrition'
 import { dayKeyOf, DAYS_PER_WEEK } from './menuWeek'
@@ -253,6 +253,17 @@ export function buildEntriesByDay(
     ;(day[meal.mealType] ??= []).push(entryFromMeal(meal, recipesById, ingredientsById))
   }
   return entries
+}
+
+/** Repas d'un autre membre du foyer rangés comme ceux du calendrier, et ses kcal du jour (voir `MenuMemberRow`). */
+export function buildMemberDays(
+  meals: Meal[],
+  recipesById: Map<string, Recipe>,
+  ingredientsById: Map<string, Ingredient>
+): Pick<MenuMemberRow, 'entries' | 'kcalByDay'> {
+  const entries = buildEntriesByDay(meals, recipesById, ingredientsById)
+  const kcalByDay = Object.fromEntries(Object.entries(entries).map(([day, byMealType]) => [day, summarizeDay(byMealType).kcal]))
+  return { entries, kcalByDay }
 }
 
 /**

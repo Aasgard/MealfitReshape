@@ -12,6 +12,50 @@ export type NewMeal = {
   date: Date
   mealType: MealType
   source: MealSource
+  /** Membre du foyer auquel rattacher le repas ; absent = le compte connecté. */
+  user?: string
+}
+
+/** Bornes d'une requête de repas : `from` inclus, `to` exclu. */
+type DateBounds = { from: Date, to: Date }
+
+/**
+ * Repas des comptes `users()` entre les bornes `bounds()` ; `null` à l'un ou l'autre : aucune requête.
+ * Index composite `user` ↑, `date` ↑.
+ */
+const useMealsOf = (users: () => (string | null)[] | null, bounds: () => DateBounds | null) => {
+  const db = useFirestore()
+
+  return useCollection<Meal>(() => {
+    const ids = users()
+    const range = bounds()
+    if (!ids?.length || !range) return null
+
+    return query(
+      collection(db, 'meals'),
+      ids.length === 1 ? where('user', '==', ids[0]) : where('user', 'in', ids),
+      where('date', '>=', Timestamp.fromDate(range.from)),
+      where('date', '<', Timestamp.fromDate(range.to))
+    )
+  })
+}
+
+/**
+ * Repas du compte connecté entre les bornes `bounds()`, ceux sans `user` (remis à `null` par `reset:owners`) compris
+ * pour ne pas disparaître ; mêmes `error`, `pending` et `promise` qu'une collection VueFire.
+ */
+const useOwnMeals = (bounds: () => DateBounds | null) => {
+  const user = useCurrentUser()
+  const signedIn = () => !!user.value
+  const own = useMealsOf(() => user.value ? [user.value.uid] : null, bounds)
+  const orphans = useMealsOf(() => signedIn() ? [null] : null, bounds)
+
+  const merged = computed(() => [...own.value, ...orphans.value])
+  return Object.assign(merged, {
+    error: computed(() => own.error.value ?? orphans.error.value),
+    pending: computed(() => own.pending.value || orphans.pending.value),
+    promise: computed(() => Promise.all([own.promise.value, orphans.promise.value]).then(() => merged.value)),
+  })
 }
 
 /**
@@ -19,24 +63,21 @@ export type NewMeal = {
  * (pour "Copier la semaine précédente") et, avec `weeksAhead`, les suivantes (préchargées pour passer de l'une à
  * l'autre sans attente), et écritures associées. Au changement de semaine, les repas affichés restent jusqu'à
  * l'arrivée des nouveaux (`reset: false`, défaut de VueFire).
- * La requête (`user` + plage de `date`) demande un index composite `user` ↑, `date` ↑.
+ * Avec `withHousehold`, `householdMeals` donne aussi ceux des autres membres du foyer, une fois que les règles peuvent
+ * les ouvrir (`shared`) ; leurs écritures passent par les mêmes fonctions.
  */
-export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
+export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0, withHousehold = false } = {}) => {
   const db = useFirestore()
   const user = useCurrentUser()
   const { dishesById, stageStockChanges, stageStockMove } = usePreparedDishes()
+  const { memberIds, shared } = useHousehold()
 
-  const meals = useCollection<Meal>(() => {
-    const uid = user.value?.uid
-    if (!uid) return null
-
-    return query(
-      collection(db, 'meals'),
-      // where('user', '==', uid),
-      where('date', '>=', Timestamp.fromDate(subWeeks(weekStart.value, 1))),
-      where('date', '<', Timestamp.fromDate(addWeeks(weekStart.value, 1 + weeksAhead)))
-    )
-  })
+  const bounds = () => ({ from: subWeeks(weekStart.value, 1), to: addWeeks(weekStart.value, 1 + weeksAhead) })
+  const meals = useOwnMeals(bounds)
+  const householdMeals = useMealsOf(
+    () => withHousehold && shared.value ? memberIds.value.filter(id => id !== user.value?.uid) : null,
+    bounds,
+  )
 
   /**
    * Supprime `toDelete` et crée `toCreate` en une seule écriture atomique, parts du stock comprises : prises aux plats
@@ -55,10 +96,10 @@ export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
     for (const meal of toDelete) batch.delete(doc(db, 'meals', meal.id))
 
     const now = Date.now()
-    toCreate.forEach(({ date, mealType, source }, index) => {
+    toCreate.forEach(({ date, mealType, source, user: owner }, index) => {
       batch.set(doc(collection(db, 'meals')), {
         ...source,
-        user: uid,
+        user: owner ?? uid,
         date: Timestamp.fromDate(date),
         mealType,
         // Un décalage d'1 ms par repas conserve leur ordre d'ajout à l'intérieur d'une case.
@@ -110,33 +151,20 @@ export const useMeals = (weekStart: Ref<Date>, { weeksAhead = 0 } = {}) => {
     await batch.commit()
   }
 
-  return { meals, addMeal, moveMeal, updateMealSource, replaceMeals }
+  return { meals, householdMeals, addMeal, moveMeal, updateMealSource, replaceMeals }
 }
 
 /** Plage de jours, bornes incluses. */
 export type DayRange = { start: Date, end: Date }
 
 /**
- * Repas de l'utilisateur connecté (lecture seule) du jour `start` au jour `end` inclus.
- * `range` à `null` : aucune requête (ex. panneau fermé). Même index composite que `useMeals`.
+ * Repas de l'utilisateur connecté (lecture seule) du jour `start` au jour `end` inclus, comme `useMeals` ceux sans
+ * `user` compris. `range` à `null` : aucune requête (ex. panneau fermé).
  */
-export const useMealsBetween = (range: MaybeRefOrGetter<DayRange | null>) => {
-  const db = useFirestore()
-  const user = useCurrentUser()
-
-  return useCollection<Meal>(() => {
-    const uid = user.value?.uid
-    const { start, end } = toValue(range) ?? {}
-    if (!uid || !start || !end) return null
-
-    return query(
-      collection(db, 'meals'),
-      // where('user', '==', uid),
-      where('date', '>=', Timestamp.fromDate(startOfDay(start))),
-      where('date', '<', Timestamp.fromDate(addDays(startOfDay(end), 1)))
-    )
-  })
-}
+export const useMealsBetween = (range: MaybeRefOrGetter<DayRange | null>) => useOwnMeals(() => {
+  const { start, end } = toValue(range) ?? {}
+  return start && end ? { from: startOfDay(start), to: addDays(startOfDay(end), 1) } : null
+})
 
 /**
  * Repas de tous les membres du foyer (lecture seule) du jour `start` au jour `end` inclus : la liste de courses du foyer

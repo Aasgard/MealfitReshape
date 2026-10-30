@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MealType } from '~/types/meal'
-import type { MenuDayHeader, MenuEntry, MenuMealTypeRow } from '~/types/menu'
+import type { MenuDayHeader, MenuEntry, MenuMealTypeRow, MenuMemberRow } from '~/types/menu'
 import { DAILY_TARGET_TOLERANCE, TARGET_STATUS_TEXT_CLASS, targetStatus, type DailyTargets } from '~/utils/dailyTargets'
 import { summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { DAYS_PER_WEEK } from '~/utils/menuWeek'
@@ -20,13 +20,18 @@ const props = withDefaults(defineProps<{
   copiedEntryId?: string
   /** Mobile, tablette : colonnes de largeur fixe, défilement aimanté par jour, d'une semaine à l'autre. */
   continuous?: boolean
+  /** Autres membres du foyer : une ligne chacun sous celles du compte connecté (hors totaux des en-têtes). */
+  members?: MenuMemberRow[]
 }>(), {
   entries: () => ({}),
   continuous: false,
+  members: () => [],
 })
 
 const emit = defineEmits<{
   add: [dayKey: string, mealTypeKey: MealType]
+  /** "+" d'une ligne de membre, une fois la ligne du calendrier choisie. */
+  'add-for-member': [memberId: string, dayKey: string, mealTypeKey: MealType]
   'select-entry': [entryId: string]
   'edit-entry': [entryId: string]
   'copy-entry': [entryId: string]
@@ -68,6 +73,21 @@ const visibleMealTypes = computed(() => otherRowsOpen.value
   : props.mealTypes.filter(row => !collapsedMealTypes.value.includes(row)))
 
 const otherRowsLabel = computed(() => collapsedMealTypes.value.map(row => row.label).join(', '))
+
+const memberEntriesFor = (member: MenuMemberRow, dayKey: string, mealTypeKey: string): MenuEntry[] =>
+  member.entries[dayKey]?.[mealTypeKey] ?? NO_ENTRIES
+
+/**
+ * Lignes du bloc d'un membre : les mêmes que celles du compte connecté ; tant que « Autres repas » est replié, les
+ * lignes repliables n'y paraissent que si ce membre y a un repas sur les jours affichés.
+ */
+const memberMealTypes = (member: MenuMemberRow) => otherRowsOpen.value
+  ? props.mealTypes
+  : props.mealTypes.filter(row => !COLLAPSIBLE_MEAL_TYPES.includes(row.key)
+    || props.days.some(day => member.entries[day.key]?.[row.key]?.length))
+
+/** Colonne figée étroite : le prénom seul, le nom complet au survol. */
+const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name
 
 /** Totaux de chaque jour pour son en-tête : kcal colorées selon l'objectif, et macros. */
 const statusClassOf = (value: number, target: number) =>
@@ -366,6 +386,7 @@ defineExpose({
               type="button"
               data-copy-control
               class="sticky left-0 z-10 flex cursor-pointer items-center justify-center border-r border-default bg-elevated px-1 py-2 text-muted transition-colors hover:text-highlighted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+              :class="members.length && 'border-b'"
               :aria-expanded="otherRowsOpen"
               :aria-label="otherRowsOpen ? 'Masquer les lignes vides' : `Afficher les autres repas : ${otherRowsLabel}`"
               @click="otherRowsOpen = !otherRowsOpen"
@@ -380,7 +401,8 @@ defineExpose({
             <button
               type="button"
               data-copy-control
-              class="flex cursor-pointer items-center bg-elevated/50 py-2 text-xs text-muted transition-colors hover:bg-elevated hover:text-highlighted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+              class="flex cursor-pointer items-center border-default bg-elevated/50 py-2 text-xs text-muted transition-colors hover:bg-elevated hover:text-highlighted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+              :class="members.length && 'border-b'"
               style="grid-column: 2 / -1"
               tabindex="-1"
               aria-hidden="true"
@@ -391,6 +413,60 @@ defineExpose({
                 <span v-if="!otherRowsOpen" class="text-dimmed">· {{ otherRowsLabel }}</span>
               </span>
             </button>
+          </template>
+
+          <!--
+            Autres membres du foyer : un bloc chacun, ouvert par une bande à son nom et ses kcal du jour, puis les mêmes
+            lignes que ci-dessus. Leurs cartes ne se déposent que dans leur propre bloc (`group`), et leurs repas ne
+            comptent pas dans les totaux des en-têtes de colonne.
+          -->
+          <template v-for="member in members" :key="member.id">
+            <!-- Dans la colonne figée : le membre reste nommé pendant le défilement ; nom complet au survol. -->
+            <div
+              class="sticky left-0 z-10 flex flex-col items-center justify-center gap-0.5 border-b border-r border-default bg-elevated px-1 py-1.5"
+              :title="member.name"
+            >
+              <UAvatar :src="member.photoUrl" :alt="member.name" size="2xs" />
+              <span class="w-full truncate text-center text-xs font-medium text-toned">{{ firstName(member.name) }}</span>
+            </div>
+            <!-- Kcal du jour du membre, en gris : les objectifs affichés sont ceux du compte connecté, pas les siens. -->
+            <div
+              v-for="day in week"
+              :key="`${member.id}-total-${day.key}`"
+              class="flex items-center justify-center border-b border-r border-default px-2 py-1.5 text-xs tabular-nums text-dimmed last:border-r-0"
+              :class="day.isSelected ? 'bg-[color-mix(in_oklch,var(--ui-primary)_5%,var(--ui-bg-elevated))]' : 'bg-elevated'"
+            >
+              <template v-if="member.kcalByDay[day.key]">
+                <span class="font-semibold text-toned">{{ member.kcalByDay[day.key] }}</span>&nbsp;kcal
+              </template>
+              <template v-else>–</template>
+            </div>
+            <template v-for="mealType in memberMealTypes(member)" :key="`${member.id}-${mealType.key}`">
+              <div
+                class="sticky left-0 z-10 border-b border-r border-default px-1 py-2 flex items-center justify-center bg-elevated"
+                :title="[mealType.label, member.name].join(' · ')"
+              >
+                <UIcon :name="mealType.icon" class="size-5 shrink-0 text-muted" aria-hidden="true" />
+                <span class="sr-only">{{ mealType.label }} de {{ member.name }}</span>
+              </div>
+              <MenuWeekCell
+                v-for="day in week"
+                :key="`${member.id}-${mealType.key}-${day.key}`"
+                :entries="memberEntriesFor(member, day.key, mealType.key)"
+                :copied-entry-id="copiedEntryId"
+                :is-highlighted="day.isSelected"
+                :hide-nutrition="mealType.key === UNCOUNTED_MEAL_KEY"
+                :group="`menu-meals-${member.id}`"
+                @add="emit('add-for-member', member.id, day.key, mealType.key)"
+                @select-entry="emit('select-entry', $event)"
+                @edit-entry="emit('edit-entry', $event)"
+                @copy-entry="emit('copy-entry', $event)"
+                @delete-entry="emit('delete-entry', $event)"
+                @move-entry="emit('move-entry', $event, day.key, mealType.key)"
+                @drag-start="isDragging = true; emit('drag-start')"
+                @drag-end="onDragEnd"
+              />
+            </template>
           </template>
         </div>
       </div>

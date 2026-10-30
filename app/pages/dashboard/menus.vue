@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { addDays, addWeeks, differenceInCalendarWeeks, isSameWeek, parseISO, startOfWeek, subWeeks } from 'date-fns'
 import type { Meal, MealSource, MealType } from '~/types/meal'
-import type { MenuEntry } from '~/types/menu'
+import type { MenuEntry, MenuMemberRow } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
-import { buildDays, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { buildEntriesByDay, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { buildDays, dayKeyOf, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
+import { buildEntriesByDay, buildMemberDays, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -65,13 +65,23 @@ const toast = useToast()
 
 /**
  * Repas enregistrés (collection `meals`) de la semaine affichée, de la précédente et de la suivante : celles que le
- * calendrier continu montre de part et d'autre, chargées avant qu'on y arrive.
+ * calendrier continu montre de part et d'autre, chargées avant qu'on y arrive. `meals` : ceux du compte connecté ;
+ * `householdMeals` : ceux des autres membres du foyer, sur leurs propres lignes.
  */
-const { meals, addMeal, moveMeal, updateMealSource, replaceMeals } = useMeals(selectedWeekStart, { weeksAhead: 1 })
-watch(meals.error, (error) => {
-  if (!error) return
-  toast.add({ title: 'Erreur', description: `Impossible de charger les repas : ${error.message}`, color: 'error' })
+const { meals, householdMeals, addMeal, moveMeal, updateMealSource, replaceMeals } = useMeals(selectedWeekStart, { weeksAhead: 1, withHousehold: true })
+watch([meals.error, householdMeals.error], ([error, householdError]) => {
+  const failed = error ?? householdError
+  if (!failed) return
+  const what = error ? 'les repas' : 'les repas du foyer'
+  toast.add({ title: 'Erreur', description: `Impossible de charger ${what} : ${failed.message}`, color: 'error' })
 })
+
+/** Autres membres du foyer enregistré (pas ceux de la démo, qui n'ont pas de repas), dans l'ordre de la page Foyer. */
+const { household, householdId } = useHousehold()
+const otherMembers = computed(() => household.value && householdId.value
+  ? sortedMembers(household.value).filter(member => !member.isSelf)
+  : [])
+const memberNameOf = (id: string) => otherMembers.value.find(member => member.id === id)?.name
 
 // Une erreur de chargement des repas (droits, index manquant...) est signalée par le toast ci-dessus, sans bloquer la page.
 await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promise.value.catch(() => undefined)])
@@ -88,8 +98,21 @@ const summary = computed(() =>
   summarizeMenuWeek(entries.value, buildDays(selectedWeekStart.value).map(day => day.key))
 )
 
-/** Repas chargé, quelle que soit sa semaine (le calendrier continu permet d'agir sur les semaines voisines). */
-const findMeal = (entryId: string) => meals.value.find(m => m.id === entryId)
+/** Une ligne par autre membre : tous ses repas de chaque jour, et ses kcal du jour. */
+const memberRows = computed<MenuMemberRow[]>(() => otherMembers.value.map(member => ({
+  id: member.id,
+  name: member.name,
+  photoUrl: member.photoUrl,
+  ...buildMemberDays(householdMeals.value.filter(meal => meal.user === member.id), recipesById.value, ingredientsById.value),
+})))
+
+/** Repas chargé, quelle que soit sa semaine (le calendrier continu permet d'agir sur les semaines voisines) ou son membre. */
+const findMeal = (entryId: string) =>
+  meals.value.find(m => m.id === entryId) ?? householdMeals.value.find(m => m.id === entryId)
+
+/** Membre (autre que le compte connecté) auquel appartient un repas ; `undefined` pour les siens. */
+const memberOfMeal = (meal: Meal | undefined) =>
+  meal && householdMeals.value.some(m => m.id === meal.id) ? meal.user : undefined
 
 /** Repas copié via l'icône des tuiles : le prochain clic sur un "+" en ajoute un exemplaire dans cette case. */
 const copiedMeal = ref<{ id: string, source: MealSource } | null>(null)
@@ -112,13 +135,20 @@ const cancelCopyOnOutsideClick = (event: MouseEvent) => {
 onMounted(() => document.addEventListener('click', cancelCopyOnOutsideClick))
 onBeforeUnmount(() => document.removeEventListener('click', cancelCopyOnOutsideClick))
 
-/** Lance une écriture Firestore ; en cas d'échec (droits, réseau...), prévient l'utilisateur. Renvoie `true` si elle a réussi. */
-const runWrite = async (write: () => Promise<void>, failureMessage: string) => {
+/**
+ * Lance une écriture Firestore ; en cas d'échec (droits, réseau...), prévient l'utilisateur. Renvoie `true` si elle a réussi.
+ * `memberId` : repas d'un autre membre, dont les règles peuvent refuser l'écriture ; le message le dit.
+ */
+const runWrite = async (write: () => Promise<void>, failureMessage: string, memberId?: string) => {
   try {
     await write()
     return true
   } catch (error: any) {
-    toast.add({ title: 'Erreur', description: `${failureMessage} : ${error.message || 'une erreur est survenue'}.`, color: 'error' })
+    const memberName = memberId ? memberNameOf(memberId) : undefined
+    const reason = error?.code === 'permission-denied' && memberName
+      ? `vos droits Firestore ne permettent pas de modifier les repas de ${memberName}`
+      : error.message || 'une erreur est survenue'
+    toast.add({ title: 'Erreur', description: `${failureMessage} : ${reason}.`, color: 'error' })
     return false
   }
 }
@@ -126,20 +156,23 @@ const runWrite = async (write: () => Promise<void>, failureMessage: string) => {
 /** Jour d'une case : sa clé est sa date ISO (voir `dayKeyOf`). */
 const dateOfDay = (dayKey: string) => parseISO(dayKey)
 
-const saveMeal = (dayKey: string, mealType: MealType, source: MealSource) =>
-  runWrite(() => addMeal({ date: dateOfDay(dayKey), mealType, source }), 'Le repas n\'a pas pu être enregistré')
+const saveMeal = (dayKey: string, mealType: MealType, source: MealSource, memberId?: string) =>
+  runWrite(() => addMeal({ date: dateOfDay(dayKey), mealType, source, user: memberId }), 'Le repas n\'a pas pu être enregistré', memberId)
 
-/** Case pour laquelle la modale d'ajout est ouverte. */
+/** Case pour laquelle la modale d'ajout est ouverte ; `memberId` : sur la ligne d'un autre membre. */
 const addModalOpen = ref(false)
-const addTarget = ref<{ dayKey: string, mealTypeKey: MealType } | null>(null)
+const addTarget = ref<{ dayKey: string, mealTypeKey: MealType, memberId?: string } | null>(null)
 /** Repas modifié via la même modale ; `null` = ajout d'un nouveau repas dans `addTarget`. */
 const editingMeal = ref<Meal | null>(null)
 const editingSource = computed(() => editingMeal.value ? mealSourceOf(editingMeal.value) : null)
 
-/** Contenu du jour visé et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
+/**
+ * Contenu du jour visé et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté », ni
+ * pour un autre membre (les objectifs sont ceux du compte connecté).
+ */
 const addDayBudget = computed(() => {
   const target = addTarget.value
-  if (!target || target.mealTypeKey === UNCOUNTED_MEAL_KEY) return null
+  if (!target || target.memberId || target.mealTypeKey === UNCOUNTED_MEAL_KEY) return null
   return { consumed: consumedOfDay(entries.value[target.dayKey] ?? {}, editingMeal.value?.id), targets: DAILY_TARGETS }
 })
 
@@ -148,7 +181,8 @@ const addContextLabel = computed(() => {
   if (!target) return ''
   const day = days.value.find(d => d.key === target.dayKey)
   const mealType = mealTypes.find(m => m.key === target.mealTypeKey)
-  return `${day ? shortDayLabel(day.date) : ''} · ${mealType?.label}`
+  const memberName = target.memberId ? memberNameOf(target.memberId) : undefined
+  return [day ? shortDayLabel(day.date) : '', mealType?.label, memberName].filter(Boolean).join(' · ')
 })
 
 /** Colle le repas copié dans la case ; sans copie en cours, ouvre la modale d'ajout pour cette case. */
@@ -165,26 +199,38 @@ const addEntry = (dayKey: string, mealTypeKey: MealType) => {
   copiedMeal.value = null
 }
 
+/** "+" de la ligne d'un autre membre, ligne du calendrier choisie : comme `addEntry`, le repas lui revient. */
+const addEntryForMember = (memberId: string, dayKey: string, mealTypeKey: MealType) => {
+  const copied = copiedMeal.value
+  if (!copied) {
+    editingMeal.value = null
+    addTarget.value = { dayKey, mealTypeKey, memberId }
+    addModalOpen.value = true
+    return
+  }
+
+  saveMeal(dayKey, mealTypeKey, copied.source, memberId)
+  copiedMeal.value = null
+}
+
 /** Ouvre la modale pré-remplie avec le contenu du repas ; son jour et sa ligne ne changent pas (le glisser-déposer s'en charge). */
 const editEntry = (entryId: string) => {
   const meal = findMeal(entryId)
-  const dayKey = Object.entries(entries.value)
-    .find(([, byMealType]) => byMealType[meal?.mealType ?? '']?.some(e => e.id === entryId))?.[0]
-  if (!meal || !dayKey) return
+  if (!meal) return
 
   editingMeal.value = meal
-  addTarget.value = { dayKey, mealTypeKey: meal.mealType }
+  addTarget.value = { dayKey: dayKeyOf(meal.date.toDate()), mealTypeKey: meal.mealType, memberId: memberOfMeal(meal) }
   addModalOpen.value = true
 }
 
 const submitAddedEntry = (source: MealSource) => {
   const meal = editingMeal.value
   if (meal) {
-    runWrite(() => updateMealSource(meal, source), 'Le repas n\'a pas pu être modifié')
+    runWrite(() => updateMealSource(meal, source), 'Le repas n\'a pas pu être modifié', memberOfMeal(meal))
     return
   }
   if (!addTarget.value) return
-  saveMeal(addTarget.value.dayKey, addTarget.value.mealTypeKey, source)
+  saveMeal(addTarget.value.dayKey, addTarget.value.mealTypeKey, source, addTarget.value.memberId)
 }
 
 /** « Mettre au stock » (panneau d'actions) : le repas quitte le menu, ses parts rejoignent le surplus de sa fournée. */
@@ -193,7 +239,7 @@ const sendToStock = useSendToStock(() => meals.value)
 const deleteEntry = (entryId: string) => {
   const meal = findMeal(entryId)
   if (!meal) return
-  runWrite(() => replaceMeals([meal], []), 'Le repas n\'a pas pu être supprimé')
+  runWrite(() => replaceMeals([meal], []), 'Le repas n\'a pas pu être supprimé', memberOfMeal(meal))
 }
 
 /** Change la clé du calendrier pour le recréer, et réafficher les cartes telles que les données les décrivent. */
@@ -207,7 +253,8 @@ const moveEntry = async (entryId: string, dayKey: string, mealType: MealType) =>
   const meal = findMeal(entryId)
   const isMoved = !!meal && await runWrite(
     () => moveMeal(meal, { date: dateOfDay(dayKey), mealType }),
-    'Le repas n\'a pas pu être déplacé'
+    'Le repas n\'a pas pu être déplacé',
+    memberOfMeal(meal)
   )
   if (!isMoved) calendarKey.value++
 }
@@ -256,9 +303,10 @@ const selectedRecipe = ref<Recipe | null>(null)
 /** Parts du repas cliqué : la fiche recalcule les quantités d'ingrédients pour ce nombre de parts. */
 const selectedRecipeParts = ref<number | null>(null)
 
-const findEntry = (entryId: string) => Object.values(entries.value)
-  .flatMap(meals => Object.values(meals).flat())
-  .find(e => e.id === entryId)
+const findEntry = (entryId: string) => [
+  ...Object.values(entries.value).flatMap(meals => Object.values(meals).flat()),
+  ...memberRows.value.flatMap(member => Object.values(member.entries).flatMap(meals => Object.values(meals).flat())),
+].find(e => e.id === entryId)
 
 /** Ouvre la fiche de la recette dont provient le repas. */
 const openEntryRecipe = (entry: MenuEntry | undefined) => {
@@ -273,6 +321,11 @@ const openEntryRecipe = (entry: MenuEntry | undefined) => {
 /** Repas dont le panneau d'actions (mobile) est ouvert. */
 const actionsEntry = ref<MenuEntry | null>(null)
 const actionsOpen = ref(false)
+/** Membre auquel appartient ce repas, nommé dans le panneau ; « Mettre au stock » reste réservé à ses propres repas. */
+const actionsMemberName = computed(() => {
+  const memberId = actionsEntry.value ? memberOfMeal(findMeal(actionsEntry.value.id)) : undefined
+  return memberId ? memberNameOf(memberId) : undefined
+})
 
 /**
  * Sur mobile, les cartes n'affichent pas leurs icônes d'action (place réservée au texte) : un appui ouvre un panneau
@@ -462,12 +515,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :targets="DAILY_TARGETS"
             :copied-entry-id="copiedMeal?.id"
             :continuous="isContinuous"
+            :members="memberRows"
             @select-entry="selectEntry"
             @edit-entry="editEntry"
             @copy-entry="toggleCopyEntry"
             @delete-entry="deleteEntry"
             @move-entry="moveEntry"
             @add="addEntry"
+            @add-for-member="addEntryForMember"
             @visible-week="selectedWeekStart = $event"
             @drag-start="cancelSwipe"
           />
@@ -508,7 +563,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   <UDrawer
     v-model:open="actionsOpen"
     :title="actionsEntry?.label"
-    :description="[actionsEntry?.quantityLabel, actionsEntry ? `${actionsEntry.kcal} kcal` : null].filter(Boolean).join(' · ')"
+    :description="[actionsMemberName, actionsEntry?.quantityLabel, actionsEntry ? `${actionsEntry.kcal} kcal` : null].filter(Boolean).join(' · ')"
   >
     <template #body>
       <p v-if="actionsEntry?.comment" class="mb-3 flex items-start gap-1.5 rounded-md bg-elevated px-3 py-2 text-sm text-muted">
@@ -538,7 +593,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           @click="runEntryAction(editEntry)"
         />
         <UButton
-          v-if="actionsEntry?.recipeId && !actionsEntry.storage"
+          v-if="actionsEntry?.recipeId && !actionsEntry.storage && !actionsMemberName"
           label="Mettre au stock"
           icon="i-lucide-archive"
           color="neutral"

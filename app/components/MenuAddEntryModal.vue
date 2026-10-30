@@ -283,6 +283,8 @@ const ingredientCategoryFilterOptions = computed(() => [
 ])
 
 const ingredientCategoryFilter = ref(INGREDIENT_CATEGORY_FILTER_ALL)
+/** Filtre de saison des aliments (actif par défaut) : masque ceux dont les mois renseignés excluent le mois courant. */
+const ingredientSeasonOnly = ref(true)
 const ingredientId = ref<string | undefined>(undefined)
 const unit = ref(GRAMS_UNIT)
 const quantity = ref('100')
@@ -322,6 +324,7 @@ watch(open, (isOpen) => {
   filtersOpen.value = true
   parts.value = 1
   ingredientCategoryFilter.value = INGREDIENT_CATEGORY_FILTER_ALL
+  ingredientSeasonOnly.value = true
   ingredientId.value = undefined
   unit.value = GRAMS_UNIT
   quantity.value = '100'
@@ -344,6 +347,9 @@ watch(open, (isOpen) => {
   } else if (source?.category === 'INGREDIENT') {
     mode.value = 'ingredient'
     ingredientId.value = source.ingredientId
+    // Une entrée existante hors saison doit rester sélectionnable : le filtre est levé.
+    const ingredient = props.ingredientsById.get(source.ingredientId)
+    if (ingredient && !isIngredientSeasonCompatible(ingredient)) ingredientSeasonOnly.value = false
     unit.value = source.unitId ?? GRAMS_UNIT
     quantity.value = String(source.quantity)
   } else if (source?.category === 'RAW') {
@@ -439,6 +445,11 @@ const targetFit = (recipe: Recipe): TargetFit => {
 }
 const fitsRemaining = (recipe: Recipe) => targetFit(recipe) !== 'over'
 
+/** Vrai si l'aliment n'est pas hors saison : sans mois renseignés, faute d'information, il n'est pas écarté. */
+function isIngredientSeasonCompatible(ingredient: Ingredient) {
+  return !ingredient.activeMonths?.length || isIngredientInSeason(ingredient)
+}
+
 /**
  * Vrai si aucun aliment de la recette n'est hors saison ce mois-ci. Un aliment sans mois renseignés, ou introuvable,
  * ne compte pas comme hors saison : faute d'information, il n'écarte pas la recette.
@@ -446,8 +457,7 @@ const fitsRemaining = (recipe: Recipe) => targetFit(recipe) !== 'over'
 const isRecipeInSeason = (recipe: Recipe) =>
   (recipe.ingredients ?? []).every((line) => {
     const ingredient = line.ingredientRef ? props.ingredientsById.get(line.ingredientRef.id) : undefined
-    if (!ingredient?.activeMonths?.length) return true
-    return isIngredientInSeason(ingredient)
+    return !ingredient || isIngredientSeasonCompatible(ingredient)
   })
 
 const matchesRecipeFilters = (recipe: Recipe) => {
@@ -563,7 +573,9 @@ const toggleSeasonOnly = () => {
  */
 const ingredientOptions = computed(() =>
   props.ingredients
-    .filter(i => i.valuesBy100 && (ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL || i.category?.id === ingredientCategoryFilter.value))
+    .filter(i => i.valuesBy100
+      && (ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL || i.category?.id === ingredientCategoryFilter.value)
+      && (!ingredientSeasonOnly.value || isIngredientSeasonCompatible(i)))
     .map((i) => {
       const { calories, carbohydrates, protein, fat } = i.valuesBy100!
       return { id: i.id, label: i.label, kcalLabel: `${Math.round(calories)} kcal`, macros: { carbohydrates, protein, fat } }
@@ -575,6 +587,12 @@ const ingredientOptions = computed(() =>
 const onIngredientCategoryFilterChange = () => {
   if (!selectedIngredient.value || selectedIngredient.value.category?.id === ingredientCategoryFilter.value || ingredientCategoryFilter.value === INGREDIENT_CATEGORY_FILTER_ALL) return
   ingredientId.value = undefined
+}
+
+/** Comme pour la catégorie : réactiver la saison désélectionne un aliment choisi hors saison. */
+const toggleIngredientSeasonOnly = () => {
+  ingredientSeasonOnly.value = !ingredientSeasonOnly.value
+  if (ingredientSeasonOnly.value && selectedIngredient.value && !isIngredientSeasonCompatible(selectedIngredient.value)) ingredientId.value = undefined
 }
 
 const selectedRecipe = computed(() => props.recipes.find(r => r.id === recipeId.value))
@@ -1131,21 +1149,34 @@ const onSubmit = () => {
             />
           </UFormField>
           <UFormField label="Aliment" :error="ingredientError">
-            <USelectMenu
-              v-model="ingredientId"
-              :items="ingredientOptions"
-              value-key="id"
-              placeholder="Choisir un aliment..."
-              :search-input="{ placeholder: 'Rechercher...' }"
-              icon="i-lucide-carrot"
-              class="w-full"
-              @update:model-value="onIngredientChange"
-            >
-              <template #item-trailing="{ item }">
-                <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
-                <MacroPie v-bind="item.macros" />
-              </template>
-            </USelectMenu>
+            <div class="flex gap-2">
+              <USelectMenu
+                v-model="ingredientId"
+                :items="ingredientOptions"
+                value-key="id"
+                placeholder="Choisir un aliment..."
+                :search-input="{ placeholder: 'Rechercher...' }"
+                icon="i-lucide-carrot"
+                class="min-w-0 flex-1"
+                @update:model-value="onIngredientChange"
+              >
+                <template #item-trailing="{ item }">
+                  <span class="text-xs text-dimmed tabular-nums">{{ item.kcalLabel }}</span>
+                  <MacroPie v-bind="item.macros" />
+                </template>
+              </USelectMenu>
+              <!-- Saison, actif par défaut : même bouton que pour les recettes. -->
+              <UTooltip text="Uniquement les aliments de saison">
+                <UButton
+                  :color="ingredientSeasonOnly ? 'primary' : 'neutral'"
+                  :variant="ingredientSeasonOnly ? 'subtle' : 'outline'"
+                  icon="i-lucide-leaf"
+                  aria-label="Uniquement les aliments de saison"
+                  :aria-pressed="ingredientSeasonOnly"
+                  @click="toggleIngredientSeasonOnly"
+                />
+              </UTooltip>
+            </div>
           </UFormField>
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Quantité" :error="quantityError">

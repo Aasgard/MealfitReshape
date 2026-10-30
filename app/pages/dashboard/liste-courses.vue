@@ -7,28 +7,10 @@ useSeoMeta({
   description: 'Dashboard - Liste de courses - Mealfit',
 })
 
-/**
- * Page non zoomable : en magasin, les touches rapides sur les articles et le balayage entre les modes ne doivent pas
- * zoomer, ni le focus d'un champ (iOS). Rétabli en quittant la page.
- * - balise viewport : `maximum-scale=1, user-scalable=no` (Android, focus des champs sur iOS) ;
- * - `touch-action: pan-x pan-y` sur la racine : ni pincement ni double appui, sur toute la page et les panneaux
- *   téléportés sous `body` ;
- * - événements `gesture*` de Safari annulés : iOS ignore `user-scalable=no` pour le pincement.
- * `interactive-widget=resizes-content` : sur Android, le clavier réduit la page au lieu de recouvrir les panneaux du bas.
- */
+// Zoom bloqué globalement (nuxt.config) ; `interactive-widget=resizes-content` en plus : sur Android, le clavier réduit
+// la page au lieu de recouvrir les panneaux du bas.
 useHead({
-  meta: [{ key: 'viewport', name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content' }],
-})
-
-const preventGesture = (event: Event) => event.preventDefault()
-const GESTURE_EVENTS = ['gesturestart', 'gesturechange', 'gestureend'] as const
-onMounted(() => {
-  document.documentElement.style.touchAction = 'pan-x pan-y'
-  for (const name of GESTURE_EVENTS) document.addEventListener(name, preventGesture, { passive: false })
-})
-onBeforeUnmount(() => {
-  document.documentElement.style.removeProperty('touch-action')
-  for (const name of GESTURE_EVENTS) document.removeEventListener(name, preventGesture)
+  meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content' }],
 })
 
 const list = useGroceryList()

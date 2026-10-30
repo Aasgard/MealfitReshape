@@ -7,6 +7,10 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'Mealfit',
+      // Pas de zoom sur mobile, sur toutes les pages : la balise viewport le bloque sur Android, `touch-action` sur iOS
+      // (qui ignore user-scalable), complété par le plugin `no-zoom.client.ts` pour le pincement sous Safari.
+      viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+      htmlAttrs: { class: 'touch-pan-x touch-pan-y' },
       meta: [
         { name: 'description', content: 'Mealfit' },
         { name: 'theme-color', content: '#ffffff' },

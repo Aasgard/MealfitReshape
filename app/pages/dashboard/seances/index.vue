@@ -9,7 +9,6 @@ useSeoMeta({
   title: 'Dashboard - Séances - Mealfit',
   description: 'Dashboard - Séances - Mealfit',
 })
-useNoZoom()
 
 const toast = useToast()
 

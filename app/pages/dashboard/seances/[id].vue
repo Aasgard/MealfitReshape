@@ -8,7 +8,6 @@ useSeoMeta({
   title: 'Dashboard - Séance - Mealfit',
   description: 'Dashboard - Séance - Mealfit',
 })
-useNoZoom()
 
 const route = useRoute()
 const router = useRouter()

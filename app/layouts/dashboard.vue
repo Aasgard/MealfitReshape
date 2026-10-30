@@ -89,6 +89,10 @@ const links = [{
     icon: 'i-lucide-scan-barcode',
     to: '/dashboard/scanner-produit',
   }, {
+    label: 'Scan My Meal',
+    icon: 'i-lucide-camera',
+    to: '/dashboard/scan-my-meal',
+  }, {
     label: 'Minuteurs',
     icon: 'i-lucide-timer',
     to: '/dashboard/minuteurs',

@@ -1,12 +1,13 @@
-import { differenceInCalendarDays } from 'date-fns'
+import { differenceInCalendarDays, parseISO } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealSource, MealType, ScannedProduct, StockMealSource } from '~/types/meal'
 import type { MenuEntry, MenuMealTypeRow, MenuMemberRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { macrosForQuantity, scaleMacros, type IngredientMacros } from './ingredientNutrition'
 import { dayKeyOf, DAYS_PER_WEEK } from './menuWeek'
-import { formatParts } from './preparedDishes'
+import { formatParts, PARTS_EPSILON } from './preparedDishes'
 import { macrosForRecipe } from './recipeNutrition'
+import { mealDay } from './shoppingList'
 
 /** Ligne "Hors plan" du calendrier : repas hors objectif, comptés comme dérapages. */
 export const EXTRA_MEAL_KEY: MealType = 'EXCESS'
@@ -82,7 +83,7 @@ export function buildRecipeDraft(recipe: Recipe, parts: number, ingredientsById:
   // macrosForRecipe divise le total par `persons` : passer persons / parts donne total * parts / persons, sans double arrondi.
   const macros = macrosForRecipe(recipe.ingredients, ingredientsById, (recipe.persons ?? 1) / parts)
   const quantityLabel = `${formatQuantity(parts)} part${parts > 1 ? 's' : ''}`
-  return draftFromMacros(recipe.title, macros, { recipeId: recipe.id, parts, quantityLabel })
+  return draftFromMacros(recipe.title, macros, { recipeId: recipe.id, parts, recipeParts: recipe.persons ?? 1, quantityLabel })
 }
 
 /** Repas pour `quantity` grammes d'un ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités ; `null` si non calculable. */
@@ -164,10 +165,21 @@ function draftFromMeal(meal: Meal, recipesById: Map<string, Recipe>, ingredients
   }
 }
 
-/** Carte du calendrier pour un repas enregistré ; une recette ou un aliment supprimé depuis s'affiche "introuvable" (0 kcal) plutôt que de disparaître. */
-export function entryFromMeal(meal: Meal, recipesById: Map<string, Recipe>, ingredientsById: Map<string, Ingredient>): MenuEntry {
+/**
+ * Carte du calendrier pour un repas enregistré ; une recette ou un aliment supprimé depuis s'affiche "introuvable" (0 kcal) plutôt que de disparaître.
+ * Un repas de `distributedMealIds` (voir `distributedRecipeMealIds`) n'affiche pas les parts de sa recette.
+ */
+export function entryFromMeal(
+  meal: Meal,
+  recipesById: Map<string, Recipe>,
+  ingredientsById: Map<string, Ingredient>,
+  distributedMealIds?: ReadonlySet<string>
+): MenuEntry {
   const draft = draftFromMeal(meal, recipesById, ingredientsById)
-  if (draft) return { ...draft, id: meal.id }
+  if (draft) {
+    if (distributedMealIds?.has(meal.id)) delete draft.recipeParts
+    return { ...draft, id: meal.id }
+  }
 
   return {
     id: meal.id,
@@ -245,12 +257,13 @@ export function summarizeDay(entries: Record<string, MenuEntry[]>): DaySummary {
 export function buildEntriesByDay(
   meals: Meal[],
   recipesById: Map<string, Recipe>,
-  ingredientsById: Map<string, Ingredient>
+  ingredientsById: Map<string, Ingredient>,
+  distributedMealIds?: ReadonlySet<string>
 ): MenuWeekEntries {
   const entries: MenuWeekEntries = {}
   for (const meal of [...meals].sort(byCreation)) {
     const day = entries[dayKeyOf(meal.date.toDate())] ??= {}
-    ;(day[meal.mealType] ??= []).push(entryFromMeal(meal, recipesById, ingredientsById))
+    ;(day[meal.mealType] ??= []).push(entryFromMeal(meal, recipesById, ingredientsById, distributedMealIds))
   }
   return entries
 }
@@ -259,11 +272,62 @@ export function buildEntriesByDay(
 export function buildMemberDays(
   meals: Meal[],
   recipesById: Map<string, Recipe>,
-  ingredientsById: Map<string, Ingredient>
+  ingredientsById: Map<string, Ingredient>,
+  distributedMealIds?: ReadonlySet<string>
 ): Pick<MenuMemberRow, 'entries' | 'kcalByDay'> {
-  const entries = buildEntriesByDay(meals, recipesById, ingredientsById)
+  const entries = buildEntriesByDay(meals, recipesById, ingredientsById, distributedMealIds)
   const kcalByDay = Object.fromEntries(Object.entries(entries).map(([day, byMealType]) => [day, summarizeDay(byMealType).kcal]))
   return { entries, kcalByDay }
+}
+
+/** Une fournée couvre au plus les repas de ses 7 premiers jours (semaine glissante depuis le jour où elle se cuisine). */
+const BATCH_SPAN_DAYS = 7
+
+/**
+ * Repas de recette dont chaque fournée est entièrement répartie : toutes ses parts vont à des repas du foyer (`meals`, tous
+ * membres confondus) ou au surplus prévu pour le stock, dans les 7 jours qui suivent sa cuisson. Les parts y sont rangées comme
+ * dans `recipeBatches` (par date, une fournée de `persons` parts après l'autre). Recette pour 4 : 2 parts lundi et 2 parts
+ * jeudi (moi ou un autre membre) → réparties ; 1 part lundi seule → pas réparties (3 parts sans repas).
+ */
+export function distributedRecipeMealIds(meals: Meal[], recipesById: Map<string, Recipe>): Set<string> {
+  const portionsByRecipe = new Map<string, { id: string, date: string, parts: number }[]>()
+  for (const meal of meals) {
+    if (meal.category !== 'RECIPE') continue
+    const portions = portionsByRecipe.get(meal.recipeId) ?? []
+    portions.push({ id: meal.id, date: mealDay(meal), parts: meal.value })
+    portionsByRecipe.set(meal.recipeId, portions)
+  }
+
+  const covered = new Set<string>()
+  const incomplete = new Set<string>()
+  for (const [recipeId, portions] of portionsByRecipe) {
+    const recipe = recipesById.get(recipeId)
+    if (!recipe) continue
+    // Même repli que `buildRecipeDraft` (« /1 ») pour une recette sans nombre de parts.
+    const persons = recipe.persons && recipe.persons > 0 ? recipe.persons : 1
+
+    let batch: { day: string, left: number, ids: string[] } | null = null
+    const close = () => {
+      if (!batch) return
+      for (const id of batch.ids) (batch.left > PARTS_EPSILON ? incomplete : covered).add(id)
+    }
+    for (const { id, date, parts } of [...portions].sort((a, b) => a.date.localeCompare(b.date))) {
+      let toCover = parts
+      while (toCover > PARTS_EPSILON) {
+        if (!batch || batch.left <= PARTS_EPSILON || differenceInCalendarDays(parseISO(date), parseISO(batch.day)) >= BATCH_SPAN_DAYS) {
+          close()
+          batch = { day: date, left: persons, ids: [] }
+        }
+        if (!batch.ids.includes(id)) batch.ids.push(id)
+        const taken = Math.min(toCover, batch.left)
+        batch.left -= taken
+        toCover -= taken
+      }
+    }
+    close()
+  }
+  for (const id of incomplete) covered.delete(id)
+  return covered
 }
 
 /**

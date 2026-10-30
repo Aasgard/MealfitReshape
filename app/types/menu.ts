@@ -58,6 +58,8 @@ export interface MenuEntry {
   quantityLabel?: string
   /** Parts de la recette (ou du plat du stock) mangées dans ce repas ; absent pour un aliment ou des macros saisies à la main. */
   parts?: number
+  /** Parts que fait la recette, donc cuisinées par défaut (affichées "1 part /4") ; absent pour un repas pris dans le stock, un aliment ou des macros. */
+  recipeParts?: number
   /** Repas pris dans le stock : où le plat était rangé (icône sur la carte). */
   storage?: DishStorage
   /** Commentaire du plat du stock. Ex : "Ajouter la crème au réchauffage". */

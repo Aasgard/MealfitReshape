@@ -146,6 +146,24 @@ export function surplusMeals(dishes: PreparedDish[], range?: { start: string, en
   })
 }
 
+/**
+ * Comme `surplusMeals`, mais chaque surplus ne compte que ses parts encore utilisées : celles qui restent au stock et celles
+ * prises par des repas (`meals`) ; les parts retirées du stock (jetées, corrigées, plat supprimé) n'en font plus partie.
+ */
+export function usedSurplusMeals(dishes: PreparedDish[], meals: Meal[]): Meal[] {
+  const takenByDish = new Map<string, number>()
+  for (const meal of meals) {
+    if (meal.category === 'STOCK') takenByDish.set(meal.dishId, (takenByDish.get(meal.dishId) ?? 0) + meal.value)
+  }
+  const dishesById = new Map(dishes.map(dish => [dish.id, dish]))
+  return surplusMeals(dishes).flatMap((meal) => {
+    const dish = dishesById.get(meal.id.slice(SURPLUS_MEAL_PREFIX.length))
+    if (!dish || meal.category !== 'RECIPE') return []
+    const used = Math.min(meal.value, dish.parts + (takenByDish.get(dish.id) ?? 0))
+    return used > PARTS_EPSILON ? [{ ...meal, value: used }] : []
+  })
+}
+
 /** Plat du surplus prévu d'une fournée (recette `recipeId` cuisinée le `cookDay`), s'il y en a un. */
 export const findBatchSurplus = (dishes: PreparedDish[], recipeId: string, cookDay: string) =>
   dishes.find(dish => dish.recipeId === recipeId && dish.batch?.cookDay === cookDay)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { VueDraggable, type DraggableEvent } from 'vue-draggable-plus'
 import type { MenuEntry } from '~/types/menu'
-import { dishStorageOf } from '~/utils/preparedDishes'
+import { dishStorageOf, formatParts } from '~/utils/preparedDishes'
 
 /**
  * Une case du calendrier (un jour × une ligne de repas) : ses cartes, glissables vers les autres cases du même `group`,
@@ -92,11 +92,11 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
           « Non compté » : la quantité seule.
         -->
         <p v-if="hideNutrition" class="text-xs text-dimmed tabular-nums truncate">
-          {{ entry.quantityLabel }}
+          {{ entry.quantityLabel }}<span v-if="entry.recipeParts" class="text-warning" :title="`La recette fait ${formatParts(entry.recipeParts)}`"> /{{ entry.recipeParts.toLocaleString('fr-FR') }}</span>
         </p>
         <p v-else class="text-xs text-dimmed tabular-nums truncate">
           <template v-if="entry.quantityLabel">
-            {{ entry.quantityLabel }}<span class="sm:hidden"> · </span><br class="max-sm:hidden">
+            {{ entry.quantityLabel }}<span v-if="entry.recipeParts" class="text-warning" :title="`La recette fait ${formatParts(entry.recipeParts)}`"> /{{ entry.recipeParts.toLocaleString('fr-FR') }}</span><span class="sm:hidden"> · </span><br class="max-sm:hidden">
           </template>
           {{ entry.kcal }} kcal<span class="hidden sm:inline"> - </span><br class="sm:hidden">
           <!-- Gris uni : un repas seul n'a pas d'objectif, la couleur n'y dirait rien (voir l'en-tête de colonne). -->

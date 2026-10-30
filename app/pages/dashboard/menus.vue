@@ -5,7 +5,8 @@ import type { MenuEntry, MenuMemberRow } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
 import { buildDays, dayKeyOf, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
-import { buildEntriesByDay, buildMemberDays, consumedOfDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { usedSurplusMeals } from '~/utils/preparedDishes'
+import { buildEntriesByDay, buildMemberDays, consumedOfDay, distributedRecipeMealIds, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -91,8 +92,18 @@ const mealTypes = MENU_MEAL_TYPES
 const weekMeals = computed(() => mealsOfWeek(meals.value, selectedWeekStart.value))
 const isWeekEmpty = computed(() => !weekMeals.value.length)
 
+/**
+ * Repas de recette dont les fournées sont entièrement réparties dans le foyer (surplus prévus pour le stock compris, tant
+ * que ses parts sont au stock ou dans des repas) : leur carte n'affiche pas les parts de la recette (« 1 part » plutôt que « 1 part /4 »).
+ */
+const { dishes } = usePreparedDishes()
+const distributedMealIds = computed(() => {
+  const allMeals = [...meals.value, ...householdMeals.value]
+  return distributedRecipeMealIds([...allMeals, ...usedSurplusMeals(dishes.value, allMeals)], recipesById.value)
+})
+
 /** Repas de toutes les semaines chargées, par jour (date ISO) : le calendrier continu en montre trois. */
-const entries = computed(() => buildEntriesByDay(meals.value, recipesById.value, ingredientsById.value))
+const entries = computed(() => buildEntriesByDay(meals.value, recipesById.value, ingredientsById.value, distributedMealIds.value))
 /** Moyennes par jour complet de la semaine affichée (voir `summarizeMenuWeek`). */
 const summary = computed(() =>
   summarizeMenuWeek(entries.value, buildDays(selectedWeekStart.value).map(day => day.key))
@@ -103,7 +114,7 @@ const memberRows = computed<MenuMemberRow[]>(() => otherMembers.value.map(member
   id: member.id,
   name: member.name,
   photoUrl: member.photoUrl,
-  ...buildMemberDays(householdMeals.value.filter(meal => meal.user === member.id), recipesById.value, ingredientsById.value),
+  ...buildMemberDays(householdMeals.value.filter(meal => meal.user === member.id), recipesById.value, ingredientsById.value, distributedMealIds.value),
 })))
 
 /** Repas chargé, quelle que soit sa semaine (le calendrier continu permet d'agir sur les semaines voisines) ou son membre. */

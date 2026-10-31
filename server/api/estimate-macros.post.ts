@@ -1,7 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { betaJSONSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/beta/json-schema'
-import { getApps, initializeApp } from 'firebase-admin/app'
-import { getAuth } from 'firebase-admin/auth'
 import type { MacroEstimate } from '#shared/types/macroEstimate'
 
 /**
@@ -53,23 +51,6 @@ type ImageType = typeof IMAGE_TYPES[number]
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024
 const MAX_DESCRIPTION_LENGTH = 2000
 
-/** App Firebase dédiée : seul l'identifiant du projet est nécessaire pour vérifier un jeton, pas de compte de service. */
-function firebaseAuth() {
-  const app = getApps().find(a => a.name === 'estimate-macros')
-    ?? initializeApp({ projectId: process.env.NUXT_PUBLIC_VUEFIRE_CONFIG_PROJECT_ID }, 'estimate-macros')
-  return getAuth(app)
-}
-
-async function requireUser(authorization: string | undefined) {
-  const token = authorization?.match(/^Bearer (.+)$/)?.[1]
-  if (!token) throw createError({ statusCode: 401, message: 'Connexion requise.' })
-  try {
-    return await firebaseAuth().verifyIdToken(token)
-  } catch {
-    throw createError({ statusCode: 401, message: 'Session expirée, reconnectez-vous.' })
-  }
-}
-
 export default defineEventHandler(async (event): Promise<MacroEstimate> => {
   await requireUser(getHeader(event, 'authorization'))
 
@@ -105,6 +86,10 @@ export default defineEventHandler(async (event): Promise<MacroEstimate> => {
   })
 
   // Clé lue dans ANTHROPIC_API_KEY (variable d'environnement Vercel, jamais exposée au navigateur).
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('ANTHROPIC_API_KEY absente de l\'environnement du serveur.')
+    throw createError({ statusCode: 503, message: 'Le service d\'estimation n\'est pas configuré (clé API manquante).' })
+  }
   const client = new Anthropic()
   try {
     const response = await client.beta.messages.parse({

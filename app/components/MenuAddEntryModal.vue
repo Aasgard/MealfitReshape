@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
 import type { MealSource, ScannedProduct, StockMealSource } from '~/types/meal'
+import type { MacroEstimate } from '#shared/types/macroEstimate'
 import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, buildStockDraft, type MenuEntryDraft } from '~/utils/menuEntries'
@@ -17,7 +18,7 @@ import { isCompletePer100, readingsForQuantity, scannedProductFromOff, scannedPr
 /**
  * Modale d'ajout d'un repas dans une case du calendrier (jour + type de repas, fixés par le parent) :
  * des parts d'un plat du stock (déjà préparé), une recette de la base (en nombre de parts), un ingrédient de la base
- * (en grammes ou en unité), ou des macros brutes avec un libellé, saisies ou tirées d'un produit scanné. Émet un `MealSource` ; le parent l'enregistre dans la case.
+ * (en grammes ou en unité), ou des macros brutes avec un libellé, saisies, tirées d'un produit scanné ou estimées par Claude (Scan My Meal). Émet un `MealSource` ; le parent l'enregistre dans la case.
  * Avec `initialSource`, la modale sert à modifier ce repas : elle s'ouvre pré-remplie.
  */
 const props = defineProps<{
@@ -335,6 +336,7 @@ watch(open, (isOpen) => {
   carbohydrates.value = ''
   product.value = null
   productQuantity.value = ''
+  macrosEstimated.value = false
 
   const source = props.initialSource
   if (source?.category === 'STOCK') {
@@ -686,6 +688,33 @@ const scanAnotherProduct = async () => {
   await nextTick()
   productScan.value?.openScanner()
 }
+
+/** Valeurs tirées d'une estimation de Claude (Scan My Meal) : signalées comme indicatives tant qu'on ne les touche pas. */
+const macrosEstimated = ref(false)
+/** Libellé repris de la description, raccourci pour tenir dans le calendrier. */
+const ESTIMATE_LABEL_MAX = 60
+
+const onMealEstimated = (estimate: MacroEstimate, text: string) => {
+  kcal.value = String(Math.round(estimate.kcal))
+  carbohydrates.value = String(Math.round(estimate.glucides))
+  protein.value = String(Math.round(estimate.proteines))
+  fat.value = String(Math.round(estimate.lipides))
+  if (!label.value.trim()) {
+    // Nom du repas reconnu par Claude quand le serveur le renvoie, sinon la description saisie.
+    const source = estimate.description || text
+    const firstLine = source.split('\n')[0]?.trim() ?? ''
+    label.value = firstLine
+      ? (firstLine.length > ESTIMATE_LABEL_MAX ? `${firstLine.slice(0, ESTIMATE_LABEL_MAX - 1).trimEnd()}…` : firstLine)
+      : 'Repas estimé'
+  }
+  submitted.value = false
+  macrosEstimated.value = true
+}
+
+watch([kcal, carbohydrates, protein, fat], () => {
+  // Une valeur corrigée à la main n'est plus l'estimation : la mention disparaît.
+  if (macrosEstimated.value) macrosEstimated.value = false
+}, { flush: 'sync' })
 
 const manualMacros = computed(() => {
   const values = {
@@ -1278,7 +1307,12 @@ const onSubmit = () => {
 
         <template v-else>
           <ProductBarcodeLookup ref="productScan" @found="onProductFound" />
+          <MealEstimateLookup @estimated="onMealEstimated" />
           <USeparator label="ou saisissez les valeurs" :ui="{ label: 'text-xs text-dimmed font-normal' }" />
+          <p v-if="macrosEstimated" class="-mb-2 flex items-center gap-1.5 text-xs text-muted">
+            <UIcon name="i-lucide-sparkles" class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+            Estimation de Claude, indicative : ajustez les valeurs si besoin.
+          </p>
           <UFormField label="Libellé" :error="labelError">
             <UInput v-model="label" placeholder="ex : Restaurant, barre protéinée..." size="md" variant="outline" class="w-full" />
           </UFormField>

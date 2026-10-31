@@ -1,17 +1,11 @@
 <script setup lang="ts">
-import { useCurrentUser } from 'vuefire'
-import type { MacroEstimate } from '#shared/types/macroEstimate'
-
 useSeoMeta({
   title: 'Dashboard - Scan My Meal - Mealfit',
   description: 'Dashboard - Scan My Meal - Mealfit',
 })
 
-const user = useCurrentUser()
-
-// --- Photo : réduite dans le navigateur, jamais enregistrée ---
-
-const photo = usePhotoDraft()
+// Photo réduite dans le navigateur, jamais enregistrée ; description seule ou en complément de la photo.
+const { photo, description, estimating, estimate, error: estimateError, canEstimate, submit } = useMealEstimate()
 /** `capture` ouvre directement l'appareil photo sur mobile ; sans, le téléphone propose aussi la galerie et les fichiers. */
 const cameraInput = ref<HTMLInputElement | null>(null)
 const libraryInput = ref<HTMLInputElement | null>(null)
@@ -25,45 +19,6 @@ async function onPhotoSelected(event: Event) {
 
 function removePhoto() {
   photo.reset()
-}
-
-// --- Description : seule, ou en complément de la photo ---
-
-const description = ref('')
-
-// --- Estimation ---
-
-const estimating = ref(false)
-const estimate = ref<MacroEstimate | null>(null)
-const estimateError = ref<string>()
-
-const canEstimate = computed(() => !estimating.value && !photo.processing.value
-  && (photo.blob.value !== null || description.value.trim() !== ''))
-
-async function submit() {
-  if (!canEstimate.value || !user.value) return
-
-  estimating.value = true
-  estimateError.value = undefined
-  estimate.value = null
-  try {
-    const body = new FormData()
-    if (photo.blob.value) body.append('photo', photo.blob.value, 'repas.jpg')
-    body.append('description', description.value.trim())
-
-    estimate.value = await $fetch<MacroEstimate>('/api/estimate-macros', {
-      method: 'POST',
-      body,
-      headers: { Authorization: `Bearer ${await user.value.getIdToken()}` },
-    })
-  } catch (error) {
-    console.error('Estimation impossible :', error)
-    // Message du serveur dans le corps JSON de l'erreur ; à défaut (hors ligne, délai dépassé), message générique.
-    const serverMessage = (error as { data?: { message?: string } }).data?.message
-    estimateError.value = serverMessage ?? 'L\'estimation a échoué. Vérifiez la connexion et réessayez.'
-  } finally {
-    estimating.value = false
-  }
 }
 
 const RESULT_ROWS = [

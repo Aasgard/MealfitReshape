@@ -30,10 +30,9 @@ const isDepleted = computed(() => isDishDepleted(props.dish))
 const isStale = computed(() => !isDepleted.value && isDishStale(props.dish, props.todayKey))
 
 /**
- * Parts cuisinées en une fois avec ce surplus prévu (menus + stock) ; `null` une fois cuisiné, hors fournée, ou pour la
- * fournée d'un autre membre (ses menus ne sont pas connus).
+ * Parts cuisinées en une fois avec ce surplus prévu (menus du foyer + stock) ; `null` une fois cuisiné ou hors fournée.
  */
-const batchTotal = computed(() => isPlanned.value && props.dish.batch && !props.addedBy
+const batchTotal = computed(() => isPlanned.value && props.dish.batch
   ? (props.menuParts ?? 0) + props.dish.batch.surplusParts
   : null)
 

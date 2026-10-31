@@ -47,12 +47,6 @@ export const usePreparedDishes = () => {
     return query(collection(db, 'preparedDishes'), where('owner', 'in', shared.value ? memberIds.value : [uid]))
   })
 
-  /**
-   * Plats ajoutés par le compte connecté : seuls leurs surplus de fournée comptent dans son « Cuisiner » et sa liste de
-   * courses (celui d'un autre membre se cuisine et s'achète chez lui).
-   */
-  const ownDishes = computed(() => dishes.value.filter(dish => dish.owner === user.value?.uid))
-
   const dishesById = computed(() => new Map(dishes.value.map(dish => [dish.id, dish])))
 
   const requireUid = () => {
@@ -225,7 +219,7 @@ export const usePreparedDishes = () => {
     const uid = requireUid()
     await dishes.promise.value
     const now = Timestamp.now()
-    const existing = findBatchSurplus(ownDishes.value, meal.recipeId, input.cookDay)
+    const existing = findBatchSurplus(dishes.value, meal.recipeId, input.cookDay)
     const batch = writeBatch(db)
     batch.delete(doc(db, 'meals', meal.id))
 
@@ -297,5 +291,5 @@ export const usePreparedDishes = () => {
     await batch.commit()
   }
 
-  return { dishes, ownDishes, dishesById, sendMealToStock, thawMeals, stageStockChanges, stageStockMove, saveDish, setDishParts, setDishStorage, deleteDish, saveBatchSurplus }
+  return { dishes, dishesById, sendMealToStock, thawMeals, stageStockChanges, stageStockMove, saveDish, setDishParts, setDishStorage, deleteDish, saveBatchSurplus }
 }

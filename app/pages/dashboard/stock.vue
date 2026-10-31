@@ -12,7 +12,7 @@ useSeoMeta({
 
 const toast = useToast()
 const { recipes, recipesById, ingredientsById } = useFoodCatalog()
-const { dishes, ownDishes, setDishParts, setDishStorage, deleteDish } = usePreparedDishes()
+const { dishes, setDishParts, setDishStorage, deleteDish } = usePreparedDishes()
 const { household, loading: householdLoading } = useHousehold()
 
 /** Membre qui a ajouté un plat, quand ce n'est pas le compte connecté (parti du foyer depuis : rien). */
@@ -38,14 +38,13 @@ const groups = computed(() => {
 
 /**
  * Repas des menus autour des cuisines prévues pour le stock : une semaine avant (une fournée commencée plus tôt) jusqu'à
- * la fin de la fournée. Pas de requête sans cuisine prévue. Seules les fournées du compte connecté : celles des autres
- * membres se cuisinent avec leurs menus, qu'on ne lit pas.
+ * la fin de la fournée, pour tout le foyer : le stock et ses surplus sont communs. Pas de requête sans cuisine prévue.
  */
-const plannedCookDays = computed(() => ownDishes.value
+const plannedCookDays = computed(() => dishes.value
   .filter(dish => dish.batch && isDishPlanned(dish, todayKey.value))
   .map(dish => dish.preparedOn)
   .sort())
-const batchMeals = useMealsBetween(() => {
+const { meals: batchMeals } = useHouseholdMealsBetween(() => {
   const days = plannedCookDays.value
   if (!days.length) return null
   return { start: addDays(parseISO(days[0]!), -(COOKING_DAYS - 1)), end: addDays(parseISO(days.at(-1)!), COOKING_DAYS - 1) }
@@ -56,7 +55,7 @@ const menuPartsByBatch = computed(() => new Map(plannedCookDays.value.length
   ? recipesToCook(batchMeals.value, COOKING_DAYS).map(item => [`${item.recipeId}|${dayKeyOf(item.days[0]!)}`, item.parts])
   : []))
 const menuPartsOf = (dish: PreparedDish) =>
-  dish.recipeId && dish.batch && !addedBy(dish) ? menuPartsByBatch.value.get(`${dish.recipeId}|${dish.batch.cookDay}`) ?? 0 : 0
+  dish.recipeId && dish.batch ? menuPartsByBatch.value.get(`${dish.recipeId}|${dish.batch.cookDay}`) ?? 0 : 0
 
 const groupSummary = (list: PreparedDish[]) => {
   const available = list.filter(dish => !isDishDepleted(dish))

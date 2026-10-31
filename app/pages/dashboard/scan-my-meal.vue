@@ -210,9 +210,14 @@ const estimateJson = computed(() => estimate.value ? JSON.stringify(estimate.val
           />
 
           <section v-if="estimate" class="flex flex-col gap-3" aria-label="Estimation">
-            <h2 class="text-base font-semibold text-highlighted">
-              Estimation
-            </h2>
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-dimmed">
+                Estimation
+              </p>
+              <h2 class="mt-0.5 text-base font-semibold text-highlighted">
+                {{ estimate.description }}
+              </h2>
+            </div>
 
             <div class="overflow-hidden rounded-lg border border-default">
               <div
@@ -228,11 +233,19 @@ const estimateJson = computed(() => estimate.value ? JSON.stringify(estimate.val
               </div>
             </div>
 
+            <div v-if="estimate.longDescription" class="flex flex-col gap-1">
+              <h3 class="text-sm font-medium text-highlighted">
+                Ce que Claude a compté
+              </h3>
+              <!-- Texte collé aux balises : `whitespace-pre-line` garderait sinon les retours à la ligne du gabarit. -->
+              <p class="text-sm text-muted whitespace-pre-line">{{ estimate.longDescription }}</p>
+            </div>
+
             <details class="text-sm">
               <summary class="cursor-pointer text-muted hover:text-highlighted">
                 Réponse JSON
               </summary>
-              <pre class="mt-2 overflow-x-auto rounded-md bg-elevated p-3 text-xs text-default">{{ estimateJson }}</pre>
+              <pre class="mt-2 whitespace-pre-wrap break-words rounded-md bg-elevated p-3 text-xs text-default">{{ estimateJson }}</pre>
             </details>
 
             <p class="text-xs text-dimmed">

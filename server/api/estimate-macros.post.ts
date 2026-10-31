@@ -11,15 +11,24 @@ import type { MacroEstimate } from '#shared/types/macroEstimate'
  * La photo ne fait que transiter : rien n'est stocké.
  */
 
+// Les descriptions viennent avant les chiffres : Claude détaille ce qu'il a reconnu avant de compter.
 const ESTIMATE_FORMAT = betaJSONSchemaOutputFormat({
   type: 'object',
   properties: {
+    description: {
+      type: 'string',
+      description: 'Nom court du repas reconnu, en quelques mots (ex. « Pâtes carbonara et salade verte »).',
+    },
+    longDescription: {
+      type: 'string',
+      description: 'Détail du repas : chaque aliment avec son poids estimé, la cuisson et les matières grasses supposées.',
+    },
     kcal: { type: 'number', description: 'Énergie totale du repas, en kcal.' },
     proteines: { type: 'number', description: 'Protéines totales, en grammes.' },
     glucides: { type: 'number', description: 'Glucides totaux, en grammes.' },
     lipides: { type: 'number', description: 'Lipides totaux, en grammes.' },
   },
-  required: ['kcal', 'proteines', 'glucides', 'lipides'],
+  required: ['description', 'longDescription', 'kcal', 'proteines', 'glucides', 'lipides'],
   additionalProperties: false,
 })
 
@@ -30,7 +39,11 @@ Estime l'énergie (kcal) et les macronutriments (protéines, glucides, lipides, 
 - Les quantités et précisions données dans la description priment sur ce que tu déduis de la photo.
 - Compte les matières grasses de cuisson, les sauces et les assaisonnements probables, même s'ils ne se voient pas.
 - Appuie-toi sur des valeurs de référence (table CIQUAL) pour chaque aliment, puis additionne.
-- Donne une estimation réaliste, ni prudente ni généreuse.`
+- Donne une estimation réaliste, ni prudente ni généreuse.
+
+Réponds en français.
+- \`description\` : le nom du repas tel que tu l'as reconnu, en quelques mots.
+- \`longDescription\` : quelques phrases ou une courte liste, une ligne par aliment (« 180 g de pâtes cuites »…), avec les hypothèses de cuisson et de matières grasses, pour qu'on puisse vérifier ce que tu as compté.`
 
 /** Images que l'API accepte ; le client envoie normalement du JPEG (photo réduite dans le navigateur). */
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
@@ -110,9 +123,16 @@ export default defineEventHandler(async (event): Promise<MacroEstimate> => {
       throw createError({ statusCode: 502, message: 'Claude n\'a pas pu estimer ce repas.' })
     }
 
-    const { kcal, proteines, glucides, lipides } = response.parsed_output
+    const { description: label, longDescription, kcal, proteines, glucides, lipides } = response.parsed_output
     const round = (n: number) => Math.max(0, Math.round(n))
-    return { kcal: round(kcal), proteines: round(proteines), glucides: round(glucides), lipides: round(lipides) }
+    return {
+      description: label.trim(),
+      longDescription: longDescription.trim(),
+      kcal: round(kcal),
+      proteines: round(proteines),
+      glucides: round(glucides),
+      lipides: round(lipides),
+    }
   } catch (error) {
     if (error instanceof Anthropic.RateLimitError) {
       throw createError({ statusCode: 429, message: 'Trop de demandes, réessayez dans un instant.' })

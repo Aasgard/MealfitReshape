@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DishStorage, PreparedDish } from '~/types/preparedDish'
-import { formatDishDay, formatParts, PARTS_EPSILON, STOCK_PARTS_STEP } from '~/utils/preparedDishes'
+import { formatDishDay, formatParts, PARTS_EPSILON, STOCK_PARTS_STEP, wholeRecipeGap } from '~/utils/preparedDishes'
 
 /**
  * Surplus prévu d'une fournée, depuis « Cuisiner » : des parts cuisinées en plus de celles des menus, qui rejoignent le
@@ -39,9 +39,20 @@ const takenParts = computed(() => {
   return Math.max(0, dish.batch.surplusParts - dish.parts)
 })
 
+/**
+ * Surplus proposé quand il n'y en a pas encore : de quoi arrondir la fournée à la recette entière au-dessus, ou une recette
+ * de plus si les menus en font déjà un nombre entier. 1 part sans nombre de parts renseigné dans la recette.
+ */
+const suggestedParts = () => {
+  const persons = props.recipePersons
+  if (!persons || persons <= 0) return 1
+  const gap = wholeRecipeGap(props.plannedParts, persons)
+  return gap ? gap.upper - props.plannedParts : persons
+}
+
 watch(open, (isOpen) => {
   if (!isOpen) return
-  surplusParts.value = props.dish?.batch?.surplusParts ?? 2
+  surplusParts.value = props.dish?.batch?.surplusParts ?? suggestedParts()
   storage.value = props.dish?.storage ?? 'FREEZER'
   comment.value = props.dish?.comment ?? ''
 })

@@ -62,6 +62,12 @@ export type IngredientPrefill = {
   protein: string
   density: string
   comment: string
+  /** D'où viennent les valeurs : fiche Open Food Facts (par défaut) ou estimation de Claude à la lecture d'une recette. */
+  origin?: 'off' | 'estimate'
+  /** Catégorie proposée (id) ; absente = à choisir. */
+  categoryId?: string
+  /** Unités proposées, ex. l'unité « Gousse » employée par la recette lue. */
+  units?: { label: string; value: number; unit: 'g' | 'ml' }[]
 }
 
 /** Arrondi pour la saisie : `String` garde le point décimal, que les champs acceptent comme la virgule. */

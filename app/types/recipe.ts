@@ -1,5 +1,6 @@
 import type { DocumentReference, Timestamp } from 'firebase/firestore'
 import type { RecipeType } from '~/utils/recipeType'
+import type { RecipeReading } from '#shared/types/recipeReading'
 
 /** Ligne d’ingrédient dans une recette (réf. document `ingredients` + quantité) */
 export interface RecipeIngredientLine {
@@ -47,4 +48,13 @@ export interface Recipe {
   instructions?: string
   tags?: string[]
   ingredients?: RecipeIngredientLine[]
+}
+
+/** Brouillon de recette lu sur des photos, qui pré-remplit le formulaire de création (rien n'est écrit avant relecture). */
+export interface RecipeDraft {
+  reading: RecipeReading
+  /** Nombre de photos lues, pour le rappeler en tête du formulaire. */
+  photoCount: number
+  /** Illustration du plat recadrée depuis la page ; `null` si la page n'en montre pas. */
+  dishImage: Blob | null
 }

@@ -13,6 +13,8 @@ const props = defineProps<{
   /** Avancement de l'envoi (0 → 1) ; `null` hors envoi. */
   uploadProgress?: number | null
   error?: string | null
+  /** Précision sous les boutons, ex. l’origine de l’image proposée ; masquée par une erreur. */
+  hint?: string
   disabled?: boolean
   /** Ajoute un bouton « Lien » pour saisir l'URL d'une image externe (`v-model:url`). */
   allowUrl?: boolean
@@ -153,6 +155,9 @@ function onFileChange(event: Event) {
     </div>
     <p v-if="error" class="text-xs text-error" role="alert">
       {{ error }}
+    </p>
+    <p v-else-if="hint" class="text-xs text-dimmed text-pretty">
+      {{ hint }}
     </p>
 
     <input ref="cameraInput" type="file" accept="image/*" capture="environment" class="sr-only" tabindex="-1" aria-hidden="true" @change="onFileChange">

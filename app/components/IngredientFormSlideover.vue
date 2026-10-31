@@ -27,6 +27,11 @@ const props = withDefaults(defineProps<{
   prefill: null,
 })
 
+const emit = defineEmits<{
+  /** Ingrédient créé (jamais en édition), avec ses unités : le parent peut aussitôt l'utiliser dans une ligne. */
+  created: [ingredient: { id: string; units: Record<string, { label: string; value: number; unit: 'g' | 'ml' }> }]
+}>()
+
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
 
@@ -92,17 +97,24 @@ function resetForm() {
     carbohydrates.value = prefill.value.carbohydrates
     fat.value = prefill.value.fat
     comment.value = prefill.value.comment
+    if (prefill.value.categoryId) categoryId.value = prefill.value.categoryId
+    if (prefill.value.units?.length) {
+      unitRows.value = prefill.value.units.map(u => ({ key: generateFirestoreId(), label: u.label, value: String(u.value), unit: u.unit }))
+    }
   }
 }
 
 const prefill = computed(() => (isEditMode.value ? null : props.prefill))
 
+/** Valeurs estimées par Claude : le scan du vrai produit reste proposé pour les remplacer. */
+const isEstimatedPrefill = computed(() => prefill.value?.origin === 'estimate')
+
 /** Scan proposé en création, sauf si le panneau s'ouvre déjà sur un produit scanné. */
-const canScan = computed(() => !isEditMode.value && !props.prefill)
+const canScan = computed(() => !isEditMode.value && (!props.prefill || isEstimatedPrefill.value))
 
 /** Produit scanné depuis le panneau : il remplace les valeurs Open Food Facts éventuellement reçues à l'ouverture. */
 const scannedPrefill = shallowRef<IngredientPrefill | null>(null)
-const offPrefill = computed(() => scannedPrefill.value ?? prefill.value)
+const offPrefill = computed(() => scannedPrefill.value ?? (isEstimatedPrefill.value ? null : prefill.value))
 
 /**
  * Remplit le nom, la densité et les valeurs pour 100 depuis la fiche ; la catégorie, les mois et les unités restent.
@@ -122,7 +134,11 @@ function applyScannedProduct(code: string, product: OffProductDetails) {
 }
 
 const valuesHint = computed(() => {
-  if (!offPrefill.value) return 'Valeurs pour 100 g (optionnel)'
+  if (!offPrefill.value) {
+    return isEstimatedPrefill.value
+      ? 'Valeurs pour 100 g estimées par Claude (table CIQUAL) : vérifiez-les'
+      : 'Valeurs pour 100 g (optionnel)'
+  }
   return offPrefill.value.density
     ? 'Valeurs pour 100 ml d’après Open Food Facts, comptées pour 100 g avec une densité de 1'
     : 'Valeurs pour 100 g d’après Open Food Facts'
@@ -282,11 +298,12 @@ async function handleSubmit() {
       await updateDoc(doc(db, 'ingredients', props.ingredient!.id), payload)
       toast.add({ title: 'Modifié', description: `« ${trimmedLabel} » a été mis à jour`, color: 'success' })
     } else {
-      await addDoc(collection(db, 'ingredients'), {
+      const created = await addDoc(collection(db, 'ingredients'), {
         ...payload,
         owner: user.value.uid,
         createdAt: now,
       })
+      emit('created', { id: created.id, units })
       toast.add({ title: 'Ajouté', description: `« ${trimmedLabel} » a été ajouté à vos ingrédients`, color: 'success' })
     }
 

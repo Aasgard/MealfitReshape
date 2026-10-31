@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, query, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
-import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
+import type { Recipe, RecipeDraft, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { RECIPE_TYPES, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { matchesSearch } from '~/utils/search'
@@ -170,8 +170,23 @@ const resetFilters = () => {
 const formOpen = ref(false)
 const editingRecipe = ref<Recipe | null>(null)
 
+/** Brouillon lu sur des photos, qui pré-remplit le formulaire de création ; vidé pour une saisie manuelle. */
+const recipeDraft = shallowRef<RecipeDraft | null>(null)
+const photoReaderOpen = ref(false)
+
 const addRecipe = () => {
   editingRecipe.value = null
+  recipeDraft.value = null
+  formOpen.value = true
+}
+
+const addRecipeFromPhoto = () => {
+  photoReaderOpen.value = true
+}
+
+const onRecipeRead = (draft: RecipeDraft) => {
+  editingRecipe.value = null
+  recipeDraft.value = draft
   formOpen.value = true
 }
 
@@ -327,6 +342,16 @@ const confirmDeleteRecipe = () => {
         </template>
 
         <template #right>
+          <!-- Sur téléphone, icône seule : les deux boutons tiennent à côté du titre. -->
+          <UButton
+            color="neutral"
+            variant="outline"
+            icon="i-lucide-scan-text"
+            aria-label="Ajouter une recette depuis une photo"
+            :ui="{ label: 'hidden sm:inline' }"
+            label="Depuis une photo"
+            @click="addRecipeFromPhoto"
+          />
           <UButton color="primary" @click="addRecipe">
             <UIcon name="i-lucide-plus" class="size-5 shrink-0" />
             Ajouter une recette
@@ -437,7 +462,10 @@ const confirmDeleteRecipe = () => {
             icon="i-lucide-chef-hat"
             title="Aucune recette"
             description="Ajoutez votre première recette pour la retrouver ici."
-            :actions="[{ label: 'Ajouter une recette', icon: 'i-lucide-plus', onClick: addRecipe }]"
+            :actions="[
+              { label: 'Ajouter une recette', icon: 'i-lucide-plus', onClick: addRecipe },
+              { label: 'Depuis une photo', icon: 'i-lucide-scan-text', color: 'neutral', variant: 'outline', onClick: addRecipeFromPhoto },
+            ]"
           />
           <UEmpty
             v-else-if="!recipesLoading && filteredRecipes.length === 0"
@@ -507,6 +535,13 @@ const confirmDeleteRecipe = () => {
   <RecipeFormSlideover
     v-model:open="formOpen"
     :recipe="editingRecipe"
+    :draft="recipeDraft"
+  />
+
+  <RecipePhotoReaderSlideover
+    v-model:open="photoReaderOpen"
+    :ingredients="ingredients"
+    @read="onRecipeRead"
   />
 
   <ConfirmDialog

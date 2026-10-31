@@ -2,8 +2,10 @@
 import { collection, setDoc, updateDoc, doc, Timestamp, deleteField, query, orderBy } from 'firebase/firestore'
 import { useCollection } from 'vuefire'
 import { VueDraggable } from 'vue-draggable-plus'
-import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
+import type { Recipe, RecipeDraft, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
+import type { ProposedIngredient, ReadIngredientLine } from '#shared/types/recipeReading'
+import type { IngredientPrefill } from '~/utils/offNutrition'
 import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { RECIPE_DIFFICULTIES, recipeDifficultyLabel, type RecipeDifficulty } from '~/utils/recipeDifficulty'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
@@ -15,10 +17,15 @@ import { canonicalRecipeTag, dedupeRecipeTags } from '~/utils/recipeTags'
  * à l'image d'IngredientFormSlideover. `recipe` nul = création ; non nul = édition.
  * L'image est soit une photo (réduite dans le navigateur, envoyée dans Storage avant l'écriture Firestore),
  * soit un lien externe : choisir l'une remplace l'autre.
+ * En création, `draft` pré-remplit le formulaire avec une recette lue sur des photos : chaque ligne d'ingrédient
+ * garde le texte lu et son état (reconnue, à vérifier, à associer) jusqu'à l'enregistrement.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   recipe: Recipe | null
-}>()
+  draft?: RecipeDraft | null
+}>(), {
+  draft: null,
+})
 
 const open = defineModel<boolean>('open', { default: false })
 useOverlayBackClose(open)
@@ -57,12 +64,25 @@ const ingredientsQuery = useCollection<Ingredient>(() => {
 const ingredientsById = computed(() => new Map(ingredientsQuery.value.map(i => [i.id, i])))
 const ingredientOptions = computed(() => ingredientsQuery.value.map(i => ({ id: i.id, label: i.label })))
 
+/** Ce que la lecture des photos a donné pour une ligne ; `reviewed` = quantité supposée retouchée ou ingrédient choisi à la main. */
+interface RowReading {
+  text: string
+  status: ReadIngredientLine['status'] | 'reviewed'
+  note: string
+  /** Quantité dans l'unité proposée pour un ingrédient à créer. */
+  quantity: number
+  grams: number
+  proposal: ProposedIngredient | null
+}
+
 interface IngredientRow {
   key: string
   ingredientId: string | undefined
   /** Id d'une unité de l'ingrédient (clé de `ingredient.units`) ; GRAMS_UNIT = grammes */
   unit: string
   quantity: string
+  /** Présent pour une ligne lue sur une photo. */
+  read?: RowReading
 }
 
 /**
@@ -102,6 +122,8 @@ const submitted = ref(false)
 const photo = usePhotoDraft()
 /** L'utilisateur a retiré la photo envoyée existante (ou l'a remplacée par un lien). */
 const photoRemoved = ref(false)
+/** La photo proposée est l'illustration recadrée depuis la page lue : on le signale tant qu'elle n'est pas remplacée. */
+const photoFromPage = ref(false)
 /** Avancement de l'envoi (0 → 1) ; `null` hors envoi. */
 const uploadProgress = ref<number | null>(null)
 
@@ -113,11 +135,15 @@ const previewUrl = computed(() => {
 })
 
 async function onPhotoPicked(file: File) {
-  if (await photo.pick(file)) imageUrl.value = ''
+  if (await photo.pick(file)) {
+    imageUrl.value = ''
+    photoFromPage.value = false
+  }
 }
 
 function removePhoto() {
   photo.reset()
+  photoFromPage.value = false
   imageUrl.value = ''
   photoRemoved.value = true
 }
@@ -127,6 +153,7 @@ function onImageUrlInput() {
   if (!imageUrl.value.trim()) return
   photo.reset()
   photoRemoved.value = true
+  photoFromPage.value = false
 }
 
 function resetForm() {
@@ -141,6 +168,7 @@ function resetForm() {
   imageUrl.value = r?.imagePath ? '' : (r?.imageUrl ?? '')
   photo.reset()
   photoRemoved.value = false
+  photoFromPage.value = false
   uploadProgress.value = null
   source.value = r?.source ?? ''
   description.value = r?.description ?? ''
@@ -156,6 +184,95 @@ function resetForm() {
       }))
     : []
   submitted.value = false
+  if (!r && props.draft) applyDraft(props.draft)
+}
+
+/** Recette lue : seuls les champs lus sont remplis, le reste garde ses valeurs par défaut. */
+function applyDraft(draft: RecipeDraft) {
+  const d = draft.reading
+  recipeTitle.value = d.title
+  if (d.persons) persons.value = String(d.persons)
+  if (d.prepTime != null) prepTime.value = String(d.prepTime)
+  if (d.cookTime != null) cookTime.value = String(d.cookTime)
+  instructions.value = d.instructions
+  source.value = d.source
+  ingredientRows.value = d.ingredients.map(line => ({
+    key: generateFirestoreId(),
+    ingredientId: line.ingredientId ?? undefined,
+    unit: line.unitId ?? GRAMS_UNIT,
+    // Sans ingrédient, seule l'unité « Grammes » existe : la quantité dans l'unité proposée attend sa création.
+    quantity: String(line.ingredientId ? line.quantity : (line.grams || line.quantity)),
+    read: { text: line.text, status: line.status, note: line.note, quantity: line.quantity, grams: line.grams, proposal: line.proposal },
+  }))
+  if (draft.dishImage) {
+    photo.set(draft.dishImage)
+    photoFromPage.value = true
+  }
+}
+
+const isFromDraft = computed(() => !isEditMode.value && props.draft !== null)
+
+/** Lignes lues encore à traiter : sans ingrédient (bloquant) ou à quantité supposée. */
+const readCounts = computed(() => {
+  let unmatched = 0
+  let check = 0
+  for (const row of ingredientRows.value) {
+    if (!row.read) continue
+    if (!row.ingredientId) unmatched++
+    else if (row.read.status === 'check') check++
+  }
+  return { unmatched, check }
+})
+
+/** Retoucher la quantité ou l'unité d'une ligne à vérifier vaut vérification. */
+function markRowReviewed(row: IngredientRow) {
+  if (row.read?.status === 'check') row.read.status = 'reviewed'
+}
+
+// --- Création d'un ingrédient absent du catalogue, pré-rempli par la lecture ---
+
+const ingredientFormOpen = ref(false)
+const creatingRowKey = ref<string | null>(null)
+
+const ingredientPrefill = computed<IngredientPrefill | null>(() => {
+  const proposal = ingredientRows.value.find(r => r.key === creatingRowKey.value)?.read?.proposal
+  if (!proposal) return null
+  return {
+    label: proposal.label,
+    calories: String(proposal.calories),
+    carbohydrates: String(proposal.carbohydrates),
+    fat: String(proposal.fat),
+    protein: String(proposal.protein),
+    density: '',
+    comment: '',
+    origin: 'estimate',
+    categoryId: proposal.categoryId || undefined,
+    units: proposal.unit ? [proposal.unit] : [],
+  }
+})
+
+function createIngredientFor(row: IngredientRow) {
+  creatingRowKey.value = row.key
+  ingredientFormOpen.value = true
+}
+
+/** L'ingrédient créé prend place dans la ligne, avec l'unité proposée si elle a été gardée, sinon en grammes. */
+function onIngredientCreated(created: { id: string; units: Record<string, { label: string }> }) {
+  const row = ingredientRows.value.find(r => r.key === creatingRowKey.value)
+  creatingRowKey.value = null
+  if (!row?.read) return
+  row.ingredientId = created.id
+  const proposedUnit = row.read.proposal?.unit?.label.trim().toLowerCase()
+  const unitKey = proposedUnit
+    ? Object.entries(created.units).find(([, u]) => u.label.trim().toLowerCase() === proposedUnit)?.[0]
+    : undefined
+  if (unitKey) {
+    row.unit = unitKey
+    row.quantity = String(row.read.quantity)
+  } else {
+    row.unit = GRAMS_UNIT
+    if (row.read.grams > 0) row.quantity = String(row.read.grams)
+  }
 }
 
 watch(open, (isOpen) => {
@@ -200,6 +317,13 @@ function onIngredientHandleKeydown(row: IngredientRow, event: KeyboardEvent) {
 
 /** Les unités disponibles dépendent de l'ingrédient choisi : celle d'une ligne ne survit pas à un changement d'ingrédient. */
 function onIngredientRowIngredientChange(row: IngredientRow) {
+  // Ligne lue : la quantité lue ne vaut que pour l'unité d'origine, on repart de son équivalent en grammes.
+  if (row.read) {
+    row.unit = GRAMS_UNIT
+    if (row.read.grams > 0) row.quantity = String(row.read.grams)
+    row.read.status = 'reviewed'
+    return
+  }
   row.unit = unitOptionsForRow(row)[0]!.value
 }
 
@@ -388,6 +512,14 @@ async function handleSubmit() {
   >
     <template #body>
       <div class="flex flex-col gap-6">
+        <div v-if="isFromDraft" class="flex items-start gap-2.5 rounded-lg bg-elevated px-3 py-2.5 text-sm">
+          <UIcon name="i-lucide-scan-text" class="size-4 shrink-0 mt-0.5 text-primary" />
+          <p class="text-pretty">
+            <span class="font-medium text-highlighted">Recette lue sur {{ draft!.photoCount > 1 ? `${draft!.photoCount} photos` : 'une photo' }}.</span>
+            <span class="text-muted"> Relisez chaque champ avant d'enregistrer : rien n'est écrit avant.</span>
+          </p>
+        </div>
+
         <UFormField label="Titre" :error="titleError">
           <UInput v-model="recipeTitle" placeholder="ex : Salade de quinoa au poulet" size="md" variant="outline" class="w-full" />
         </UFormField>
@@ -441,6 +573,7 @@ async function handleSubmit() {
           :processing="photo.processing.value"
           :upload-progress="uploadProgress"
           :error="photo.error.value"
+          :hint="photoFromPage ? 'Illustration extraite de la page. Retirez-la ou remplacez-la si le cadrage ne convient pas.' : undefined"
           :disabled="saving"
           @pick="onPhotoPicked"
           allow-url
@@ -466,6 +599,11 @@ async function handleSubmit() {
               <UIcon name="i-lucide-list" class="size-3.5 text-muted shrink-0" />
               <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Ingrédients (optionnel)</p>
             </div>
+            <p v-if="readCounts.unmatched || readCounts.check" class="flex items-center gap-1.5 text-xs tabular-nums" aria-live="polite">
+              <span v-if="readCounts.unmatched" class="font-medium text-error">{{ readCounts.unmatched }} à associer</span>
+              <span v-if="readCounts.unmatched && readCounts.check" class="text-dimmed" aria-hidden="true">·</span>
+              <span v-if="readCounts.check" class="text-warning">{{ readCounts.check }} à vérifier</span>
+            </p>
           </div>
           <VueDraggable
             v-if="ingredientRows.length > 0"
@@ -480,7 +618,7 @@ async function handleSubmit() {
             <div
               v-for="(row, index) in ingredientRows"
               :key="row.key"
-              class="ingredient-row flex flex-col gap-2 rounded-lg border border-transparent p-2 sm:flex-row sm:items-start sm:p-1.5"
+              class="ingredient-row flex flex-col gap-2 rounded-lg border border-transparent p-2 sm:flex-row sm:flex-wrap sm:items-start sm:p-1.5"
             >
               <div class="flex items-start gap-2 sm:contents">
                 <UButton
@@ -509,7 +647,17 @@ async function handleSubmit() {
               <!-- pl-10 = poignée (32px) + gap (8px) : aligne la 2e ligne sur le sélecteur d'ingrédient en mobile -->
               <div class="flex items-start gap-2 pl-10 sm:contents">
                 <UFormField class="w-20 shrink-0" :error="ingredientRowQuantityError(row)">
-                  <UInput v-model="row.quantity" type="text" inputmode="decimal" placeholder="qté" aria-label="Quantité" size="md" variant="outline" class="w-full" />
+                  <UInput
+                    v-model="row.quantity"
+                    type="text"
+                    inputmode="decimal"
+                    placeholder="qté"
+                    aria-label="Quantité"
+                    size="md"
+                    variant="outline"
+                    class="w-full"
+                    @update:model-value="markRowReviewed(row)"
+                  />
                 </UFormField>
                 <USelectMenu
                   v-model="row.unit"
@@ -518,6 +666,7 @@ async function handleSubmit() {
                   :search-input="false"
                   aria-label="Unité"
                   class="min-w-0 flex-1 sm:w-28 sm:flex-none"
+                  @update:model-value="markRowReviewed(row)"
                 />
                 <UButton
                   icon="i-lucide-trash-2"
@@ -528,6 +677,33 @@ async function handleSubmit() {
                   class="shrink-0 mt-0.5"
                   @click="removeIngredientRow(row.key)"
                 />
+              </div>
+
+              <!-- Ligne lue sur une photo : le texte d'origine reste visible pour comparer, avec ce qu'il reste à faire. -->
+              <div v-if="row.read" class="flex flex-col gap-1.5 pl-10 sm:basis-full sm:-mt-1">
+                <p class="truncate text-xs text-dimmed" :title="row.read.text">
+                  « {{ row.read.text }} »
+                </p>
+                <div v-if="!row.ingredientId" class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+                  <span class="flex items-center gap-1 text-error">
+                    <UIcon name="i-lucide-circle-help" class="size-3.5 shrink-0" />
+                    Absent du catalogue
+                  </span>
+                  <UButton
+                    v-if="row.read.proposal"
+                    :label="`Créer « ${row.read.proposal.label} »`"
+                    icon="i-lucide-plus"
+                    color="primary"
+                    variant="soft"
+                    size="xs"
+                    @click="createIngredientFor(row)"
+                  />
+                  <span class="text-dimmed">ou choisissez-le dans la liste</span>
+                </div>
+                <p v-else-if="row.read.status === 'check'" class="flex items-center gap-1 text-xs text-warning">
+                  <UIcon name="i-lucide-triangle-alert" class="size-3.5 shrink-0" />
+                  {{ row.read.note }} · à vérifier
+                </p>
               </div>
             </div>
           </VueDraggable>
@@ -597,6 +773,13 @@ async function handleSubmit() {
       />
     </template>
   </USlideover>
+
+  <IngredientFormSlideover
+    v-model:open="ingredientFormOpen"
+    :ingredient="null"
+    :prefill="ingredientPrefill"
+    @created="onIngredientCreated"
+  />
 </template>
 
 <style scoped>

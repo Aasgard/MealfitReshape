@@ -12,7 +12,9 @@ const user = useCurrentUser()
 // --- Photo : réduite dans le navigateur, jamais enregistrée ---
 
 const photo = usePhotoDraft()
-const fileInput = ref<HTMLInputElement | null>(null)
+/** `capture` ouvre directement l'appareil photo sur mobile ; sans, le téléphone propose aussi la galerie et les fichiers. */
+const cameraInput = ref<HTMLInputElement | null>(null)
+const libraryInput = ref<HTMLInputElement | null>(null)
 
 async function onPhotoSelected(event: Event) {
   const input = event.target as HTMLInputElement
@@ -94,10 +96,19 @@ const estimateJson = computed(() => estimate.value ? JSON.stringify(estimate.val
 
           <form class="flex flex-col gap-6" novalidate @submit.prevent="submit">
             <input
-              ref="fileInput"
+              ref="cameraInput"
               type="file"
               accept="image/*"
               capture="environment"
+              class="sr-only"
+              tabindex="-1"
+              aria-hidden="true"
+              @change="onPhotoSelected"
+            >
+            <input
+              ref="libraryInput"
+              type="file"
+              accept="image/*"
               class="sr-only"
               tabindex="-1"
               aria-hidden="true"
@@ -113,9 +124,9 @@ const estimateJson = computed(() => estimate.value ? JSON.stringify(estimate.val
                     variant="solid"
                     size="sm"
                     icon="i-lucide-refresh-cw"
-                    @click="fileInput?.click()"
+                    @click="libraryInput?.click()"
                   >
-                    Reprendre
+                    Changer
                   </UButton>
                   <UButton
                     color="neutral"
@@ -128,19 +139,32 @@ const estimateJson = computed(() => estimate.value ? JSON.stringify(estimate.val
                 </div>
               </div>
 
-              <UButton
-                v-else
-                size="xl"
-                block
-                color="neutral"
-                variant="outline"
-                icon="i-lucide-camera"
-                class="justify-center"
-                :loading="photo.processing.value"
-                @click="fileInput?.click()"
-              >
-                Prendre une photo
-              </UButton>
+              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <UButton
+                  size="xl"
+                  block
+                  color="neutral"
+                  variant="outline"
+                  icon="i-lucide-camera"
+                  class="justify-center"
+                  :loading="photo.processing.value"
+                  @click="cameraInput?.click()"
+                >
+                  Prendre une photo
+                </UButton>
+                <UButton
+                  size="xl"
+                  block
+                  color="neutral"
+                  variant="outline"
+                  icon="i-lucide-image"
+                  class="justify-center"
+                  :disabled="photo.processing.value"
+                  @click="libraryInput?.click()"
+                >
+                  Importer une photo
+                </UButton>
+              </div>
 
               <p v-if="photo.error.value" role="alert" class="text-sm text-error">
                 {{ photo.error.value }}

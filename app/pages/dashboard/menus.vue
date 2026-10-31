@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { addDays, addWeeks, differenceInCalendarWeeks, isSameWeek, parseISO, startOfWeek, subWeeks } from 'date-fns'
 import type { Meal, MealSource, MealType } from '~/types/meal'
-import type { MenuEntry, MenuMemberRow } from '~/types/menu'
+import type { MenuEntry, MenuMemberRow, MenuPerson } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
 import { buildDays, dayKeyOf, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
@@ -27,12 +27,30 @@ const weekLabelShort = computed(() => formatWeekLabel(selectedWeekStart.value, a
 /**
  * Mobile, tablette (sous `lg:`) : le calendrier défile d'une semaine à l'autre (voir MenuWeekCalendar). Au-delà, les
  * 7 jours tiennent à l'écran et on change de semaine par les flèches, avec un glissement.
+ * PC avec une barre latérale large : si la place manque pour la grille (`min-w-220` du calendrier), mode continu aussi.
+ * La grille du PC ne défile ainsi jamais en largeur, ce qui laisse sa ligne des jours et ses bandes coller à la page.
  */
 const CONTINUOUS_QUERY = '(max-width: 63.999rem)'
-const isContinuous = ref(window.matchMedia(CONTINUOUS_QUERY).matches)
-const onContinuousChange = (event: MediaQueryListEvent) => { isContinuous.value = event.matches }
+const MIN_GRID_WIDTH_PX = 55 * 16
+const isSmallScreen = ref(window.matchMedia(CONTINUOUS_QUERY).matches)
+const onContinuousChange = (event: MediaQueryListEvent) => { isSmallScreen.value = event.matches }
 onMounted(() => window.matchMedia(CONTINUOUS_QUERY).addEventListener('change', onContinuousChange))
 onBeforeUnmount(() => window.matchMedia(CONTINUOUS_QUERY).removeEventListener('change', onContinuousChange))
+
+const pageBody = useTemplateRef<HTMLElement>('pageBody')
+const isGridTooWide = ref(false)
+const pageBodyObserver = typeof ResizeObserver === 'undefined'
+  ? null
+  : new ResizeObserver(([entry]) => {
+      if (entry) isGridTooWide.value = entry.contentRect.width < MIN_GRID_WIDTH_PX
+    })
+watch(pageBody, (element) => {
+  pageBodyObserver?.disconnect()
+  if (element) pageBodyObserver?.observe(element)
+})
+onBeforeUnmount(() => pageBodyObserver?.disconnect())
+
+const isContinuous = computed(() => isSmallScreen.value || isGridTooWide.value)
 
 const calendar = useTemplateRef<{ scrollByWeeks: (delta: number) => void }>('calendar')
 
@@ -83,6 +101,11 @@ const otherMembers = computed(() => household.value && householdId.value
   ? sortedMembers(household.value).filter(member => !member.isSelf)
   : [])
 const memberNameOf = (id: string) => otherMembers.value.find(member => member.id === id)?.name
+/** Compte connecté tel que le foyer le connaît : nomme son propre bloc dans le calendrier. */
+const selfMember = computed<MenuPerson | undefined>(() => {
+  const self = household.value && householdId.value ? sortedMembers(household.value).find(member => member.isSelf) : undefined
+  return self ? { id: self.id, name: self.name, photoUrl: self.photoUrl } : undefined
+})
 
 // Une erreur de chargement des repas (droits, index manquant...) est signalée par le toast ci-dessus, sans bloquer la page.
 await Promise.all([recipes.promise.value, ingredients.promise.value, meals.promise.value.catch(() => undefined)])
@@ -482,9 +505,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <template #body>
       <!--
         Mobile, tablette : la ligne des jours du calendrier remonte avec la page puis se colle sous l'en-tête du panneau.
-        PC : tout défile avec la page.
+        PC : elle colle en haut de la page, dans le calendrier.
       -->
       <div
+        ref="pageBody"
         class="flex flex-1 flex-col gap-4 overflow-x-clip p-4 sm:gap-6 sm:p-6"
         @touchstart.passive="onTouchStart"
         @touchend.passive="onTouchEnd"
@@ -527,6 +551,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :copied-entry-id="copiedMeal?.id"
             :continuous="isContinuous"
             :members="memberRows"
+            :self="selfMember"
             @select-entry="selectEntry"
             @edit-entry="editEntry"
             @copy-entry="toggleCopyEntry"

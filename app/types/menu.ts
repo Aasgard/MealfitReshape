@@ -22,6 +22,14 @@ export interface MenuDayHeader {
   isWeekStart?: boolean
 }
 
+/** Totaux d'un jour du compte connecté, avec les classes de couleur de leur statut par rapport à l'objectif. */
+export interface MenuDayTotals {
+  kcal: number
+  statusClass: string
+  /** Glucides, protéines, lipides : "G", "P", "L". */
+  macroItems: { letter: string, value: number, statusClass: string }[]
+}
+
 /** Une ligne du calendrier (un type de repas : Petit déj, Déjeuner, ...). */
 export interface MenuMealTypeRow {
   key: MealType
@@ -36,11 +44,15 @@ export interface MenuMealTypeRow {
 /** Repas par jour (date ISO) puis par type de repas : entries[dayKey][mealTypeKey]. */
 export type MenuWeekEntries = Record<string, Record<string, MenuEntry[]>>
 
-/** Bloc d'un autre membre du foyer, sous celui du compte connecté : ses repas, dans les mêmes lignes du calendrier. */
-export interface MenuMemberRow {
+/** Une personne du foyer, telle que le calendrier la montre (bande de son bloc, avatars des repas partagés). */
+export interface MenuPerson {
   id: string
   name: string
   photoUrl?: string
+}
+
+/** Bloc d'un autre membre du foyer, sous celui du compte connecté : ses repas, dans les mêmes lignes du calendrier. */
+export interface MenuMemberRow extends MenuPerson {
   entries: MenuWeekEntries
   /** Kcal du jour par date ISO, « Non compté » exclu. */
   kcalByDay: Record<string, number>

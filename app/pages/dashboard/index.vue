@@ -176,7 +176,7 @@ watch(workoutsError, (error) => {
 })
 
 const shoppingList = useShoppingList()
-const { dishes, ownDishes, dishesById, saveBatchSurplus, thawMeals } = usePreparedDishes()
+const { dishes, dishesById, saveBatchSurplus, thawMeals } = usePreparedDishes()
 watch(shoppingList.items.error, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger la liste de courses : ${error.message}`, color: 'error' })
@@ -331,9 +331,9 @@ const cookingDays = (portions: RecipeToCookPortion[], { alwaysShowMeal = false }
  */
 const cookingRecipes = computed<TodayCookingRecipe[]>(() => {
   const cookDay = selectedDayKey.value
-  /** Parts prévues en plus pour le stock : cuisinées avec la fournée, comptées dans ses parts. */
+  /** Parts prévues en plus pour le stock du foyer : cuisinées avec la fournée, comptées dans ses parts. */
   const withSurplus = (recipeId: string) => {
-    const dish = findBatchSurplus(ownDishes.value, recipeId, cookDay)
+    const dish = findBatchSurplus(dishes.value, recipeId, cookDay)
     const parts = dish?.batch?.surplusParts ?? 0
     return parts > PARTS_EPSILON && dish ? { parts, storage: dish.storage } : undefined
   }
@@ -355,9 +355,11 @@ const cookingRecipes = computed<TodayCookingRecipe[]>(() => {
   })
 
   // Surplus dont les repas des menus ont été retirés depuis : il reste à cuisiner pour le stock.
-  const surplusOnly = ownDishes.value.flatMap((dish) => {
+  const listed = new Set(batches.map(b => b.recipeId))
+  const surplusOnly = dishes.value.flatMap((dish) => {
     const recipe = dish.recipeId ? recipesById.value.get(dish.recipeId) : undefined
-    if (!recipe || dish.batch?.cookDay !== cookDay || batches.some(b => b.recipeId === recipe.id)) return []
+    if (!recipe || dish.batch?.cookDay !== cookDay || listed.has(recipe.id)) return []
+    listed.add(recipe.id)
     const surplus = withSurplus(recipe.id)
     if (!surplus) return []
     return [{ recipeId: recipe.id, cookDay, title: recipe.title, persons: recipe.persons, imageUrl: recipe.imageUrl, days: [], parts: surplus.parts, surplus }]
@@ -476,7 +478,7 @@ const surplusTarget = ref<TodayCookingRecipe | null>(null)
 const surplusSaving = ref(false)
 const surplusDish = computed(() => {
   const target = surplusTarget.value
-  return target ? findBatchSurplus(ownDishes.value, target.recipeId, target.cookDay) ?? null : null
+  return target ? findBatchSurplus(dishes.value, target.recipeId, target.cookDay) ?? null : null
 })
 
 const openSurplus = (recipe: TodayCookingRecipe) => {

@@ -152,9 +152,14 @@ const notFoundCode = computed(() =>
         <div class="flex gap-2">
           <UInput
             v-model="manualCode"
-            type="text"
+            name="product-ean"
+            type="search"
             inputmode="numeric"
+            enterkeyhint="search"
             autocomplete="off"
+            spellcheck="false"
+            data-form-type="other"
+            data-lpignore="true"
             placeholder="Code EAN, ex : 3017624010701"
             aria-label="Code EAN"
             variant="outline"
@@ -162,7 +167,7 @@ const notFoundCode = computed(() =>
             autofocus
             :color="manualError ? 'error' : undefined"
             :highlight="!!manualError"
-            :ui="{ base: 'tabular-nums' }"
+            :ui="{ base: `tabular-nums ${NAME_FIELD_BASE}` }"
           />
           <UButton type="submit" color="neutral" variant="outline">
             Rechercher

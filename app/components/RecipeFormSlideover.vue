@@ -160,6 +160,15 @@ const { vocabulary: tagVocabulary } = useRecipeTags()
 const tagSuggestions = computed(() => tagVocabulary.value.map(t => t.label))
 const tagCounts = computed(() => new Map(tagVocabulary.value.map(t => [t.label, t.count])))
 
+/**
+ * Le champ des tags passe en `type="search"` pour qu'Android n'y propose pas sa barre de mots de passe (voir `NAME_FIELD_BASE`).
+ * En mode `multiple`, `UInputMenu` ne transmet pas sa prop `type` au champ, qui reste en `text` : on la pose sur l'élément.
+ */
+const tagInputMenu = useTemplateRef('tagInputMenu')
+watch(() => tagInputMenu.value?.inputRef, (input) => {
+  if (input instanceof HTMLInputElement) input.type = 'search'
+})
+
 /** Un tag créé reprend l'orthographe d'un tag existant équivalent (« Vege » → « végé »). */
 function createTag(input: string) {
   tags.value = dedupeRecipeTags([...tags.value, canonicalRecipeTag(input, tagVocabulary.value)])
@@ -791,12 +800,20 @@ async function handleSubmit() {
             {{ label }}
           </template>
           <UInputMenu
+            ref="tagInputMenu"
             v-model="tags"
             v-model:search-term="tagSearch"
             :items="tagSuggestions"
             multiple
             create-item="always"
             placeholder="Ajouter un tag..."
+            name="recipe-tag"
+            enterkeyhint="done"
+            autocomplete="off"
+            spellcheck="false"
+            data-form-type="other"
+            data-lpignore="true"
+            :ui="{ tagsInput: NAME_FIELD_BASE }"
             variant="outline"
             class="w-full"
             @create="createTag"

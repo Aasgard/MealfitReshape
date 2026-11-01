@@ -625,13 +625,13 @@ async function handleSubmit() {
 
         <div class="grid grid-cols-3 gap-4">
           <UFormField label="Parts" :error="personsError">
-            <UInput v-model="persons" type="text" inputmode="numeric" placeholder="1" size="md" variant="outline" class="w-full" />
+            <UInput v-model="persons" type="search" inputmode="numeric" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="1" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
           <UFormField label="Prép. (min)" :error="prepTimeError">
-            <UInput v-model="prepTime" type="text" inputmode="numeric" placeholder="ex : 15" size="md" variant="outline" class="w-full" />
+            <UInput v-model="prepTime" type="search" inputmode="numeric" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 15" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
           <UFormField label="Cuisson (min)" :error="cookTimeError">
-            <UInput v-model="cookTime" type="text" inputmode="numeric" placeholder="ex : 25" size="md" variant="outline" class="w-full" />
+            <UInput v-model="cookTime" type="search" inputmode="numeric" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 25" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
         </div>
 
@@ -720,13 +720,19 @@ async function handleSubmit() {
                 <UFormField class="w-20 shrink-0" :error="ingredientRowQuantityError(row)">
                   <UInput
                     v-model="row.quantity"
-                    type="text"
+                    type="search"
                     inputmode="decimal"
+                    enterkeyhint="done"
+                    autocomplete="off"
+                    spellcheck="false"
+                    data-form-type="other"
+                    data-lpignore="true"
                     placeholder="qté"
                     aria-label="Quantité"
                     size="md"
                     variant="outline"
                     class="w-full"
+                    :ui="{ base: NAME_FIELD_BASE }"
                     @update:model-value="markRowReviewed(row)"
                   />
                 </UFormField>

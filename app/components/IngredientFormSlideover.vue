@@ -357,7 +357,7 @@ async function handleSubmit() {
                   <IngredientDensityInfo />
                 </span>
               </template>
-              <UInput v-model="density" type="text" inputmode="decimal" placeholder="ex : 0.92" size="md" variant="outline" class="w-full" />
+              <UInput v-model="density" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 0.92" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
           </div>
         </div>
@@ -367,16 +367,16 @@ async function handleSubmit() {
           <p class="text-xs text-dimmed mb-2">{{ valuesHint }}</p>
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Calories (kcal)" :error="caloriesError">
-              <UInput v-model="calories" type="text" inputmode="decimal" placeholder="ex : 52" size="md" variant="outline" class="w-full" />
+              <UInput v-model="calories" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 52" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
             <UFormField label="Glucides (g)" :error="carbohydratesError">
-              <UInput v-model="carbohydrates" type="text" inputmode="decimal" placeholder="ex : 14" size="md" variant="outline" class="w-full" />
+              <UInput v-model="carbohydrates" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 14" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
             <UFormField label="Protéines (g)" :error="proteinError">
-              <UInput v-model="protein" type="text" inputmode="decimal" placeholder="ex : 0.3" size="md" variant="outline" class="w-full" />
+              <UInput v-model="protein" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 0.3" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
             <UFormField label="Lipides (g)" :error="fatError">
-              <UInput v-model="fat" type="text" inputmode="decimal" placeholder="ex : 0.2" size="md" variant="outline" class="w-full" />
+              <UInput v-model="fat" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 0.2" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
           </div>
         </div>
@@ -435,10 +435,10 @@ async function handleSubmit() {
           <div v-else class="flex flex-col gap-3">
             <div v-for="row in unitRows" :key="row.key" class="flex items-start gap-2">
               <UFormField class="flex-1" :error="unitLabelError(row)">
-                <UInput v-model="row.label" placeholder="ex : Tranche" size="md" variant="outline" class="w-full" />
+                <UInput v-model="row.label" type="search" enterkeyhint="done" autocomplete="off" autocapitalize="sentences" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : Tranche" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
               </UFormField>
               <UFormField class="w-20 shrink-0" :error="unitValueError(row)">
-                <UInput v-model="row.value" type="text" inputmode="decimal" placeholder="qté" size="md" variant="outline" class="w-full" />
+                <UInput v-model="row.value" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="qté" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
               </UFormField>
               <div class="flex gap-1 shrink-0 mt-0.5">
                 <UButton

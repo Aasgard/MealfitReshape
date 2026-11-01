@@ -44,7 +44,12 @@ export interface Recipe {
   imageUrl?: string
   /** Chemin Storage de la photo envoyée, pour la remplacer ou la supprimer ; absent pour un lien externe. */
   imagePath?: string
+  /** Source en texte libre (lien, magazine…) ; absente quand la recette vient d'un livre de la bibliothèque. */
   source?: string
+  /** Livre de cuisine (Firestore `books`) d'où vient la recette. */
+  bookId?: string
+  /** Page du livre, telle qu'écrite (« 42 », « 42-43 ») ; seulement avec `bookId`. */
+  bookPage?: string
   instructions?: string
   tags?: string[]
   ingredients?: RecipeIngredientLine[]

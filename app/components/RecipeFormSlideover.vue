@@ -11,6 +11,7 @@ import { RECIPE_DIFFICULTIES, recipeDifficultyLabel, type RecipeDifficulty } fro
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
 import { canonicalRecipeTag, dedupeRecipeTags } from '~/utils/recipeTags'
+import { BOOK_PAGE_MAX, cleanBookPage, isBookLikeSource, matchBookByTitle, splitSourcePage } from '~/utils/books'
 
 /**
  * Slideover d'ajout/modification de recette — un seul composant pour les deux modes,
@@ -99,6 +100,56 @@ const prepTime = ref('')
 const cookTime = ref('')
 const imageUrl = ref('')
 const source = ref('')
+/** Source de la recette : un livre de la bibliothèque (avec sa page), ou un texte libre (lien, magazine…). */
+const sourceMode = ref<'book' | 'text'>('book')
+const bookId = ref<string | undefined>(undefined)
+const bookPage = ref('')
+
+/** Livres de cuisine : les seuls qu'une recette peut prendre pour source. */
+const { books } = useBooks()
+const bookOptions = computed(() => books.value.map(b => ({ id: b.id, label: b.title, description: b.authors.join(', ') || undefined })))
+
+/**
+ * Source texte qui ressemble à un livre : on propose de la rattacher au livre de même titre, ou de créer ce livre.
+ * La page écrite dans le texte (« p. 42 ») suit.
+ */
+const textSourceSuggestion = computed(() => {
+  if (sourceMode.value !== 'text' || !isBookLikeSource(source.value)) return null
+  const { title, page } = splitSourcePage(source.value)
+  if (!title) return null
+  const match = matchBookByTitle(title, books.value)
+  return { title, page, match }
+})
+
+const bookFormOpen = ref(false)
+const bookFormTitle = ref('')
+/** Page à reprendre quand le livre créé depuis la source arrive. */
+const pendingBookPage = ref('')
+
+function applySuggestedBook() {
+  const suggestion = textSourceSuggestion.value
+  if (!suggestion) return
+  if (suggestion.match) {
+    bookId.value = suggestion.match.id
+    bookPage.value = suggestion.page || bookPage.value
+    sourceMode.value = 'book'
+    return
+  }
+  createBook(suggestion.title, suggestion.page)
+}
+
+function createBook(title: string, page = '') {
+  bookFormTitle.value = title.trim()
+  pendingBookPage.value = page
+  bookFormOpen.value = true
+}
+
+function onBookCreated(id: string) {
+  bookId.value = id
+  if (pendingBookPage.value) bookPage.value = pendingBookPage.value
+  pendingBookPage.value = ''
+  sourceMode.value = 'book'
+}
 const description = ref('')
 const instructions = ref('')
 const tags = ref<string[]>([])
@@ -171,6 +222,9 @@ function resetForm() {
   photoFromPage.value = false
   uploadProgress.value = null
   source.value = r?.source ?? ''
+  bookId.value = r?.bookId
+  bookPage.value = r?.bookPage ?? ''
+  sourceMode.value = r?.bookId || !r?.source ? 'book' : 'text'
   description.value = r?.description ?? ''
   instructions.value = r?.instructions ?? ''
   tags.value = r?.tags ? [...r.tags] : []
@@ -196,6 +250,10 @@ function applyDraft(draft: RecipeDraft) {
   if (d.cookTime != null) cookTime.value = String(d.cookTime)
   instructions.value = d.instructions
   source.value = d.source
+  bookPage.value = d.page
+  // Livre reconnu par Claude, sinon par son titre ; à défaut, le texte lu reste, avec de quoi ajouter le livre.
+  bookId.value = d.bookId ?? (d.source ? matchBookByTitle(splitSourcePage(d.source).title, books.value)?.id : undefined)
+  sourceMode.value = bookId.value || !d.source ? 'book' : 'text'
   ingredientRows.value = d.ingredients.map(line => ({
     key: generateFirestoreId(),
     ingredientId: line.ingredientId ?? undefined,
@@ -454,7 +512,11 @@ async function handleSubmit() {
     setOrClear('difficulty', difficulty.value ?? undefined)
     setOrClear('prepTime', prepTime.value.trim() ? parseNonNegativeNumber(prepTime.value)! : undefined)
     setOrClear('cookTime', cookTime.value.trim() ? parseNonNegativeNumber(cookTime.value)! : undefined)
-    setOrClear('source', source.value.trim())
+    // On enregistre la source affichée : le livre choisi, ou le texte libre ; l'autre est retirée.
+    const withBook = sourceMode.value === 'book' && !!bookId.value
+    setOrClear('bookId', withBook ? bookId.value : undefined)
+    setOrClear('bookPage', withBook ? cleanBookPage(bookPage.value) : undefined)
+    setOrClear('source', sourceMode.value === 'text' ? source.value.trim() : undefined)
     setOrClear('description', description.value.trim())
     setOrClear('instructions', instructions.value.trim())
 
@@ -756,8 +818,79 @@ async function handleSubmit() {
           <UTextarea v-model="description" :rows="2" autoresize :ui="{ base: 'overflow-hidden' }" placeholder="Note libre..." variant="outline" class="w-full" />
         </UFormField>
 
-        <UFormField label="Source (optionnel)">
-          <UInput v-model="source" placeholder="ex : lien ou livre de cuisine" size="md" variant="outline" class="w-full" />
+        <UFormField label="Source (optionnel)" :ui="SECTION_FIELD_UI">
+          <template #label="{ label }">
+            <UIcon name="i-lucide-book-open" class="size-3.5 text-muted shrink-0" />
+            {{ label }}
+          </template>
+          <div class="flex flex-col gap-2">
+            <div role="group" aria-label="Type de source" class="flex w-fit gap-1 rounded-lg bg-elevated p-0.5">
+              <UButton
+                v-for="mode in ([{ value: 'book', label: 'Livre', icon: 'i-lucide-library' }, { value: 'text', label: 'Autre', icon: 'i-lucide-link' }] as const)"
+                :key="mode.value"
+                :label="mode.label"
+                :icon="mode.icon"
+                :color="sourceMode === mode.value ? 'primary' : 'neutral'"
+                :variant="sourceMode === mode.value ? 'solid' : 'ghost'"
+                size="xs"
+                :aria-pressed="sourceMode === mode.value"
+                @click="sourceMode = mode.value"
+              />
+            </div>
+
+            <template v-if="sourceMode === 'book'">
+              <div class="flex gap-2">
+                <USelectMenu
+                  v-model="bookId"
+                  :items="bookOptions"
+                  value-key="id"
+                  placeholder="Choisir un livre..."
+                  :search-input="{ placeholder: 'Rechercher ou ajouter un livre...' }"
+                  create-item="always"
+                  icon="i-lucide-book-open"
+                  aria-label="Livre"
+                  class="min-w-0 flex-1"
+                  @create="createBook"
+                >
+                  <template #create-item-label="{ item }">
+                    Ajouter « {{ item }} » à la bibliothèque
+                  </template>
+                </USelectMenu>
+                <UInput
+                  v-model="bookPage"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="Page"
+                  aria-label="Page du livre"
+                  :maxlength="BOOK_PAGE_MAX"
+                  size="md"
+                  variant="outline"
+                  class="w-20 shrink-0"
+                  :ui="{ base: 'tabular-nums' }"
+                />
+              </div>
+              <p v-if="!books.length" class="text-xs text-dimmed text-pretty">
+                La bibliothèque est vide : tapez le titre du livre pour l'ajouter, ou scannez-le depuis Outils › Bibliothèque.
+              </p>
+            </template>
+
+            <template v-else>
+              <UInput v-model="source" placeholder="ex : lien, magazine, carnet de famille" size="md" variant="outline" class="w-full" />
+              <div v-if="textSourceSuggestion" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                <span class="text-dimmed">{{ textSourceSuggestion.match ? 'Ce livre est dans la bibliothèque :' : 'Un livre ?' }}</span>
+                <UButton
+                  :label="textSourceSuggestion.match ? `Rattacher à « ${textSourceSuggestion.match.title} »` : `Ajouter « ${textSourceSuggestion.title} » à la bibliothèque`"
+                  :icon="textSourceSuggestion.match ? 'i-lucide-link-2' : 'i-lucide-plus'"
+                  color="primary"
+                  variant="soft"
+                  size="xs"
+                  class="min-w-0"
+                  :ui="{ label: 'truncate' }"
+                  @click="applySuggestedBook"
+                />
+              </div>
+            </template>
+          </div>
         </UFormField>
       </div>
     </template>
@@ -779,6 +912,14 @@ async function handleSubmit() {
     :ingredient="null"
     :prefill="ingredientPrefill"
     @created="onIngredientCreated"
+  />
+
+  <BookFormSlideover
+    v-model:open="bookFormOpen"
+    :book="null"
+    :prefill-title="bookFormTitle"
+    @created="onBookCreated"
+    @existing="(book) => onBookCreated(book.id)"
   />
 </template>
 

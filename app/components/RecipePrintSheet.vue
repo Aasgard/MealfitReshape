@@ -17,6 +17,8 @@ defineProps<{
   scaledNote?: string | null
   /** Ingrédients remplacés sur la fiche, ex. « Variante : Riz au lieu de Pommes de terre ». */
   variantNote?: string | null
+  /** Source imprimée : « Titre du livre, p. 42 », ou le texte libre de la recette. */
+  sourceLabel?: string | null
 }>()
 </script>
 
@@ -88,7 +90,7 @@ defineProps<{
 
       <footer class="recipe-print__footer">
         <span v-if="recipe.tags?.length">{{ recipe.tags.join(' · ') }}</span>
-        <span v-if="recipe.source">Source : {{ recipe.source }}</span>
+        <span v-if="sourceLabel">Source : {{ sourceLabel }}</span>
         <span>Mealfit</span>
       </footer>
     </article>

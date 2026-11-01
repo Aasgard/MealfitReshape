@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core'
-import type { DocumentReference } from 'firebase/firestore'
+import { doc, type DocumentReference } from 'firebase/firestore'
 import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { recipeTypeLabel } from '~/utils/recipeType'
 import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
 import { describeRecipeLine, macrosForRecipe } from '~/utils/recipeNutrition'
 import { formatKitchenGrams, nearestUnitLabel, swapForLine } from '~/utils/ingredientSwap'
+import { useDocument } from 'vuefire'
+import type { Book } from '~/types/book'
+import { bookAuthorsLabel, bookSourceLabel, formatBookPage } from '~/utils/books'
 
 const props = defineProps<{
   recipe: Recipe | null
@@ -44,6 +47,13 @@ onBeforeUnmount(() => {
 })
 
 const { formatDate } = useDateFormat()
+
+/** Livre d'où vient la recette : lu seul, la fiche s'ouvre partout (Accueil, Menus) sans charger la bibliothèque. */
+const db = useFirestore()
+const bookDoc = useDocument<Book>(() => (props.recipe?.bookId ? doc(db, 'books', props.recipe.bookId) : null))
+const book = computed(() => (props.recipe?.bookId && bookDoc.value?.id === props.recipe.bookId ? bookDoc.value : null))
+/** Source imprimée : « Titre, p. 42 », sinon le texte libre. */
+const sourceLabel = computed(() => (book.value ? bookSourceLabel(book.value, props.recipe?.bookPage) : props.recipe?.source))
 
 const persons = computed(() => props.recipe?.persons ?? 1)
 /** Parts à l'ouverture : celles du repas (ou de la fournée), sinon celles de la recette. */
@@ -337,6 +347,7 @@ const editRecipe = async () => {
         :parts-label="formatParts(displayedParts)"
         :scaled-note="scaledNote"
         :variant-note="variantNote"
+        :source-label="sourceLabel"
       />
 
       <div class="flex flex-col gap-6">
@@ -602,8 +613,29 @@ const editRecipe = async () => {
           <p class="text-sm text-muted whitespace-pre-line">{{ recipe.description }}</p>
         </div>
 
-        <!-- Source -->
-        <div v-if="recipe?.source">
+        <!-- Source : le livre (vers sa fiche dans la bibliothèque), sinon le texte libre -->
+        <div v-if="book">
+          <p class="text-xs text-dimmed mb-1.5">Source</p>
+          <NuxtLink
+            :to="{ path: '/dashboard/bibliotheque', query: { livre: book.id } }"
+            class="group -mx-1.5 flex items-center gap-3 rounded-md p-1.5 transition-colors hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
+            @click="open = false"
+          >
+            <div class="w-9 shrink-0">
+              <BookCover :book="book" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-highlighted group-hover:text-primary">{{ book.title }}</p>
+              <p class="truncate text-xs text-muted">
+                <template v-if="recipe?.bookPage"><span class="tabular-nums">{{ formatBookPage(recipe.bookPage) }}</span></template>
+                <template v-if="recipe?.bookPage && book.authors.length"> · </template>
+                {{ bookAuthorsLabel(book) }}
+              </p>
+            </div>
+            <UIcon name="i-lucide-chevron-right" class="size-4 shrink-0 text-dimmed" aria-hidden="true" />
+          </NuxtLink>
+        </div>
+        <div v-else-if="recipe?.source">
           <p class="text-xs text-dimmed mb-1">Source</p>
           <p class="text-sm text-muted">{{ recipe.source }}</p>
         </div>

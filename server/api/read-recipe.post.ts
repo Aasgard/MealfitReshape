@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { betaJSONSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/beta/json-schema'
 import type {
+  CatalogBook,
   CatalogCategory,
   CatalogIngredient,
   DishImageBox,
@@ -28,6 +29,8 @@ const READING_FORMAT = betaJSONSchemaOutputFormat({
     cookTime: { type: 'number', description: 'Cuisson en minutes ; -1 si non indiquée, 0 si la recette est sans cuisson.' },
     instructions: { type: 'string', description: 'Étapes, une par ligne, numérotées « 1. », « 2. »…' },
     source: { type: 'string', description: 'Livre, magazine, site ou compte lisible sur les photos ; "" sinon.' },
+    bookId: { type: 'string', description: 'Id d\'un livre de la bibliothèque fournie d\'où vient la recette ; "" si aucun ne correspond.' },
+    page: { type: 'string', description: 'Numéro de page imprimé de la recette (« 42 », ou « 42-43 » sur deux pages) ; "" s\'il n\'est pas lisible.' },
     ingredients: {
       type: 'array',
       items: {
@@ -76,7 +79,7 @@ const READING_FORMAT = betaJSONSchemaOutputFormat({
       additionalProperties: false,
     },
   },
-  required: ['isRecipe', 'title', 'persons', 'prepTime', 'cookTime', 'instructions', 'source', 'ingredients', 'dishImage'],
+  required: ['isRecipe', 'title', 'persons', 'prepTime', 'cookTime', 'instructions', 'source', 'bookId', 'page', 'ingredients', 'dishImage'],
   additionalProperties: false,
 })
 
@@ -87,6 +90,8 @@ Recopie fidèlement, sans rien inventer :
 - Titre, nombre de parts, temps de préparation et de cuisson tels qu'écrits (convertis les heures en minutes). Ce qui n'est pas écrit reste absent.
 - Instructions : le texte des étapes, une étape par ligne, numérotées. Corrige seulement les coupures de mots et de lignes dues à la mise en page.
 - Source : le nom du livre, du magazine, du site ou du compte s'il est lisible (en-tête, pied de page, filigrane).
+- Livre : si un titre ou un auteur lisible sur les photos (même en partie) désigne un livre de la bibliothèque fournie, donne son id dans bookId ; sinon "". Sans indice écrit, ne devine pas.
+- Page : le numéro de page imprimé de la recette (« 42 », « 42-43 » si elle tient sur deux pages) ; "" s'il n'est pas lisible ou pour une capture d'écran.
 
 Ingrédients : une entrée par ligne de la liste d'ingrédients, dans l'ordre. Pour chacune, choisis dans le catalogue fourni l'ingrédient qui correspond (synonymes, pluriels, variantes : « échalotes » → Échalote, « huile d'olive vierge extra » → Huile d'olive). Ignore la préparation (« émincé », « à température ambiante »).
 - Si l'ingrédient a une unité qui correspond à celle de la recette (« 2 gousses » → unité Gousse), utilise-la avec la quantité écrite. Sinon, convertis en grammes (unitId "") : les millilitres avec la densité de l'aliment, les cuillères (café ≈ 5 ml, soupe ≈ 15 ml), les verres, pincées, pièces avec un poids réaliste.
@@ -130,6 +135,21 @@ function sanitizeCatalog(raw: unknown): CatalogIngredient[] {
       : []
     return [{ id: item.id, label: item.label, units }]
   })
+}
+
+function sanitizeBooks(raw: unknown): CatalogBook[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter(b => typeof b?.id === 'string' && typeof b?.title === 'string').map(b => ({
+    id: b.id,
+    title: b.title,
+    authors: Array.isArray(b.authors) ? b.authors.filter((a: unknown) => typeof a === 'string') : [],
+  }))
+}
+
+/** Bibliothèque en une ligne par livre : id, titre, auteurs. */
+function booksPrompt(books: CatalogBook[]) {
+  const lines = books.map(b => (b.authors.length ? `${b.id} | ${b.title} | ${b.authors.join(', ')}` : `${b.id} | ${b.title}`))
+  return `Bibliothèque de livres de cuisine (id | titre | auteurs) :\n${lines.join('\n') || '(vide)'}`
 }
 
 function sanitizeCategories(raw: unknown): CatalogCategory[] {
@@ -261,10 +281,12 @@ export default defineEventHandler(async (event): Promise<RecipeReading> => {
 
   const catalog = sanitizeCatalog(parseJsonPart(parts.find(p => p.name === 'catalog')?.data, 'Catalogue'))
   const categories = sanitizeCategories(parseJsonPart(parts.find(p => p.name === 'categories')?.data, 'Catégories'))
+  const books = sanitizeBooks(parseJsonPart(parts.find(p => p.name === 'books')?.data, 'Bibliothèque'))
 
   const content: Anthropic.Beta.BetaContentBlockParam[] = [
     // Le catalogue change rarement d'une lecture à l'autre : mis en cache, il ne coûte qu'une fois pour plusieurs recettes.
     { type: 'text', text: catalogPrompt(catalog, categories), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: booksPrompt(books) },
     ...photos.flatMap((p, index): Anthropic.Beta.BetaContentBlockParam[] => [
       { type: 'text', text: `Photo ${index} :` },
       { type: 'image', source: { type: 'base64', media_type: p.type as ImageType, data: p.data.toString('base64') } },
@@ -305,6 +327,9 @@ export default defineEventHandler(async (event): Promise<RecipeReading> => {
       cookTime: optionalMinutes(output.cookTime),
       instructions: output.instructions.trim(),
       source: output.source.trim(),
+      // Seul un id de la bibliothèque envoyée compte : un id inventé laisse la source en texte.
+      bookId: books.some(b => b.id === output.bookId) ? output.bookId : null,
+      page: output.page.trim().replace(/^p(?:ages?)?\.?\s*/i, '').slice(0, 12),
       ingredients: (output.ingredients as RawLine[])
         .filter(line => line.text.trim())
         .map(line => normalizeLine(line, catalogById, categoryIds)),

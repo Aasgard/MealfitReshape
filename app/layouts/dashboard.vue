@@ -96,6 +96,10 @@ const links = [{
     label: 'Minuteurs',
     icon: 'i-lucide-timer',
     to: '/dashboard/minuteurs',
+  }, {
+    label: 'Bibliothèque',
+    icon: 'i-lucide-library',
+    to: '/dashboard/bibliotheque',
   }]
 }] satisfies NavigationMenuItem[]
 

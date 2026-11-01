@@ -35,6 +35,13 @@ export default defineNuxtConfig({
   pinia: {
     storesDirs: ['app/stores/**'],
   },
+  runtimeConfig: {
+    public: {
+      // Clé navigateur Google Books (NUXT_PUBLIC_GOOGLE_BOOKS_KEY), à restreindre au domaine de l'appli. Facultative :
+      // sans elle, les recherches ISBN partagent le quota anonyme de Google, souvent épuisé, et passent par Open Library.
+      googleBooksKey: '',
+    },
+  },
   experimental: {
     // Après un déploiement, un onglet resté ouvert demande des fichiers de l'ancienne version, supprimés : on recharge
     // l'appli dès l'échec plutôt qu'à la navigation suivante (voir aussi `error.vue`).

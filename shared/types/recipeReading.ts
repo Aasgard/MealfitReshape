@@ -12,6 +12,9 @@ export type CatalogIngredient = {
 
 export type CatalogCategory = { id: string; label: string }
 
+/** Livre de cuisine de la bibliothèque, pour reconnaître celui d'où vient la page. */
+export type CatalogBook = { id: string; title: string; authors: string[] }
+
 /** Ingrédient absent du catalogue, tel que Claude propose de le créer (valeurs pour 100 g estimées). */
 export type ProposedIngredient = {
   label: string
@@ -65,6 +68,10 @@ export type RecipeReading = {
   instructions: string
   /** Livre, magazine, site ou compte lisible sur la page ; vide sinon. */
   source: string
+  /** Livre de la bibliothèque envoyée d'où vient la recette ; `null` si aucun ne correspond. */
+  bookId: string | null
+  /** Numéro de page imprimé (« 42 », « 42-43 ») ; vide s'il n'est pas lisible. */
+  page: string
   ingredients: ReadIngredientLine[]
   dishImage: DishImageBox | null
 }

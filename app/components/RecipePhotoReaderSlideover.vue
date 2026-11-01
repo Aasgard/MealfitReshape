@@ -2,7 +2,7 @@
 import { useCurrentUser } from 'vuefire'
 import type { Ingredient } from '~/types/ingredient'
 import type { RecipeDraft } from '~/types/recipe'
-import type { CatalogIngredient, RecipeReading } from '#shared/types/recipeReading'
+import type { CatalogBook, CatalogIngredient, RecipeReading } from '#shared/types/recipeReading'
 import { cropImage, resizeImage } from '~/utils/imageResize'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
@@ -25,6 +25,8 @@ useOverlayBackClose(open)
 
 const user = useCurrentUser()
 const categoriesStore = useIngredientCategoriesStore()
+/** Livres de cuisine, envoyés à Claude pour reconnaître celui d'où vient la page. */
+const { books } = useBooks()
 const { generate: generateId } = useFirestoreId()
 
 const MAX_PAGES = 4
@@ -135,6 +137,7 @@ async function read() {
     sources.forEach((page, index) => body.append('photo', page.blob, `page-${index + 1}.jpg`))
     body.append('catalog', JSON.stringify(catalogForReading()))
     body.append('categories', JSON.stringify(categoriesStore.categories.map(c => ({ id: c.id, label: c.label }))))
+    body.append('books', JSON.stringify(books.value.map((b): CatalogBook => ({ id: b.id, title: b.title, authors: b.authors }))))
 
     const result = await $fetch<RecipeReading>('/api/read-recipe', {
       method: 'POST',

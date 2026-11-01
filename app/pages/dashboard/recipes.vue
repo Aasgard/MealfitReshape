@@ -99,13 +99,41 @@ watch(tagOptions, (options) => {
   if (selectedTagKeys.value.some(key => !known.has(key))) selectedTagKeys.value = selectedTagKeys.value.filter(key => known.has(key))
 })
 
+/** Livres de cuisine qui ont au moins une recette : le filtre n'apparaît que s'il y en a. */
+const { booksById } = useBooks()
+const bookOptions = computed(() => {
+  const counts = new Map<string, number>()
+  for (const r of recipes.value ?? []) {
+    if (r.bookId && booksById.value.has(r.bookId)) counts.set(r.bookId, (counts.get(r.bookId) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, label: booksById.value.get(id)!.title, count }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+})
+/** Une recette doit venir de l'un des livres sélectionnés. */
+const selectedBookIds = ref<string[]>([])
+
+// Depuis la bibliothèque (« Voir dans Recettes ») : `?livre=<id>` filtre la liste sur ce livre.
+const route = useRoute()
+const router = useRouter()
+watch(() => route.query.livre, (id) => {
+  if (typeof id !== 'string') return
+  selectedBookIds.value = [id]
+  router.replace({ query: { ...route.query, livre: undefined } })
+}, { immediate: true })
+
 /** Recettes masquées immédiatement pendant le délai d'annulation d'une suppression (voir confirmDeleteRecipe). */
 const pendingDeleteIds = ref(new Set<string>())
 
 const filteredRecipes = computed(() => {
   const list = (recipes.value ?? []).filter(r => !pendingDeleteIds.value.has(r.id)).filter((r) => {
-    // La recherche porte sur le titre et les tags : « batch » trouve les recettes taguées batch.
-    const matchesQuery = matchesSearch(r.title, searchQuery.value) || (r.tags ?? []).some(t => matchesSearch(t, searchQuery.value))
+    // La recherche porte sur le titre, les tags et le livre : « batch » trouve les recettes taguées batch,
+    // « simplissime » celles de ce livre.
+    const book = r.bookId ? booksById.value.get(r.bookId) : undefined
+    const matchesQuery = matchesSearch(r.title, searchQuery.value)
+      || (r.tags ?? []).some(t => matchesSearch(t, searchQuery.value))
+      || (!!book && matchesSearch(book.title, searchQuery.value))
+    const matchesBook = selectedBookIds.value.length === 0 || (!!r.bookId && selectedBookIds.value.includes(r.bookId))
     const matchesType = selectedTypes.value.length === 0 || (!!r.type && selectedTypes.value.includes(r.type))
     const matchesIngredients = selectedIngredientIds.value.length === 0 || (() => {
       const recipeIngredientIds = new Set((r.ingredients ?? []).map(line => line.ingredientRef?.id))
@@ -115,7 +143,7 @@ const filteredRecipes = computed(() => {
       const recipeTagKeys = new Set((r.tags ?? []).map(recipeTagKey))
       return selectedTagKeys.value.every(key => recipeTagKeys.has(key))
     })()
-    return matchesQuery && matchesType && matchesIngredients && matchesTags
+    return matchesQuery && matchesType && matchesIngredients && matchesTags && matchesBook
   })
 
   return sortList(list, r => recipeSortValue(r, sort.value.key, recipeMacrosById.value.get(r.id) ?? null), sort.value.direction, r => r.title)
@@ -158,6 +186,7 @@ const hasActiveFilters = computed(() =>
   || selectedTypes.value.length > 0
   || selectedIngredientIds.value.length > 0
   || selectedTagKeys.value.length > 0
+  || selectedBookIds.value.length > 0
 )
 
 const resetFilters = () => {
@@ -165,6 +194,7 @@ const resetFilters = () => {
   selectedTypes.value = []
   selectedIngredientIds.value = []
   selectedTagKeys.value = []
+  selectedBookIds.value = []
 }
 
 const formOpen = ref(false)
@@ -414,6 +444,22 @@ const confirmDeleteRecipe = () => {
                   :search-input="{ placeholder: 'Rechercher un tag...' }"
                   icon="i-lucide-tag"
                   aria-label="Filtrer par tag"
+                  class="w-full sm:min-w-0 sm:flex-1 2xl:w-56 2xl:flex-none"
+                >
+                  <template #item-trailing="{ item }">
+                    <span class="text-xs text-dimmed tabular-nums">{{ item.count }}</span>
+                  </template>
+                </USelectMenu>
+                <USelectMenu
+                  v-if="bookOptions.length || selectedBookIds.length"
+                  v-model="selectedBookIds"
+                  :items="bookOptions"
+                  value-key="id"
+                  multiple
+                  placeholder="Tous les livres"
+                  :search-input="{ placeholder: 'Rechercher un livre...' }"
+                  icon="i-lucide-book-open"
+                  aria-label="Filtrer par livre"
                   class="w-full sm:min-w-0 sm:flex-1 2xl:w-56 2xl:flex-none"
                 >
                   <template #item-trailing="{ item }">

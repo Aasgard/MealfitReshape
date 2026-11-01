@@ -2,8 +2,9 @@
 import type { DishStorage, PreparedDish } from '~/types/preparedDish'
 import { dayKeyOf } from '~/utils/menuWeek'
 import { addDays, parseISO } from 'date-fns'
-import { compareDishes, DISH_STORAGES, formatParts, isDishDepleted, isDishPlanned, isDishShown, PARTS_EPSILON } from '~/utils/preparedDishes'
+import { compareDishes, DISH_STORAGES, dishStorageOf, formatDishDay, formatParts, isDishDepleted, isDishPlanned, isDishShown, PARTS_EPSILON } from '~/utils/preparedDishes'
 import { COOKING_DAYS, recipesToCook } from '~/utils/recipesToCook'
+import { formatBaseGrams, GRAMS_EPSILON, type BaseStockState } from '~/utils/baseStock'
 
 useSeoMeta({
   title: 'Dashboard - Stock - Mealfit',
@@ -15,6 +16,33 @@ const { recipes, recipesById, ingredientsById } = useFoodCatalog()
 const { dishes, setDishParts, setDishStorage, deleteDish } = usePreparedDishes()
 const { household, loading: householdLoading } = useHousehold()
 
+// --- Bases (pickles, sauces) : comptées en grammes, les plats des menus y puisent leur part ---
+const { stocks: baseStocks, ledger: baseLedger, deleteStock: deleteBaseStock } = useBaseStocks()
+/** Bocaux à afficher : ceux où il reste quelque chose, ou que des repas à venir attendent encore. */
+const baseStates = computed(() => [...baseLedger.value.states.values()]
+  .filter(state => state.remaining >= GRAMS_EPSILON || state.reserved >= GRAMS_EPSILON)
+  .sort((a, b) => a.stock.label.localeCompare(b.stock.label, 'fr') || a.stock.preparedOn.localeCompare(b.stock.preparedOn)))
+const baseModalOpen = ref(false)
+const editedBaseState = ref<BaseStockState | null>(null)
+const addBaseStock = () => {
+  editedBaseState.value = null
+  baseModalOpen.value = true
+}
+const editBaseStock = (state: BaseStockState) => {
+  editedBaseState.value = state
+  baseModalOpen.value = true
+}
+/** Les repas à venir en attendent plus qu'il n'en reste : le manque se prépare (voir « Cuisiner »). */
+const baseShortage = (state: BaseStockState) => Math.max(0, state.reserved - state.remaining)
+const removeBaseStock = async (state: BaseStockState) => {
+  try {
+    await deleteBaseStock(state.stock)
+    toast.add({ title: 'Base retirée du stock', description: `« ${state.stock.label} »`, color: 'neutral', icon: 'i-lucide-trash-2' })
+  } catch (error: any) {
+    toast.add({ title: 'Erreur', description: `« ${state.stock.label} » n'a pas pu être retirée : ${error.message || 'une erreur est survenue'}.`, color: 'error' })
+  }
+}
+
 /** Membre qui a ajouté un plat, quand ce n'est pas le compte connecté (parti du foyer depuis : rien). */
 const addedBy = (dish: PreparedDish) => household.value?.members.find(m => m.id === dish.owner && !m.isSelf)
 
@@ -23,7 +51,7 @@ watch(dishes.error, (error) => {
   toast.add({ title: 'Erreur', description: `Impossible de charger le stock : ${error.message}`, color: 'error' })
 })
 
-const isLoading = computed(() => householdLoading.value || (dishes.pending.value && !dishes.value.length))
+const isLoading = computed(() => householdLoading.value || (dishes.pending.value && !dishes.value.length) || (baseStocks.pending.value && !baseStocks.value.length))
 
 /** Recalculé à chaque rendu : la page peut rester ouverte d'un jour à l'autre. */
 const todayKey = computed(() => dayKeyOf(new Date()))
@@ -150,12 +178,12 @@ const confirmDeleteDish = async () => {
         </template>
 
         <UEmpty
-          v-else-if="!groups.length"
+          v-else-if="!groups.length && !baseStates.length"
           class="py-12"
           icon="i-lucide-archive"
           title="Aucun plat en stock"
           description="Ajoutez un plat déjà préparé, ou une recette à cuisiner plus tard pour le stock (avec une date à venir). Des parts en plus d'une recette des menus se prévoient aussi depuis « Cuisiner » sur l'accueil. Pris dans un repas, un plat du stock ne se cuisine pas et ne s'achète pas."
-          :actions="[{ label: 'Ajouter un plat', icon: 'i-lucide-plus', onClick: () => addDish() }]"
+          :actions="[{ label: 'Ajouter un plat', icon: 'i-lucide-plus', onClick: () => addDish() }, { label: 'Mettre une base au stock', icon: 'i-lucide-cooking-pot', color: 'neutral', variant: 'outline', onClick: addBaseStock }]"
         />
 
         <template v-else>
@@ -198,10 +226,69 @@ const confirmDeleteDish = async () => {
               />
             </ul>
           </section>
+
+          <!-- Bases : un bocal par ligne, en grammes ; toucher la ligne corrige ce qu'il reste. -->
+          <section class="flex flex-col gap-3" aria-labelledby="stock-bases">
+            <div class="flex items-center justify-between gap-3">
+              <h2 id="stock-bases" class="flex items-baseline gap-2 text-lg font-bold tracking-tight text-highlighted">
+                <UIcon name="i-lucide-cooking-pot" class="size-5 shrink-0 self-center text-primary" aria-hidden="true" />
+                Bases
+                <span class="text-sm font-normal tracking-normal text-dimmed tabular-nums">
+                  {{ baseStates.length ? `${baseStates.length} bocal${baseStates.length > 1 ? 'x' : ''}` : 'pickles, sauces, pestos…' }}
+                </span>
+              </h2>
+              <UButton icon="i-lucide-plus" color="neutral" variant="ghost" size="sm" aria-label="Mettre une base au stock" @click="addBaseStock" />
+            </div>
+
+            <ul v-if="baseStates.length" class="divide-y divide-default overflow-hidden rounded-xl border border-default bg-default">
+              <li v-for="state in baseStates" :key="state.stock.id" class="flex items-center">
+                <button
+                  type="button"
+                  class="flex min-w-0 flex-1 items-center gap-3 p-4 pe-2 text-start transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+                  :aria-label="`Corriger ${state.stock.label}, reste ${formatBaseGrams(state.remaining)}`"
+                  @click="editBaseStock(state)"
+                >
+                  <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-accented text-muted" aria-hidden="true">
+                    <UIcon :name="dishStorageOf(state.stock.storage).icon" class="size-4" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-semibold text-highlighted">{{ state.stock.label }}</p>
+                    <p class="truncate text-xs text-dimmed">
+                      {{ dishStorageOf(state.stock.storage).label }} · préparée le {{ formatDishDay(state.stock.preparedOn) }}
+                      <template v-if="state.stock.comment"> · {{ state.stock.comment }}</template>
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 flex-col items-end">
+                    <p class="text-sm font-semibold tabular-nums text-highlighted">{{ formatBaseGrams(state.remaining) }}</p>
+                    <p v-if="baseShortage(state) >= GRAMS_EPSILON" class="text-xs tabular-nums text-warning">
+                      manque {{ formatBaseGrams(baseShortage(state)) }}
+                    </p>
+                    <p v-else-if="state.reserved >= GRAMS_EPSILON" class="text-xs tabular-nums text-dimmed">
+                      dont {{ formatBaseGrams(state.reserved) }} réservés
+                    </p>
+                  </div>
+                </button>
+                <UButton
+                  icon="i-lucide-trash-2"
+                  color="neutral"
+                  variant="ghost"
+                  class="me-2 shrink-0 text-dimmed"
+                  :aria-label="`Retirer ${state.stock.label} du stock`"
+                  @click="removeBaseStock(state)"
+                />
+              </li>
+            </ul>
+            <p v-else class="rounded-xl border border-dashed border-default px-4 py-5 text-sm text-muted text-pretty">
+              Une base préparée d'avance (bocal de pickles, pot de pesto) se range ici, en grammes. Les plats des menus qui
+              l'utilisent y puisent leur part : ses ingrédients ne s'ajoutent aux courses que s'il n'en reste pas assez.
+            </p>
+          </section>
         </template>
       </div>
     </template>
   </UDashboardPanel>
+
+  <BaseStockModal v-model:open="baseModalOpen" :stock="editedBaseState" :recipes="recipes" />
 
   <PreparedDishFormSlideover
     v-model:open="formOpen"

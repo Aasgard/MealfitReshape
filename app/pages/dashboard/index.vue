@@ -3,7 +3,7 @@ import { addDays, differenceInCalendarDays, format, parseISO, startOfDay, startO
 import { fr } from 'date-fns/locale'
 import { useCurrentUser } from 'vuefire'
 import type { Ingredient } from '~/types/ingredient'
-import type { Meal, MealSource, MealType, StockMealSource } from '~/types/meal'
+import type { Meal, MealBaseAdjustment, MealSource, MealType, StockMealSource } from '~/types/meal'
 import type { MenuEntry } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import type { Workout } from '~/types/workout'
@@ -13,10 +13,12 @@ import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTa
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
 import { buildDayEntries, consumedOfDay, mealSourceOf, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { COOKING_DAYS, recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
+import { baseStockLedger, GRAMS_EPSILON, mealBaseNeeds } from '~/utils/baseStock'
+import { baseYield } from '~/utils/recipeBases'
 import type { DishStorage } from '~/types/preparedDish'
 import { findBatchSurplus, formatParts, isDishPlanned, PARTS_EPSILON, SURPLUS_MEAL_PREFIX } from '~/utils/preparedDishes'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
-import { shortDayLabel, WEEK_STARTS_ON } from '~/utils/menuWeek'
+import { dayKeyOf, shortDayLabel, WEEK_STARTS_ON } from '~/utils/menuWeek'
 
 useSeoMeta({
   title: 'Dashboard - Accueil - Mealfit',
@@ -365,8 +367,57 @@ const cookingRecipes = computed<TodayCookingRecipe[]>(() => {
     return [{ recipeId: recipe.id, cookDay, title: recipe.title, persons: recipe.persons, imageUrl: recipe.imageUrl, days: [], parts: surplus.parts, surplus }]
   })
 
-  return [...batches, ...surplusOnly]
+  return [...baseItems(batches), ...batches, ...surplusOnly]
 })
+
+/**
+ * Bases à préparer le jour affiché, avant les plats qui les utilisent : ce que le stock de bases ne couvre pas pour les
+ * repas des fournées de ce jour, cumulé par base. Une base imbriquée (mayonnaise d'une rémoulade) se prépare dans la
+ * recette de sa base : seules celles des plats comptent.
+ */
+// Répartition du stock de bases sur les repas du foyer, ceux de la semaine compris (bases prévues, ajustées ou ajoutées).
+const { stocks: baseStocks, meals: baseStockMeals, todayKey: baseTodayKey } = useBaseStocks()
+const baseCoverage = computed(() => {
+  const byId = new Map([...baseStockMeals.value, ...upcomingMeals.value].map(meal => [meal.id, meal]))
+  return baseStockLedger(baseStocks.value, [...byId.values()], recipesById.value, ingredientsById.value, baseTodayKey.value).coverage
+})
+function baseItems(batches: TodayCookingRecipe[]): TodayCookingRecipe[] {
+  const cookDay = selectedDayKey.value
+  const byBase = new Map<string, { grams: number, for: Set<string> }>()
+  const toCook = recipesToCook(upcomingMeals.value.filter(isNotPendingDelete), COOKING_DAYS)
+  for (const batch of batches) {
+    const item = toCook
+      .find(candidate => candidate.recipeId === batch.recipeId && dayKeyOf(candidate.days[0]!) === cookDay)
+    const batchDays = new Set((item?.days ?? []).map(day => dayKeyOf(day)))
+    const meals = upcomingMeals.value.filter(meal => isNotPendingDelete(meal)
+      && meal.category === 'RECIPE' && meal.recipeId === batch.recipeId && batchDays.has(dayKeyOf(meal.date.toDate())))
+    for (const meal of meals) {
+      const coverage = baseCoverage.value.get(meal.id)
+      for (const [baseId, need] of mealBaseNeeds(meal, recipesById.value, ingredientsById.value)) {
+        const missing = need - (coverage?.get(baseId)?.covered ?? 0)
+        if (missing < GRAMS_EPSILON) continue
+        const entry = byBase.get(baseId) ?? { grams: 0, for: new Set<string>() }
+        entry.grams += missing
+        entry.for.add(batch.title)
+        byBase.set(baseId, entry)
+      }
+    }
+  }
+  return [...byBase].flatMap(([baseId, { grams, for: forTitles }]) => {
+    const base = recipesById.value.get(baseId)
+    if (!base) return []
+    const yieldGrams = baseYield(base)
+    return [{
+      recipeId: base.id,
+      cookDay,
+      title: base.title,
+      imageUrl: base.imageUrl,
+      days: [],
+      parts: yieldGrams ? grams / yieldGrams : 1,
+      base: { grams, for: [...forTitles] },
+    }]
+  })
+}
 
 // --- Décongeler : plats du congélateur prévus le lendemain du jour affiché, pour tout le foyer ---
 
@@ -498,7 +549,7 @@ const syncSurplusInclusion = async (dishId: string, recipeId: string, cookDay: s
   const own = inclusions.find(inclusion => inclusion.mealId === mealId)
   if (own?.state === 'bought') return
 
-  const catalog = { recipesById: recipesById.value, ingredientsById: ingredientsById.value }
+  const catalog = { recipesById: recipesById.value, ingredientsById: ingredientsById.value, baseCoverage: baseCoverage.value }
   if (surplusParts < PARTS_EPSILON) {
     if (own) await shoppingList.applyInclusions([], [own], catalog)
     return
@@ -600,20 +651,23 @@ const recipeDetailOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
 /** Parts du repas cliqué : la fiche recalcule les quantités d'ingrédients pour ce nombre de parts. */
 const selectedRecipeParts = ref<number | null>(null)
+/** Bases du repas cliqué mangées autrement que prévu : la fiche montre ces quantités. */
+const selectedBaseAdjustments = ref<MealBaseAdjustment[] | null>(null)
 const ingredientDetailOpen = ref(false)
 const selectedIngredient = ref<Ingredient | null>(null)
 
-const openRecipeDetail = (recipeId: string, parts?: number) => {
+const openRecipeDetail = (recipeId: string, parts?: number, baseAdjustments?: MealBaseAdjustment[]) => {
   const recipe = recipesById.value.get(recipeId)
   if (!recipe) return false
   selectedRecipe.value = recipe
   selectedRecipeParts.value = parts ?? null
+  selectedBaseAdjustments.value = baseAdjustments ?? null
   recipeDetailOpen.value = true
   return true
 }
 
 const openEntryDetail = (entry: MenuEntry) => {
-  if (entry.recipeId && openRecipeDetail(entry.recipeId, entry.parts)) return
+  if (entry.recipeId && openRecipeDetail(entry.recipeId, entry.parts, entry.baseAdjustments)) return
   const ingredient = entry.ingredientId ? ingredientsById.value.get(entry.ingredientId) : undefined
   if (ingredient) {
     selectedIngredient.value = ingredient
@@ -984,6 +1038,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :recipe="selectedRecipe"
     :ingredients-by-id="ingredientsById"
     :parts="selectedRecipeParts"
+    :base-adjustments="selectedBaseAdjustments"
   />
 
   <IngredientDetailSlideover v-model:open="ingredientDetailOpen" :ingredient="selectedIngredient" />

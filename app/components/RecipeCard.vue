@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Recipe } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
-import { recipeTypeLabel } from '~/utils/recipeType'
+import { isBaseRecipe, recipeTypeIcon, recipeTypeLabel } from '~/utils/recipeType'
+import { baseKey } from '~/utils/recipeLineSource'
 import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
 
@@ -22,14 +23,21 @@ const emit = defineEmits<{
 
 const difficultyLabel = computed(() => recipeDifficultyLabel(props.recipe.difficulty))
 const difficultyColor = computed(() => recipeDifficultyColor(props.recipe.difficulty))
-const personsLabel = computed(() => `${props.recipe.persons ?? 1}`)
+const isBase = computed(() => isBaseRecipe(props.recipe))
+/** Parts d'un plat ; rendement en grammes d'une base (« — » s'il manque). */
+const personsLabel = computed(() => (isBase.value
+  ? (props.recipe.yieldGrams ? `${props.recipe.yieldGrams.toLocaleString('fr-FR')} g` : '— g')
+  : `${props.recipe.persons ?? 1}`))
 
 const ingredientCount = computed(() => props.recipe.ingredients?.length ?? 0)
 const ingredientCountLabel = computed(() => ingredientCount.value
   ? `${ingredientCount.value} ingrédient${ingredientCount.value > 1 ? 's' : ''}`
   : 'Aucun ingrédient')
 
-const macros = computed(() => macrosForRecipe(props.recipe.ingredients, props.ingredientsById, props.recipe.persons ?? 1))
+/** Par part pour un plat, pour 100 g pour une base (valeurs de son ingrédient virtuel). */
+const macros = computed(() => (isBase.value
+  ? props.ingredientsById.get(baseKey(props.recipe.id))?.valuesBy100 ?? { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
+  : macrosForRecipe(props.recipe.ingredients, props.ingredientsById, props.recipe.persons ?? 1)))
 const hasMacros = computed(() =>
   macros.value.calories > 0 || macros.value.protein > 0 || macros.value.carbohydrates > 0 || macros.value.fat > 0
 )
@@ -66,7 +74,7 @@ const actionItems = computed(() => [
       <div class="absolute inset-x-0 top-0 p-2 flex flex-wrap items-start justify-between gap-2">
         <UBadge
           v-if="recipe.type"
-          icon="i-lucide-utensils"
+          :icon="isBase ? recipeTypeIcon(recipe.type)! : 'i-lucide-utensils'"
           :label="recipeTypeLabel(recipe.type)"
           color="neutral"
           variant="subtle"
@@ -75,8 +83,9 @@ const actionItems = computed(() => [
         />
         <div class="flex items-center gap-2 ml-auto">
           <UBadge
-            icon="i-lucide-users"
+            :icon="isBase ? 'i-lucide-weight' : 'i-lucide-users'"
             :label="personsLabel"
+            :title="isBase ? 'Rendement' : 'Parts'"
             color="neutral"
             variant="subtle"
             size="sm"
@@ -130,7 +139,10 @@ const actionItems = computed(() => [
         </span>
       </div>
 
-      <IngredientMacroSummary :macros="hasMacros ? macros : null" class="mt-1" />
+      <div class="mt-1 flex flex-col gap-1">
+        <IngredientMacroSummary :macros="hasMacros ? macros : null" />
+        <p v-if="isBase" class="text-xs text-dimmed">Pour 100 g</p>
+      </div>
 
       <div class="flex flex-wrap items-center gap-2 mt-auto pt-2 border-t border-default">
         <UBadge

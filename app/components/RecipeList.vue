@@ -4,7 +4,7 @@ import type { Recipe } from '~/types/recipe'
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
 import { nextSort, type SortOption, type SortState } from '~/utils/listSort'
 import { recipeDifficultyRank, recipeSortOption, recipeTotalTime, type RecipeSortKey } from '~/utils/recipeSort'
-import { recipeTypeIcon, recipeTypeLabel } from '~/utils/recipeType'
+import { isBaseRecipe, recipeTypeIcon, recipeTypeLabel } from '~/utils/recipeType'
 import { recipeDifficultyColor, recipeDifficultyLabel } from '~/utils/recipeDifficulty'
 
 /**
@@ -201,7 +201,7 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 10 : 0 
 
             <template v-if="macrosOf(recipe)">
               <td class="pl-2 pr-5 py-2 text-right tabular-nums whitespace-nowrap" :class="valueClass('calories')">
-                {{ round(macrosOf(recipe)!.calories) }}
+                {{ round(macrosOf(recipe)!.calories) }}<span v-if="isBaseRecipe(recipe)" class="ml-0.5 text-xs font-normal text-dimmed" title="Base : valeurs pour 100 g">/100 g</span>
               </td>
               <td class="pl-2 pr-5 py-2">
                 <MacroPie
@@ -297,7 +297,7 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 10 : 0 
           class="flex-1 min-w-0 flex flex-col gap-1 py-2.5 pl-3 pr-1 text-left transition-colors hover:bg-elevated/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           :aria-label="[
             `Voir le détail de ${recipe.title}`,
-            macrosOf(recipe) ? `${round(macrosOf(recipe)!.calories)} kcal par part` : null,
+            macrosOf(recipe) ? `${round(macrosOf(recipe)!.calories)} kcal ${isBaseRecipe(recipe) ? 'pour 100 g' : 'par part'}` : null,
           ].filter(Boolean).join(', ')"
           @click="emit('select', recipe)"
         >
@@ -306,7 +306,7 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 10 : 0 
             <span v-if="macrosOf(recipe)" class="ml-auto flex items-center gap-2 shrink-0 text-sm">
               <span class="flex items-baseline gap-1">
                 <span class="tabular-nums font-semibold text-highlighted">{{ round(macrosOf(recipe)!.calories) }}</span>
-                <span class="text-xs text-dimmed">kcal</span>
+                <span class="text-xs text-dimmed">kcal<template v-if="isBaseRecipe(recipe)"> /100 g</template></span>
               </span>
               <MacroPie
                 :carbohydrates="macrosOf(recipe)!.carbohydrates"

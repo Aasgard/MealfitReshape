@@ -44,7 +44,7 @@ defineProps<{
       />
 
       <section v-if="macros" class="recipe-print__section">
-        <h2>Valeurs nutritionnelles pour une part{{ variantNote ? ' (avec variante)' : '' }}</h2>
+        <h2>Valeurs nutritionnelles {{ recipe.type === 'BASE' ? 'pour 100 g' : 'pour une part' }}{{ variantNote ? ' (avec variante)' : '' }}</h2>
         <table class="recipe-print__macros">
           <thead>
             <tr>

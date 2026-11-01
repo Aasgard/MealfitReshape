@@ -1,7 +1,11 @@
 import type { Ingredient } from '~/types/ingredient'
-import type { Recipe } from '~/types/recipe'
+import type { Recipe, RecipeIngredientLine } from '~/types/recipe'
 import type { ShoppingContribution, ShoppingItem, ShoppingMealInclusion } from '~/types/shoppingList'
 import { ingredientAmount, OUTSIDE_RECIPE_SOURCE, recipeBatches } from './shoppingList'
+import { expandRecipeLines } from './recipeBases'
+import type { DocumentReference } from 'firebase/firestore'
+import { GRAMS_EPSILON, type MealBaseCoverage } from './baseStock'
+import { baseGrams, plannedBases } from './mealBaseAdjustments'
 
 /**
  * Liste de courses dynamique : les repas inclus (`shoppingMeals`) déterminent les apports des articles
@@ -12,6 +16,8 @@ import { ingredientAmount, OUTSIDE_RECIPE_SOURCE, recipeBatches } from './shoppi
 export interface ShoppingCatalog {
   recipesById: Map<string, Recipe>
   ingredientsById: Map<string, Ingredient>
+  /** Part des bases de chaque repas couverte par le stock de bases (voir `baseStockLedger`) ; absente : rien en stock. */
+  baseCoverage?: Map<string, Map<string, MealBaseCoverage>>
 }
 
 const EPSILON = 1e-6
@@ -56,6 +62,30 @@ export function keyTarget(key: string, inclusions: ShoppingMealInclusion[], cata
       return result
     }
     const persons = recipe.persons && recipe.persons > 0 ? recipe.persons : 1
+    /** Bases manquantes des repas d'une fournée, en lignes de base (grammes) ; un repas partagé entre deux fournées ne compte qu'une fois. */
+    const ownById = new Map(own.map(inclusion => [inclusion.id, inclusion]))
+    const countedMeals = new Set<string>()
+    const missingBaseLines = (inclusionIds: string[]): RecipeIngredientLine[] => {
+      const missing = new Map<string, number>()
+      const add = (baseId: string, grams: number) => missing.set(baseId, (missing.get(baseId) ?? 0) + grams)
+      for (const id of inclusionIds) {
+        const inclusion = ownById.get(id)
+        if (!inclusion || countedMeals.has(id)) continue
+        countedMeals.add(id)
+        const entries = catalog.baseCoverage?.get(inclusion.mealId)
+        if (entries) {
+          for (const [baseId, { need, covered }] of entries) add(baseId, need - covered)
+          continue
+        }
+        // Repas inconnu de la répartition (surplus d'une fournée) : ce que prévoit la recette pour ses parts.
+        for (const planned of plannedBases(recipe, inclusion.parts ?? 0)) {
+          for (const line of planned.lines) add(planned.recipeId, baseGrams(planned.recipeId, line.unit, line.quantity, catalog.ingredientsById) ?? 0)
+        }
+      }
+      return [...missing]
+        .filter(([, grams]) => grams >= GRAMS_EPSILON)
+        .map(([baseId, grams]) => ({ recipeRef: { id: baseId } as DocumentReference, quantity: grams }))
+    }
     const batches = recipeBatches(own.map(inclusion => ({ id: inclusion.id, date: inclusion.date, parts: inclusion.parts ?? 0 })), persons)
     for (const batch of batches) {
       for (const id of batch.covers) result.dayOf.set(id, batch.day)
@@ -63,7 +93,15 @@ export function keyTarget(key: string, inclusions: ShoppingMealInclusion[], cata
         result.frozenDays.add(batch.day)
         continue
       }
-      for (const line of recipe.ingredients ?? []) {
+      // Avec la répartition du stock de bases, les bases se comptent repas par repas (prévues, ajustées ou ajoutées sur
+      // le repas) et seul ce que le stock ne couvre pas se déplie en ses ingrédients ; sans elle, la recette se déplie entière.
+      const lines = catalog.baseCoverage
+        ? [
+            ...expandRecipeLines(recipe.ingredients, catalog.recipesById, result.skipped, () => 1),
+            ...expandRecipeLines(missingBaseLines(batch.covers), catalog.recipesById, result.skipped),
+          ]
+        : expandRecipeLines(recipe.ingredients, catalog.recipesById, result.skipped)
+      for (const line of lines) {
         const ingredient = line.ingredientRef ? catalog.ingredientsById.get(line.ingredientRef.id) : undefined
         if (!ingredient || line.quantity <= 0) continue
         const amount = ingredientAmount(ingredient, line.unit ?? null, line.quantity)

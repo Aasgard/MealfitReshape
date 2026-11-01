@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
-import type { MealSource, ScannedProduct, StockMealSource } from '~/types/meal'
+import type { MealBaseAdjustment, MealSource, ScannedProduct, StockMealSource } from '~/types/meal'
 import type { MacroEstimate } from '#shared/types/macroEstimate'
 import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
@@ -8,7 +8,10 @@ import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, buildStockDra
 import { compareDishes, dishStorageOf, formatDishDay, formatParts, isDishPlanned, isDishStale, PARTS_EPSILON } from '~/utils/preparedDishes'
 import { gramsForUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
-import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { isBaseRecipe, MEAL_RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { recipeIngredientIds } from '~/utils/recipeBases'
+import { baseKey } from '~/utils/recipeLineSource'
+import { baseGrams, plannedBases, type PlannedBase } from '~/utils/mealBaseAdjustments'
 import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
 import { matchesSearch } from '~/utils/search'
 import { recipeTagKey, recipeTagVocabulary } from '~/utils/recipeTags'
@@ -93,7 +96,11 @@ const submitted = ref(false)
 
 /** Libellé du type de recette, raccourci pour le petit-déjeuner comme dans le calendrier (« Petit déj »). */
 const shortRecipeTypeLabel = (type: string) => type === 'BREAKFAST' ? 'Petit déj' : recipeTypeLabel(type)
-const recipeTypeFilterOptions = RECIPE_TYPES.map(t => ({ value: t, label: shortRecipeTypeLabel(t) }))
+const recipeTypeFilterOptions = MEAL_RECIPE_TYPES.map(t => ({ value: t, label: shortRecipeTypeLabel(t) }))
+
+/** Recettes qu'on sert en repas : une base (pickles, sauce) n'y entre qu'à travers les plats qui l'utilisent. */
+const mealRecipes = computed(() => props.recipes.filter(r => !isBaseRecipe(r)))
+const recipesById = computed(() => new Map(props.recipes.map(r => [r.id, r])))
 
 /** Filtres cumulatifs de la liste des recettes : l'un des types choisis, tous les ingrédients et tous les tags choisis. Vides = pas de filtre. */
 const recipeTypeFilter = ref<RecipeType[]>([])
@@ -179,6 +186,116 @@ const parts = ref(1)
 const stepParts = (direction: 1 | -1) => {
   parts.value = Math.max(PARTS_STEP, parts.value + direction * PARTS_STEP)
 }
+
+// --- Bases du plat (pickles, sauce) mangées autrement que prévu, ou ajoutées au repas ---
+
+/** Quantité saisie d'une base, dans l'une de ses portions ou en grammes (GRAMS_UNIT). */
+interface BaseEdit { quantity: string, unit: string }
+/**
+ * Bases retouchées pour la recette `recipeId` : choisir une autre recette les oublie. `added` = bases absentes de la
+ * recette, dans l'ordre d'ajout.
+ */
+interface BaseEdits { recipeId: string | undefined, edits: Record<string, BaseEdit>, added: string[] }
+const baseEdits = ref<BaseEdits>({ recipeId: undefined, edits: {}, added: [] })
+const currentBaseEdits = computed<BaseEdits>(() =>
+  baseEdits.value.recipeId === recipeId.value ? baseEdits.value : { recipeId: recipeId.value, edits: {}, added: [] })
+const editBases = (mutate: (state: BaseEdits) => void) => {
+  if (baseEdits.value.recipeId !== recipeId.value) baseEdits.value = { recipeId: recipeId.value, edits: {}, added: [] }
+  mutate(baseEdits.value)
+}
+
+/** Les bases accessibles : de quoi en ajouter une au repas. */
+const hasAnyBase = computed(() => props.recipes.some(isBaseRecipe))
+const formatBaseAmount = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+const baseLabel = (id: string) => props.ingredientsById.get(baseKey(id))?.label ?? 'Base introuvable'
+const baseQuantityText = (id: string, unit: string | undefined, quantity: number) => {
+  const portion = unit ? props.ingredientsById.get(baseKey(id))?.units?.[unit] : undefined
+  return portion ? `${formatBaseAmount(quantity)} × ${portion.label}` : `${formatBaseAmount(quantity)} g`
+}
+/** Valeur de départ du champ : la quantité prévue, dans l'unité de la recette (en grammes si la base y figure plusieurs fois). */
+const plannedDefault = (planned: PlannedBase): BaseEdit => {
+  const [only] = planned.lines
+  if (planned.lines.length === 1 && only) return { quantity: formatBaseAmount(only.quantity), unit: only.unit ?? GRAMS_UNIT }
+  const grams = planned.lines.reduce((total, line) => total + (baseGrams(planned.recipeId, line.unit, line.quantity, props.ingredientsById) ?? 0), 0)
+  return { quantity: formatBaseAmount(Math.round(grams)), unit: GRAMS_UNIT }
+}
+const baseUnitOptions = (id: string) => [
+  ...Object.entries(props.ingredientsById.get(baseKey(id))?.units ?? {})
+    .sort(([, a], [, b]) => a.value - b.value)
+    .map(([key, u]) => ({ value: key, label: `${u.label} (${formatBaseAmount(u.value)} g)` })),
+  { value: GRAMS_UNIT, label: 'Grammes (g)' },
+]
+
+/** Une ligne par base de la recette (quantité prévue pour les parts choisies), puis les bases ajoutées au repas. */
+const baseRows = computed(() => {
+  const recipe = selectedRecipe.value
+  if (!recipe) return []
+  const state = currentBaseEdits.value
+  const planned = plannedBases(recipe, parts.value)
+  const rows = planned.map(p => ({
+    recipeId: p.recipeId,
+    planned: p as PlannedBase | null,
+    plannedLabel: p.lines.map(line => baseQuantityText(p.recipeId, line.unit, line.quantity)).join(' + ') as string | null,
+    value: state.edits[p.recipeId] ?? plannedDefault(p),
+    edited: !!state.edits[p.recipeId],
+  }))
+  for (const id of state.added) {
+    if (planned.some(p => p.recipeId === id)) continue
+    rows.push({ recipeId: id, planned: null, plannedLabel: null, value: state.edits[id] ?? { quantity: '', unit: GRAMS_UNIT }, edited: true })
+  }
+  return rows.map(row => ({ ...row, label: baseLabel(row.recipeId), unitOptions: baseUnitOptions(row.recipeId) }))
+})
+type BaseRow = (typeof baseRows.value)[number]
+
+const setBaseValue = (row: BaseRow, patch: Partial<BaseEdit>) => editBases((state) => {
+  state.edits[row.recipeId] = { ...row.value, ...patch }
+})
+/** Revient à la quantité de la recette, ou retire une base ajoutée au repas. */
+const resetBase = (row: BaseRow) => editBases((state) => {
+  delete state.edits[row.recipeId]
+  state.added = state.added.filter(id => id !== row.recipeId)
+})
+
+const addableBases = computed(() => props.recipes
+  .filter(r => isBaseRecipe(r) && !baseRows.value.some(row => row.recipeId === r.id))
+  .map(r => ({ id: r.id, label: r.title }))
+  .sort(byLabel))
+const baseToAdd = ref<string | undefined>(undefined)
+const addBase = (id: string | undefined) => {
+  if (!id) return
+  editBases((state) => {
+    state.added.push(id)
+    state.edits[id] = { quantity: '', unit: baseUnitOptions(id)[0]!.value }
+  })
+  nextTick(() => { baseToAdd.value = undefined })
+}
+
+const baseQuantityError = (row: BaseRow) => {
+  if (!row.edited) return undefined
+  if (!row.value.quantity.trim()) return submitted.value ? 'Requis' : undefined
+  return parseNonNegativeNumber(row.value.quantity) === null ? 'Nombre invalide' : undefined
+}
+
+/**
+ * Ce qui part avec le repas : les bases dont la quantité s'écarte de la recette, et celles ajoutées (sauf à 0).
+ * `null` tant qu'une quantité saisie n'est pas un nombre.
+ */
+const baseAdjustments = computed<MealBaseAdjustment[] | null>(() => {
+  const result: MealBaseAdjustment[] = []
+  for (const row of baseRows.value) {
+    if (!row.edited) continue
+    const quantity = parseNonNegativeNumber(row.value.quantity)
+    if (quantity === null) return null
+    if (row.planned) {
+      const planned = plannedDefault(row.planned)
+      if (row.value.unit === planned.unit && Math.abs(quantity - (parseNonNegativeNumber(planned.quantity) ?? -1)) < 1e-6) continue
+    } else if (quantity === 0) {
+      continue
+    }
+    result.push({ recipeId: row.recipeId, quantity, ...(row.value.unit !== GRAMS_UNIT ? { unit: row.value.unit } : {}) })
+  }
+  return result
+})
 
 /**
  * Onglet Stock : un plat déjà préparé et le nombre de parts qu'on y prend, sans dépasser ce qui reste. En modification,
@@ -337,6 +454,8 @@ watch(open, (isOpen) => {
   product.value = null
   productQuantity.value = ''
   macrosEstimated.value = false
+  baseEdits.value = { recipeId: undefined, edits: {}, added: [] }
+  baseToAdd.value = undefined
 
   const source = props.initialSource
   if (source?.category === 'STOCK') {
@@ -346,6 +465,13 @@ watch(open, (isOpen) => {
   } else if (source?.category === 'RECIPE') {
     recipeId.value = source.recipeId
     parts.value = source.value
+    // Bases déjà ajustées : chacune reprend sa quantité ; celles hors recette se retrouvent parmi les ajoutées.
+    const adjustments = source.baseAdjustments ?? []
+    baseEdits.value = {
+      recipeId: source.recipeId,
+      edits: Object.fromEntries(adjustments.map(a => [a.recipeId, { quantity: formatBaseAmount(a.quantity), unit: a.unit ?? GRAMS_UNIT }])),
+      added: adjustments.map(a => a.recipeId),
+    }
   } else if (source?.category === 'INGREDIENT') {
     mode.value = 'ingredient'
     ingredientId.value = source.ingredientId
@@ -373,7 +499,7 @@ const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCo
 
 /** Ingrédients présents dans au moins une recette, pour ne proposer que des filtres utiles. */
 const recipeIngredientFilterOptions = computed(() => {
-  const usedIds = new Set(props.recipes.flatMap(r => (r.ingredients ?? []).map(line => line.ingredientRef?.id)))
+  const usedIds = new Set(mealRecipes.value.flatMap(r => [...recipeIngredientIds(r, recipesById.value)]))
   return [...usedIds]
     .map(id => id ? props.ingredientsById.get(id) : undefined)
     .filter((i): i is Ingredient => !!i)
@@ -389,7 +515,7 @@ const TAG_VALUE_PREFIX = 'tag:'
 const INGREDIENT_VALUE_PREFIX = 'ingredient:'
 
 const recipeContentFilterItems = computed(() => {
-  const tags = recipeTagVocabulary(props.recipes)
+  const tags = recipeTagVocabulary(mealRecipes.value)
     .map(t => ({ value: TAG_VALUE_PREFIX + t.key, label: t.label, icon: 'i-lucide-tag', count: t.count }))
   const ingredients = recipeIngredientFilterOptions.value
     .map(i => ({ value: INGREDIENT_VALUE_PREFIX + i.id, label: i.label, icon: 'i-lucide-carrot' }))
@@ -457,8 +583,9 @@ function isIngredientSeasonCompatible(ingredient: Ingredient) {
  * ne compte pas comme hors saison : faute d'information, il n'écarte pas la recette.
  */
 const isRecipeInSeason = (recipe: Recipe) =>
-  (recipe.ingredients ?? []).every((line) => {
-    const ingredient = line.ingredientRef ? props.ingredientsById.get(line.ingredientRef.id) : undefined
+  // Les ingrédients des bases comptent : des pickles de tomates sont hors saison avec les tomates.
+  [...recipeIngredientIds(recipe, recipesById.value)].every((id) => {
+    const ingredient = props.ingredientsById.get(id)
     return !ingredient || isIngredientSeasonCompatible(ingredient)
   })
 
@@ -471,8 +598,8 @@ const matchesRecipeFilters = (recipe: Recipe) => {
     if (!recipeTagFilter.value.every(key => recipeTagKeys.has(key))) return false
   }
   if (!recipeIngredientFilter.value.length) return true
-  const recipeIngredientIds = new Set((recipe.ingredients ?? []).map(line => line.ingredientRef?.id))
-  return recipeIngredientFilter.value.every(id => recipeIngredientIds.has(id))
+  const ids = recipeIngredientIds(recipe, recipesById.value)
+  return recipeIngredientFilter.value.every(id => ids.has(id))
 }
 
 /** Écart à l'état par défaut (aucun type, ingrédient ni tag, saison et objectifs actifs) : « Réinitialiser » y revient. */
@@ -497,7 +624,7 @@ const isExceeded = (key: TargetKey) => (remaining.value?.[key] ?? 0) < 0
 
 /** Chaque recette avec ses kcal et sa répartition des macros pour une part, affichées en fin de ligne. */
 const recipeOptions = computed(() =>
-  props.recipes
+  mealRecipes.value
     .filter(matchesRecipeFilters)
     // Comme sur la page Recettes, la recherche porte aussi sur les tags.
     .filter(r => matchesSearch(r.title, recipeSearch.value) || (r.tags ?? []).some(t => matchesSearch(t, recipeSearch.value)))
@@ -730,8 +857,9 @@ const manualMacros = computed(() => {
 const mealSource = computed<MealSource | null>(() => {
   if (mode.value === 'stock') return stockSource.value
   if (mode.value === 'recipe') {
-    if (!recipeId.value || !parts.value) return null
-    return { category: 'RECIPE', recipeId: recipeId.value, value: parts.value }
+    if (!recipeId.value || !parts.value || baseAdjustments.value === null) return null
+    const adjustments = baseAdjustments.value
+    return { category: 'RECIPE', recipeId: recipeId.value, value: parts.value, ...(adjustments.length ? { baseAdjustments: adjustments } : {}) }
   }
   if (mode.value === 'ingredient') {
     if (!ingredientId.value || quantityValue.value === null) return null
@@ -757,7 +885,7 @@ const draft = computed<MenuEntryDraft | null>(() => {
   if (mode.value === 'stock') return stockSource.value ? buildStockDraft(stockSource.value, stockSource.value.value) : null
   if (mode.value === 'recipe') {
     if (!selectedRecipe.value || !parts.value) return null
-    return buildRecipeDraft(selectedRecipe.value, parts.value, props.ingredientsById)
+    return buildRecipeDraft(selectedRecipe.value, parts.value, props.ingredientsById, baseAdjustments.value ?? undefined)
   }
   if (mode.value === 'ingredient') {
     if (!selectedIngredient.value || quantityValue.value === null) return null
@@ -1163,6 +1291,96 @@ const onSubmit = () => {
               @click="takeFromStock"
             />
           </div>
+
+          <!--
+            Bases du plat (pickles, sauce) : une ligne par base, toujours visible, avec la quantité prévue par la recette et
+            celle réellement mangée ; le « + » de la première ligne ajoute une base absente de la recette.
+          -->
+          <section
+            v-if="selectedRecipe && (baseRows.length || hasAnyBase)"
+            aria-label="Bases du repas"
+            class="shrink-0 max-h-24 overflow-y-auto overscroll-contain rounded-md ring ring-inset ring-default divide-y divide-default"
+          >
+            <div
+              v-for="(row, index) in baseRows.length ? baseRows : [null]"
+              :key="row?.recipeId ?? 'none'"
+              class="flex items-start gap-1.5 px-2 py-1"
+            >
+              <UIcon
+                name="i-lucide-cooking-pot"
+                class="mt-1 size-3.5 shrink-0"
+                :class="row?.edited ? 'text-primary' : 'text-muted'"
+                aria-hidden="true"
+              />
+              <template v-if="row">
+                <p class="min-w-0 flex-1 truncate pt-0.5 text-xs" :title="row.plannedLabel ? `${row.label} : ${row.plannedLabel} prévu par la recette` : `${row.label} : ajoutée à ce repas`">
+                  <span class="font-medium" :class="row.edited ? 'text-primary' : 'text-highlighted'">{{ row.label }}</span>
+                  <span class="tabular-nums text-dimmed"> · {{ row.plannedLabel ? `prévu ${row.plannedLabel}` : 'ajoutée' }}</span>
+                </p>
+                <UFormField class="w-14 shrink-0" :error="baseQuantityError(row)" :ui="{ error: 'mt-0.5 text-xs' }">
+                  <UInput
+                    :model-value="row.value.quantity"
+                    type="search"
+                    inputmode="decimal"
+                    enterkeyhint="done"
+                    autocomplete="off"
+                    spellcheck="false"
+                    data-form-type="other"
+                    data-lpignore="true"
+                    placeholder="qté"
+                    :aria-label="`Quantité de ${row.label} mangée`"
+                    size="xs"
+                    variant="outline"
+                    class="w-full"
+                    :ui="{ base: `${NAME_FIELD_BASE} tabular-nums` }"
+                    @update:model-value="(value) => setBaseValue(row, { quantity: String(value) })"
+                  />
+                </UFormField>
+                <USelectMenu
+                  v-if="row.unitOptions.length > 1"
+                  :model-value="row.value.unit"
+                  :items="row.unitOptions"
+                  value-key="value"
+                  :search-input="false"
+                  :aria-label="`Unité de ${row.label}`"
+                  size="xs"
+                  class="w-20 shrink-0"
+                  @update:model-value="(value) => setBaseValue(row, { unit: String(value) })"
+                />
+                <span v-else class="w-4 shrink-0 pt-0.5 text-xs text-dimmed">g</span>
+                <UButton
+                  :icon="row.planned ? 'i-lucide-undo-2' : 'i-lucide-x'"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  :class="row.planned && !row.edited && 'invisible'"
+                  :aria-label="row.planned ? `Revenir à la quantité de la recette pour ${row.label}` : `Retirer ${row.label} du repas`"
+                  :title="row.planned ? 'Revenir à la recette' : 'Retirer'"
+                  @click="resetBase(row)"
+                />
+              </template>
+              <p v-else class="min-w-0 flex-1 truncate pt-0.5 text-xs text-dimmed">
+                <span class="font-medium text-highlighted">Bases</span> · ajouter une sauce, des pickles…
+              </p>
+              <!-- Ajout d'une base absente de la recette : un « + » seul, au bout de la première ligne. -->
+              <USelectMenu
+                v-if="index === 0 && addableBases.length"
+                v-model="baseToAdd"
+                :items="addableBases"
+                value-key="id"
+                :search-input="{ placeholder: 'Rechercher une base...' }"
+                icon="i-lucide-plus"
+                size="xs"
+                variant="ghost"
+                aria-label="Ajouter une base au repas"
+                title="Ajouter une base"
+                :content="{ align: 'end' }"
+                :ui="{ base: 'px-1.5', trailing: 'hidden', content: 'min-w-56' }"
+                class="shrink-0"
+                @update:model-value="addBase"
+              />
+            </div>
+          </section>
         </template>
 
         <template v-else-if="mode === 'ingredient'">
@@ -1434,5 +1652,6 @@ const onSubmit = () => {
     :recipe="viewedRecipe"
     :ingredients-by-id="ingredientsById"
     :parts="parts"
+    :base-adjustments="viewedRecipe?.id === recipeId ? baseAdjustments : null"
   />
 </template>

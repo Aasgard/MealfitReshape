@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { addDays, addWeeks, differenceInCalendarWeeks, isSameWeek, parseISO, startOfWeek, subWeeks } from 'date-fns'
-import type { Meal, MealSource, MealType } from '~/types/meal'
+import type { Meal, MealBaseAdjustment, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry, MenuMemberRow, MenuPerson } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { DAILY_TARGETS } from '~/utils/dailyTargets'
@@ -336,6 +336,8 @@ const slideoverOpen = ref(false)
 const selectedRecipe = ref<Recipe | null>(null)
 /** Parts du repas cliqué : la fiche recalcule les quantités d'ingrédients pour ce nombre de parts. */
 const selectedRecipeParts = ref<number | null>(null)
+/** Bases du repas cliqué mangées autrement que prévu : la fiche montre ces quantités. */
+const selectedBaseAdjustments = ref<MealBaseAdjustment[] | null>(null)
 
 const findEntry = (entryId: string) => [
   ...Object.values(entries.value).flatMap(meals => Object.values(meals).flat()),
@@ -349,6 +351,7 @@ const openEntryRecipe = (entry: MenuEntry | undefined) => {
 
   selectedRecipe.value = recipe
   selectedRecipeParts.value = entry?.parts ?? null
+  selectedBaseAdjustments.value = entry?.baseAdjustments ?? null
   slideoverOpen.value = true
 }
 
@@ -606,6 +609,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <UIcon name="i-lucide-message-square-text" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         {{ actionsEntry.comment }}
       </p>
+      <!-- Bases mangées autrement que prévu : « Modifier » permet de les reprendre. -->
+      <p v-if="actionsEntry?.baseAdjustmentLabel" class="mb-3 flex items-start gap-1.5 rounded-md bg-elevated px-3 py-2 text-sm text-muted">
+        <UIcon name="i-lucide-cooking-pot" class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+        <span class="tabular-nums">{{ actionsEntry.baseAdjustmentLabel }}</span>
+      </p>
       <div class="flex flex-col gap-1">
         <UButton
           v-if="actionsEntry?.recipeId"
@@ -681,5 +689,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :recipe="selectedRecipe"
     :ingredients-by-id="ingredientsById"
     :parts="selectedRecipeParts"
+    :base-adjustments="selectedBaseAdjustments"
   />
 </template>

@@ -6,10 +6,13 @@ import type { Recipe, RecipeDraft, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import type { ProposedIngredient, ReadIngredientLine } from '#shared/types/recipeReading'
 import type { IngredientPrefill } from '~/utils/offNutrition'
-import { RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { RECIPE_TYPES, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { RECIPE_DIFFICULTIES, recipeDifficultyLabel, type RecipeDifficulty } from '~/utils/recipeDifficulty'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
+import { baseIdOfKey, baseKey, lineBaseId, lineSourceKey } from '~/utils/recipeLineSource'
+import { basesContaining, linesGrams, recipesUsingBase, withRecipeBases } from '~/utils/recipeBases'
+import { formatRecipeTitles } from '~/utils/recipeUsage'
 import { canonicalRecipeTag, dedupeRecipeTags } from '~/utils/recipeTags'
 import { BOOK_PAGE_MAX, cleanBookPage, isBookLikeSource, matchBookByTitle, splitSourcePage } from '~/utils/books'
 
@@ -46,8 +49,6 @@ const SECTION_FIELD_UI = {
   container: 'mt-3',
 }
 
-const typeItems = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t) }))
-
 /** Catalogue d'ingrédients (privés de l'utilisateur + publics) pour le sélecteur de lignes de recette. */
 const ingredientsQuery = useCollection<Ingredient>(() => {
   const uid = user.value?.uid
@@ -62,8 +63,36 @@ const ingredientsQuery = useCollection<Ingredient>(() => {
     orderBy('label', 'asc')
   )
 })
-const ingredientsById = computed(() => new Map(ingredientsQuery.value.map(i => [i.id, i])))
-const ingredientOptions = computed(() => ingredientsQuery.value.map(i => ({ id: i.id, label: i.label })))
+/** Toutes les recettes accessibles : les bases s'ajoutent au sélecteur de lignes, et l'on sait qui utilise celle-ci. */
+const { recipes: allRecipes } = useFoodCatalog()
+/** Ingrédients et bases (ingrédient virtuel `recipe:<id>`) : une ligne de base se calcule comme une ligne d'ingrédient. */
+const ingredientsById = computed(() => withRecipeBases(ingredientsQuery.value, allRecipes.value))
+
+/** Recettes qui utilisent la recette éditée comme base : elle doit rester une base, et ses unités utilisées rester. */
+const usedIn = computed(() => (props.recipe ? recipesUsingBase(allRecipes.value, props.recipe.id) : []))
+/** Bases qu'on ne peut pas ajouter sans boucle : la recette elle-même et celles qui la contiennent déjà. */
+const blockedBaseIds = computed(() => (props.recipe ? basesContaining(allRecipes.value, props.recipe.id) : new Set<string>()))
+
+/** Ingrédients du catalogue, puis les bases maison (pickles, sauces…) dans leur propre groupe. */
+const ingredientOptions = computed(() => {
+  const ingredients = ingredientsQuery.value.map(i => ({ id: i.id, label: i.label }))
+  const bases = allRecipes.value
+    .filter(r => r.type === 'BASE' && r.id !== props.recipe?.id)
+    .sort((a, b) => a.title.localeCompare(b.title, 'fr'))
+    .map((r) => {
+      const blocked = blockedBaseIds.value.has(r.id)
+      return {
+        id: baseKey(r.id),
+        label: r.title,
+        icon: 'i-lucide-cooking-pot',
+        disabled: blocked,
+        description: blocked ? 'Contient déjà cette base' : undefined,
+      }
+    })
+  return bases.length ? [ingredients, [{ type: 'label' as const, label: 'Bases maison' }, ...bases]] : [ingredients]
+})
+
+const isBaseKey = (key: string | undefined) => baseIdOfKey(key) !== null
 
 /** Ce que la lecture des photos a donné pour une ligne ; `reviewed` = quantité supposée retouchée ou ingrédient choisi à la main. */
 interface RowReading {
@@ -92,8 +121,28 @@ interface IngredientRow {
  */
 const GRAMS_UNIT = '__grams__'
 
+/** Portion pratique d'une base (c. à soupe, bocal), toujours en grammes. */
+interface BaseUnitRow {
+  key: string
+  label: string
+  value: string
+}
+
 const recipeTitle = ref('')
 const type = ref<RecipeType | undefined>(undefined)
+const isBase = computed(() => type.value === 'BASE')
+/** Base seulement : rendement saisi ; vide = la somme des ingrédients. */
+const yieldGrams = ref('')
+const baseUnitRows = ref<BaseUnitRow[]>([])
+
+/** Une base utilisée par d'autres recettes reste une base : ces recettes n'auraient plus de quoi la doser. */
+const typeLocked = computed(() => props.recipe?.type === 'BASE' && usedIn.value.length > 0)
+const typeItems = computed(() => RECIPE_TYPES.map(t => ({
+  value: t,
+  label: recipeTypeLabel(t),
+  icon: recipeTypeIcon(t) ?? undefined,
+  disabled: typeLocked.value && t !== 'BASE',
+})))
 const difficulty = ref<RecipeDifficulty | null>(null)
 const persons = ref('1')
 const prepTime = ref('')
@@ -222,6 +271,10 @@ function resetForm() {
   type.value = r?.type
   difficulty.value = (r?.difficulty as RecipeDifficulty) ?? null
   persons.value = r?.persons != null ? String(r.persons) : '1'
+  yieldGrams.value = r?.yieldGrams != null ? String(r.yieldGrams) : ''
+  baseUnitRows.value = Object.entries(r?.units ?? {})
+    .sort(([, a], [, b]) => a.value - b.value)
+    .map(([key, u]) => ({ key, label: u.label, value: String(u.value) }))
   prepTime.value = r?.prepTime != null ? String(r.prepTime) : ''
   cookTime.value = r?.cookTime != null ? String(r.cookTime) : ''
   // Le champ lien n'affiche que les liens externes : une photo envoyée se voit dans l'aperçu.
@@ -241,7 +294,7 @@ function resetForm() {
   ingredientRows.value = r?.ingredients
     ? r.ingredients.map(line => ({
         key: generateFirestoreId(),
-        ingredientId: line.ingredientRef?.id,
+        ingredientId: lineSourceKey(line),
         unit: line.unit ?? GRAMS_UNIT,
         quantity: String(line.quantity),
       }))
@@ -408,15 +461,75 @@ function unitOptionsForRow(row: IngredientRow) {
  * Valeurs pour une part, recalculées à la saisie comme sur la fiche : les lignes incomplètes (ingrédient non choisi,
  * quantité invalide) sont ignorées, et des parts invalides comptent pour une.
  */
+function rowToLine(row: IngredientRow, quantity: number): RecipeIngredientLine {
+  const baseId = baseIdOfKey(row.ingredientId)
+  const line: RecipeIngredientLine = baseId
+    ? { recipeRef: doc(db, 'recipes', baseId), quantity }
+    : { ingredientRef: doc(db, 'ingredients', row.ingredientId!), quantity }
+  if (row.unit !== GRAMS_UNIT) line.unit = row.unit
+  return line
+}
+
+/** Lignes complètes du formulaire (ingrédient choisi, quantité valide). */
+const draftLines = computed(() => ingredientRows.value.flatMap((row) => {
+  const quantity = parsePositiveNumber(row.quantity)
+  if (!row.ingredientId || quantity === null) return []
+  return [rowToLine(row, quantity)]
+}))
+
+/** Base : poids des ingrédients, proposé comme rendement tant qu'on n'en saisit pas un autre (réduction, égouttage). */
+const proposedYield = computed(() => linesGrams(draftLines.value, ingredientsById.value))
+const proposedYieldGrams = computed(() => Math.round(proposedYield.value.grams))
+const effectiveYield = computed(() => parsePositiveNumber(yieldGrams.value) ?? (proposedYieldGrams.value > 0 ? proposedYieldGrams.value : null))
+/** Le rendement saisi s'écarte de la somme des ingrédients : on le signale, avec de quoi y revenir. */
+const yieldDiffers = computed(() => {
+  const typed = parsePositiveNumber(yieldGrams.value)
+  return typed !== null && proposedYieldGrams.value > 0 && Math.abs(typed - proposedYieldGrams.value) >= 1
+})
+const formatGrams = (grams: number) => `${Math.round(grams).toLocaleString('fr-FR')} g`
+
+/** Pour une part d'un plat ; pour 100 g d'une base (rien sans rendement). */
 const macros = computed(() => {
-  const lines = ingredientRows.value.flatMap((row) => {
-    const quantity = parsePositiveNumber(row.quantity)
-    if (!row.ingredientId || quantity === null) return []
-    const line: RecipeIngredientLine = { ingredientRef: doc(db, 'ingredients', row.ingredientId), quantity }
-    if (row.unit !== GRAMS_UNIT) line.unit = row.unit
-    return [line]
-  })
-  return macrosForRecipe(lines, ingredientsById.value, parsePositiveNumber(persons.value) ?? 1)
+  if (!isBase.value) return macrosForRecipe(draftLines.value, ingredientsById.value, parsePositiveNumber(persons.value) ?? 1)
+  const total = macrosForRecipe(draftLines.value, ingredientsById.value, 1)
+  const grams = effectiveYield.value
+  if (!grams) return { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
+  const per100 = (n: number) => (n * 100) / grams
+  return { calories: per100(total.calories), protein: per100(total.protein), carbohydrates: per100(total.carbohydrates), fat: per100(total.fat) }
+})
+
+// --- Portions pratiques d'une base ---
+
+function addBaseUnitRow() {
+  baseUnitRows.value.push({ key: generateFirestoreId(), label: '', value: '' })
+}
+
+/** Une portion enregistrée et utilisée dans une recette ne se retire pas : la ligne n'aurait plus de poids. */
+function removeBaseUnitRow(row: BaseUnitRow) {
+  const users = usedIn.value.filter(r => (r.ingredients ?? []).some(line => lineBaseId(line) === props.recipe?.id && line.unit === row.key))
+  if (users.length) {
+    const unitName = row.label.trim() ? `La portion « ${row.label.trim()} »` : 'Cette portion'
+    toast.add({
+      title: 'Suppression impossible',
+      description: `${unitName} est utilisée dans ${users.length > 1 ? `${users.length} recettes` : 'la recette'} ${formatRecipeTitles(users)}. Changez la quantité dans ces recettes avant de la retirer.`,
+      color: 'warning',
+      icon: 'i-lucide-link',
+    })
+    return
+  }
+  baseUnitRows.value = baseUnitRows.value.filter(r => r.key !== row.key)
+}
+
+const baseUnitLabelError = (row: BaseUnitRow) => (submitted.value && !row.label.trim() ? 'Requis' : undefined)
+function baseUnitValueError(row: BaseUnitRow) {
+  if (!submitted.value) return undefined
+  if (!row.value.trim()) return 'Requis'
+  return parsePositiveNumber(row.value) === null ? 'Nombre invalide' : undefined
+}
+
+const yieldError = computed(() => {
+  if (!submitted.value || !yieldGrams.value.trim()) return undefined
+  return parsePositiveNumber(yieldGrams.value) === null ? 'Nombre invalide' : undefined
 })
 const hasMacros = computed(() => {
   const m = macros.value
@@ -430,7 +543,7 @@ function ingredientRowLabel(row: IngredientRow) {
 const titleError = computed(() => (submitted.value && !recipeTitle.value.trim()) ? 'Requis' : undefined)
 
 const personsError = computed(() => {
-  if (!submitted.value) return undefined
+  if (!submitted.value || isBase.value) return undefined
   if (!persons.value.trim()) return 'Requis'
   return parsePositiveNumber(persons.value) === null ? 'Nombre invalide' : undefined
 })
@@ -455,7 +568,12 @@ function ingredientRowQuantityError(row: IngredientRow) {
 
 const isValid = computed(() => {
   if (!recipeTitle.value.trim()) return false
-  if (!persons.value.trim() || parsePositiveNumber(persons.value) === null) return false
+  if (isBase.value) {
+    if (yieldGrams.value.trim() && parsePositiveNumber(yieldGrams.value) === null) return false
+    if (baseUnitRows.value.some(r => !r.label.trim() || parsePositiveNumber(r.value) === null)) return false
+  } else if (!persons.value.trim() || parsePositiveNumber(persons.value) === null) {
+    return false
+  }
   if (prepTime.value.trim() && parseNonNegativeNumber(prepTime.value) === null) return false
   if (cookTime.value.trim() && parseNonNegativeNumber(cookTime.value) === null) return false
   if (ingredientRows.value.some(r => !r.ingredientId || parsePositiveNumber(r.quantity) === null)) return false
@@ -495,18 +613,12 @@ async function handleSubmit() {
     const now = Timestamp.now()
     const trimmedTitle = recipeTitle.value.trim()
 
-    const ingredientLines: RecipeIngredientLine[] = ingredientRows.value.map((row) => {
-      const line: RecipeIngredientLine = {
-        ingredientRef: doc(db, 'ingredients', row.ingredientId!),
-        quantity: parsePositiveNumber(row.quantity)!,
-      }
-      if (row.unit !== GRAMS_UNIT) line.unit = row.unit
-      return line
-    })
+    const ingredientLines: RecipeIngredientLine[] = ingredientRows.value.map(row => rowToLine(row, parsePositiveNumber(row.quantity)!))
 
     const payload: Record<string, unknown> = {
       title: trimmedTitle,
-      persons: parsePositiveNumber(persons.value)!,
+      // Une base se dose en grammes : ses parts restent à 1 pour les calculs qui en attendent.
+      persons: isBase.value ? 1 : parsePositiveNumber(persons.value)!,
       tags: dedupeRecipeTags(tags.value.map(t => canonicalRecipeTag(t, tagVocabulary.value))),
       ingredients: ingredientLines,
       updatedAt: now,
@@ -518,6 +630,10 @@ async function handleSubmit() {
     }
 
     setOrClear('type', type.value)
+    // Base : rendement saisi, sinon la somme des ingrédients ; un plat n'en a pas.
+    setOrClear('yieldGrams', isBase.value ? effectiveYield.value ?? undefined : undefined)
+    const units = Object.fromEntries(baseUnitRows.value.map(row => [row.key, { label: row.label.trim(), value: parsePositiveNumber(row.value)!, unit: 'g' as const }]))
+    setOrClear('units', isBase.value && baseUnitRows.value.length ? units : undefined)
     setOrClear('difficulty', difficulty.value ?? undefined)
     setOrClear('prepTime', prepTime.value.trim() ? parseNonNegativeNumber(prepTime.value)! : undefined)
     setOrClear('cookTime', cookTime.value.trim() ? parseNonNegativeNumber(cookTime.value)! : undefined)
@@ -596,14 +712,14 @@ async function handleSubmit() {
         </UFormField>
 
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Type de plat">
+          <UFormField label="Type" :help="typeLocked ? `Utilisée dans ${usedIn.length > 1 ? `${usedIn.length} recettes` : 'une recette'} : elle reste une base.` : undefined">
             <USelectMenu
               v-model="type"
               :items="typeItems"
               value-key="value"
               placeholder="Choisir..."
               :search-input="false"
-              icon="i-lucide-utensils"
+              :icon="(type && recipeTypeIcon(type)) || 'i-lucide-utensils'"
               class="w-full"
             />
           </UFormField>
@@ -624,7 +740,11 @@ async function handleSubmit() {
         </div>
 
         <div class="grid grid-cols-3 gap-4">
-          <UFormField label="Parts" :error="personsError">
+          <!-- Une base se dose en grammes : son rendement remplace les parts. Vide = somme des ingrédients. -->
+          <UFormField v-if="isBase" label="Rendement (g)" :error="yieldError">
+            <UInput v-model="yieldGrams" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" :placeholder="proposedYieldGrams > 0 ? String(proposedYieldGrams) : 'ex : 450'" size="md" variant="outline" class="w-full" :ui="{ base: `${NAME_FIELD_BASE} tabular-nums` }" />
+          </UFormField>
+          <UFormField v-else label="Parts" :error="personsError">
             <UInput v-model="persons" type="search" inputmode="numeric" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="1" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
           <UFormField label="Prép. (min)" :error="prepTimeError">
@@ -633,6 +753,23 @@ async function handleSubmit() {
           <UFormField label="Cuisson (min)" :error="cookTimeError">
             <UInput v-model="cookTime" type="search" inputmode="numeric" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 25" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
+        </div>
+
+        <!-- Rendement d'une base : d'où vient la valeur proposée, et l'écart quand on en saisit une autre. -->
+        <div v-if="isBase" class="-mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dimmed" aria-live="polite">
+          <template v-if="proposedYieldGrams > 0">
+            <span>
+              Ingrédients : <span class="tabular-nums text-muted">{{ formatGrams(proposedYieldGrams) }}</span><template v-if="!proposedYield.complete"> (hors lignes sans poids)</template>
+            </span>
+            <template v-if="yieldDiffers">
+              <span aria-hidden="true">·</span>
+              <span class="tabular-nums text-muted">
+                {{ parsePositiveNumber(yieldGrams)! < proposedYieldGrams ? 'Réduit' : 'Augmenté' }} de {{ formatGrams(Math.abs(parsePositiveNumber(yieldGrams)! - proposedYieldGrams)) }}
+              </span>
+              <UButton label="Reprendre la somme" color="neutral" variant="link" size="xs" class="p-0" @click="() => { yieldGrams = '' }" />
+            </template>
+          </template>
+          <span v-else>Le rendement se propose à partir du poids des ingrédients.</span>
         </div>
 
         <PhotoField
@@ -655,7 +792,7 @@ async function handleSubmit() {
 
         <!-- Valeurs nutritionnelles, recalculées à chaque modification des ingrédients ou des parts -->
         <div v-if="hasMacros">
-          <p class="text-xs text-dimmed mb-2">Valeurs nutritionnelles pour une part</p>
+          <p class="text-xs text-dimmed mb-2">Valeurs nutritionnelles {{ isBase ? 'pour 100 g' : 'pour une part' }}</p>
           <IngredientMacroSummary :macros="macros" />
         </div>
         <p v-else-if="ingredientRows.length > 0" class="flex items-center gap-1.5 text-xs text-dimmed">
@@ -706,9 +843,9 @@ async function handleSubmit() {
                     v-model="row.ingredientId"
                     :items="ingredientOptions"
                     value-key="id"
-                    placeholder="Choisir un ingrédient..."
+                    placeholder="Choisir un ingrédient ou une base..."
                     :search-input="{ placeholder: 'Rechercher...' }"
-                    icon="i-lucide-carrot"
+                    :icon="isBaseKey(row.ingredientId) ? 'i-lucide-cooking-pot' : 'i-lucide-carrot'"
                     aria-label="Ingrédient"
                     class="w-full"
                     @update:model-value="onIngredientRowIngredientChange(row)"
@@ -789,6 +926,43 @@ async function handleSubmit() {
               Aucun ingrédient.
             </p>
             <UButton label="Ajouter" icon="i-lucide-plus" size="xs" color="neutral" variant="outline" @click="addIngredientRow" />
+          </div>
+        </div>
+
+        <!-- Portions d'une base : ce qu'un plat pourra en prendre sans peser (« 2 × c. à soupe »). -->
+        <div v-if="isBase">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-git-branch" class="size-3.5 text-muted shrink-0" />
+              <p class="text-xs text-dimmed font-medium uppercase tracking-wide">Portions (optionnel)</p>
+            </div>
+            <UButton label="Ajouter" icon="i-lucide-plus" size="xs" color="neutral" variant="outline" @click="addBaseUnitRow" />
+          </div>
+          <p v-if="baseUnitRows.length === 0" class="text-xs text-dimmed text-pretty">
+            Les plats doseront cette base en grammes. Ajoutez une portion (c. à soupe, bocal) pour la doser autrement.
+          </p>
+          <div v-else class="flex flex-col gap-3">
+            <div v-for="row in baseUnitRows" :key="row.key" class="flex items-start gap-2">
+              <UFormField class="flex-1" :error="baseUnitLabelError(row)">
+                <UInput v-model="row.label" type="search" enterkeyhint="done" autocomplete="off" autocapitalize="sentences" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : Cuillère à soupe" aria-label="Nom de la portion" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
+              </UFormField>
+              <UFormField class="w-24 shrink-0" :error="baseUnitValueError(row)">
+                <UInput v-model="row.value" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="qté" aria-label="Poids de la portion en grammes" size="md" variant="outline" class="w-full" :ui="{ base: `${NAME_FIELD_BASE} tabular-nums`, trailing: 'pointer-events-none' }">
+                  <template #trailing>
+                    <span class="text-xs text-dimmed">g</span>
+                  </template>
+                </UInput>
+              </UFormField>
+              <UButton
+                icon="i-lucide-trash-2"
+                color="neutral"
+                variant="ghost"
+                size="md"
+                :aria-label="`Supprimer la portion ${row.label || ''}`"
+                class="mt-0.5"
+                @click="removeBaseUnitRow(row)"
+              />
+            </div>
           </div>
         </div>
 

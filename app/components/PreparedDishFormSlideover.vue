@@ -7,6 +7,7 @@ import { dayKeyOf } from '~/utils/menuWeek'
 import { parseNonNegativeNumber } from '~/utils/numberInput'
 import { formatParts, STOCK_PARTS_STEP } from '~/utils/preparedDishes'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
+import { isBaseRecipe } from '~/utils/recipeType'
 
 /**
  * Ajout à la main ou modification d'un plat du stock : une recette de la base (macros par part figées à
@@ -94,7 +95,8 @@ const unreadableRecipe = computed(() => {
 const isUnreadableRecipe = computed(() => !!unreadableRecipe.value && recipeId.value === unreadableRecipe.value.recipeId)
 
 const recipeOptions = computed(() => [
-  ...props.recipes.map(r => ({ id: r.id, label: r.title, kcalLabel: `${Math.round(recipePerPart(r).calories)} kcal / part` })),
+  // Une base se range au stock en grammes, pas en parts : elle n'est pas proposée ici.
+  ...props.recipes.filter(r => !isBaseRecipe(r)).map(r => ({ id: r.id, label: r.title, kcalLabel: `${Math.round(recipePerPart(r).calories)} kcal / part` })),
   ...(unreadableRecipe.value
     ? [{ id: unreadableRecipe.value.recipeId!, label: unreadableRecipe.value.label, kcalLabel: `${Math.round(unreadableRecipe.value.perPart.calories)} kcal / part` }]
     : []),

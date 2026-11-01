@@ -3,6 +3,7 @@ import type { ShoppingItem, ShoppingMealInclusion } from '~/types/shoppingList'
 import { plannedMealKey } from './plannedMealRows'
 import { gramsPerPiece, ingredientAmount, mealDay, OUTSIDE_RECIPE_SOURCE, piecesFor, recipeBatches } from './shoppingList'
 import type { ShoppingCatalog } from './shoppingPlan'
+import { expandRecipeLines } from './recipeBases'
 
 /**
  * « Vérifier un article » : ce que les repas planifiés vont encore consommer d'un ingrédient, d'aujourd'hui à la fin de
@@ -115,7 +116,8 @@ export function stockNeeds(
       const origins = batch.covers.map(originOf)
       // Une fournée s'achète en entier : un repas acheté suffit à la couvrir.
       const origin: StockNeedOrigin = origins.includes('bought') ? 'bought' : origins.includes('listed') ? 'listed' : 'unlisted'
-      for (const line of recipe.ingredients ?? []) {
+      // Les bases se déplient en leurs ingrédients, au prorata de ce que la recette en prend.
+      for (const line of expandRecipeLines(recipe.ingredients, catalog.recipesById, skipped)) {
         if (!line.ingredientRef) continue
         add(line.ingredientRef.id, line.unit ?? null, line.quantity, {
           id: `recipe:${recipeId}|${batch.day}`,

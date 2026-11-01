@@ -2,11 +2,16 @@ import type { DocumentReference, Timestamp } from 'firebase/firestore'
 import type { RecipeType } from '~/utils/recipeType'
 import type { RecipeReading } from '#shared/types/recipeReading'
 
-/** Ligne d’ingrédient dans une recette (réf. document `ingredients` + quantité) */
+/**
+ * Ligne d’ingrédient dans une recette : un ingrédient du catalogue (`ingredientRef`) ou une recette de base
+ * (`recipeRef`, type `BASE`), jamais les deux.
+ */
 export interface RecipeIngredientLine {
-  /** Référence Firestore vers le document ingrédient (jamais vers une unité) */
-  ingredientRef: DocumentReference
-  /** Id d'une unité de l'ingrédient (clé de `ingredient.units`) ; absent = quantité en grammes */
+  /** Référence Firestore vers le document ingrédient (jamais vers une unité) ; absente pour une ligne de base. */
+  ingredientRef?: DocumentReference
+  /** Référence Firestore vers une recette de base (pickles, sauce…) dont la ligne prend une partie du rendement. */
+  recipeRef?: DocumentReference
+  /** Id d'une unité de l'ingrédient ou de la base (clé de `units`) ; absent = quantité en grammes */
   unit?: string
   /** Quantité : grammes si `unit` absent, sinon nombre de fois l'unité référencée */
   quantity: number
@@ -38,8 +43,12 @@ export interface Recipe {
   type?: RecipeType
   /** Niveau de difficulté (ex. "EASY", "MEDIUM", "HARD") */
   difficulty?: string
-  /** Nombre de parts que produit la recette ; `undefined` équivaut à 1. */
+  /** Nombre de parts que produit la recette ; `undefined` équivaut à 1. Sans objet pour une base (voir `yieldGrams`). */
   persons?: number
+  /** Base seulement : poids total préparé, en grammes, dont les plats prennent une partie. */
+  yieldGrams?: number
+  /** Base seulement : portions pratiques (c. à soupe, bocal), toujours en grammes, comme les unités d'un ingrédient. */
+  units?: Record<string, { label: string; value: number; unit: 'g' }>
   /** URL de l'image : photo envoyée dans Firebase Storage, ou lien externe saisi. */
   imageUrl?: string
   /** Chemin Storage de la photo envoyée, pour la remplacer ou la supprimer ; absent pour un lien externe. */

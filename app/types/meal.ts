@@ -8,12 +8,27 @@ export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINER' | 'SNACK' | 'EXCESS' | 'N
 /** Nature de ce qui a été mangé, stockée telle quelle côté Firestore (`meals.category`). */
 export type MealCategory = 'RECIPE' | 'INGREDIENT' | 'RAW' | 'STOCK'
 
+/**
+ * Quantité d'une recette de base (pickles, sauce) réellement mangée dans un repas, quand elle s'écarte de ce que prévoit
+ * la recette du plat pour ses parts, ou quand la base n'est pas dans la recette (mayonnaise ajoutée aux frites).
+ */
+export type MealBaseAdjustment = {
+  /** Recette de base (Firestore `recipes`, type `BASE`). */
+  recipeId: string
+  /** Quantité totale mangée dans ce repas, pas un écart : grammes si `unit` est absent, sinon nombre de fois l'unité. */
+  quantity: number
+  /** Id d'une portion de la base (clé de `recipe.units`) ; absent = grammes. */
+  unit?: string
+}
+
 /** Une recette de la base, en nombre de parts. */
 export type RecipeMealSource = {
   category: 'RECIPE'
   recipeId: string
   /** Nombre de parts mangées. */
   value: number
+  /** Bases mangées en plus ou en moins que prévu ; absent quand tout est comme dans la recette. */
+  baseAdjustments?: MealBaseAdjustment[]
 }
 
 /** Un ingrédient de la base, en grammes ou en nombre de fois l'une de ses unités. */

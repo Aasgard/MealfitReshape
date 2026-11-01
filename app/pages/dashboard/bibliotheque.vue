@@ -6,6 +6,7 @@ import type { Book } from '~/types/book'
 import type { Recipe } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
 import { bookAuthorsLabel, bookMatchesSearch, groupLegacySources, type LegacySourceGroup } from '~/utils/books'
+import { withRecipeBases } from '~/utils/recipeBases'
 
 useSeoMeta({
   title: 'Dashboard - Bibliothèque - Mealfit',
@@ -24,7 +25,8 @@ const { books, booksById, loading: booksLoading, linkRecipes, remove } = useBook
 const recipes = useCollection<Recipe>(() => (user.value ? query(collection(db, 'recipes')) : null))
 /** Catalogue d'ingrédients, pour ouvrir la fiche d'une recette depuis le sommaire d'un livre. */
 const ingredients = useCollection<Ingredient>(() => (user.value ? query(collection(db, 'ingredients')) : null))
-const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
+/** Ingrédients, plus un ingrédient virtuel par recette de base : les lignes de base se résolvent comme les autres. */
+const ingredientsById = computed(() => withRecipeBases(ingredients.value, recipes.value ?? []))
 
 const recipesByBook = computed(() => {
   const map = new Map<string, Recipe[]>()

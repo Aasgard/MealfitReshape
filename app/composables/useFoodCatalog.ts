@@ -2,6 +2,7 @@ import { collection, query } from 'firebase/firestore'
 import { useCollection, useCurrentUser, useFirestore } from 'vuefire'
 import type { Ingredient } from '~/types/ingredient'
 import type { Recipe } from '~/types/recipe'
+import { withRecipeBases } from '~/utils/recipeBases'
 
 /** Recettes et ingrédients accessibles à l'utilisateur (les siens + le catalogue public), pour calculer les kcal et macros des repas. */
 export const useFoodCatalog = () => {
@@ -25,7 +26,8 @@ export const useFoodCatalog = () => {
   const ingredients = useCollection<Ingredient>(() => ownedOrPublic('ingredients'))
 
   const recipesById = computed(() => new Map(recipes.value.map(r => [r.id, r])))
-  const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
+  /** Ingrédients du catalogue, plus un ingrédient virtuel par recette de base (`recipe:<id>`) pour les lignes qui l'utilisent. */
+  const ingredientsById = computed(() => withRecipeBases(ingredients.value, recipes.value))
 
   return { recipes, ingredients, recipesById, ingredientsById }
 }

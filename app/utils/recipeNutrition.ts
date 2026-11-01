@@ -1,12 +1,13 @@
 import type { Ingredient } from '~/types/ingredient'
 import type { RecipeIngredientLine } from '~/types/recipe'
 import { gramsForUnit, scaleMacros, type IngredientMacros } from './ingredientNutrition'
+import { lineSourceKey } from './recipeLineSource'
 
 const EMPTY_MACROS: IngredientMacros = { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
 
 /**
- * Macros d'une ligne d'ingrédient de recette. `line.ingredientRef` désigne
- * toujours le document ingrédient (trouvé dans `ingredientsById`) :
+ * Macros d’une ligne d’ingrédient de recette. La ligne désigne un ingrédient, ou une recette de base par son
+ * ingrédient virtuel (voir `lineSourceKey`), trouvé dans `ingredientsById` :
  * - si `line.unit` est absent, `quantity` est en grammes ;
  * - si `line.unit` est renseigné, c'est l'id d'une unité de cet ingrédient
  *   (`ingredient.units[unit]`) et `quantity` en est un multiplicateur (ex. 5 pièces).
@@ -14,13 +15,12 @@ const EMPTY_MACROS: IngredientMacros = { calories: 0, protein: 0, carbohydrates:
  * ou si les valeurs nutritionnelles nécessaires sont absentes.
  */
 export function macrosForRecipeLine(
-  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'unit' | 'quantity'>,
+  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'recipeRef' | 'unit' | 'quantity'>,
   ingredientsById: Map<string, Ingredient>
 ): IngredientMacros | null {
   if (line.quantity <= 0) return null
-  if (!line.ingredientRef) return null
-
-  const ingredient = ingredientsById.get(line.ingredientRef.id)
+  const key = lineSourceKey(line)
+  const ingredient = key ? ingredientsById.get(key) : undefined
   if (!ingredient?.valuesBy100) return null
 
   if (!line.unit) {
@@ -46,13 +46,12 @@ const formatLineQuantity = (quantity: number, inGrams: boolean) =>
  * `null` si l'ingrédient ou l'unité référencée est introuvable.
  */
 export function describeRecipeLine(
-  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'unit' | 'quantity'>,
+  line: Pick<RecipeIngredientLine, 'ingredientRef' | 'recipeRef' | 'unit' | 'quantity'>,
   ingredientsById: Map<string, Ingredient>,
   factor = 1
 ): { label: string; quantityLabel: string; equivalentLabel?: string } | null {
-  if (!line.ingredientRef) return null
-
-  const ingredient = ingredientsById.get(line.ingredientRef.id)
+  const key = lineSourceKey(line)
+  const ingredient = key ? ingredientsById.get(key) : undefined
   if (!ingredient) return null
 
   const quantity = line.quantity * factor

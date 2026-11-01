@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TodayCookingRecipe } from '~/types/today'
 import { dishStorageOf, wholeRecipeGap } from '~/utils/preparedDishes'
+import { formatBaseGrams } from '~/utils/baseStock'
 
 defineProps<{
   /** Recettes à préparer le jour affiché, en une fois pour leurs repas des 7 jours suivants. */
@@ -21,7 +22,7 @@ const formatNumber = (parts: number) => parts.toLocaleString('fr-FR', { maximumF
 const formatParts = (parts: number) => `${formatNumber(parts)} part${parts > 1 ? 's' : ''}`
 
 /** Écart à des recettes entières ; `null` quand le compte est rond. */
-const gapOf = (recipe: TodayCookingRecipe) => wholeRecipeGap(recipe.parts, recipe.persons)
+const gapOf = (recipe: TodayCookingRecipe) => recipe.base ? null : wholeRecipeGap(recipe.parts, recipe.persons)
 </script>
 
 <template>
@@ -46,7 +47,7 @@ const gapOf = (recipe: TodayCookingRecipe) => wholeRecipeGap(recipe.parts, recip
             class="size-10 shrink-0 rounded-full bg-accented object-cover"
           >
           <div v-else class="flex size-10 shrink-0 items-center justify-center rounded-full bg-accented text-muted" aria-hidden="true">
-            <UIcon name="i-lucide-chef-hat" class="size-4" />
+            <UIcon :name="recipe.base ? 'i-lucide-cooking-pot' : 'i-lucide-chef-hat'" class="size-4" />
           </div>
           <div class="min-w-0 flex-1">
             <p class="truncate font-semibold text-highlighted">
@@ -57,7 +58,11 @@ const gapOf = (recipe: TodayCookingRecipe) => wholeRecipeGap(recipe.parts, recip
               Chaque bloc porte son « · » devant lui ; la marge négative pousse celui d'un début de ligne hors du cadre, qui le masque.
               Le surplus pour le stock ferme la ligne, comme un récipient de plus.
             -->
-            <span class="mt-0.5 block overflow-hidden text-xs text-dimmed">
+            <!-- Base à préparer : les plats qui l'attendent, faute d'assez en stock. -->
+            <span v-if="recipe.base" class="mt-0.5 block truncate text-xs text-dimmed">
+              Base pour {{ recipe.base.for.join(', ') }}
+            </span>
+            <span v-else class="mt-0.5 block overflow-hidden text-xs text-dimmed">
               <span class="-ms-3 flex flex-wrap items-center gap-x-1 gap-y-0.5">
                 <span
                   v-for="day in recipe.days"
@@ -91,8 +96,11 @@ const gapOf = (recipe: TodayCookingRecipe) => wholeRecipeGap(recipe.parts, recip
               </span>
             </span>
           </div>
+          <p v-if="recipe.base" class="shrink-0 text-sm font-semibold tabular-nums text-highlighted">
+            {{ formatBaseGrams(recipe.base.grams) }}
+          </p>
           <!-- Alerte condensée : les parts ne font pas un nombre entier de recettes (ex. 3 parts d'une recette de 4). -->
-          <div v-if="gapOf(recipe)" class="flex shrink-0 flex-col items-end text-warning" :title="`La recette fait ${formatParts(recipe.persons!)}`">
+          <div v-else-if="gapOf(recipe)" class="flex shrink-0 flex-col items-end text-warning" :title="`La recette fait ${formatParts(recipe.persons!)}`">
             <p class="flex items-center gap-1 text-sm font-semibold tabular-nums">
               <UIcon name="i-lucide-triangle-alert" class="size-3.5 shrink-0" aria-hidden="true" />
               {{ formatParts(recipe.parts) }}
@@ -105,7 +113,9 @@ const gapOf = (recipe: TodayCookingRecipe) => wholeRecipeGap(recipe.parts, recip
             {{ formatParts(recipe.parts) }}
           </p>
         </button>
-        <UTooltip :text="recipe.surplus ? 'Modifier le surplus pour le stock' : 'En faire plus pour le stock'">
+        <!-- Une base se range au stock depuis sa fiche, en grammes : pas de surplus en parts. -->
+        <span v-if="recipe.base" class="me-2 size-8 shrink-0" aria-hidden="true" />
+        <UTooltip v-else :text="recipe.surplus ? 'Modifier le surplus pour le stock' : 'En faire plus pour le stock'">
           <UButton
             :icon="recipe.surplus ? 'i-lucide-archive' : 'i-lucide-package-plus'"
             :color="recipe.surplus ? 'primary' : 'neutral'"

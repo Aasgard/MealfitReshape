@@ -13,6 +13,8 @@ import type { ShoppingMealInclusion } from '~/types/shoppingList'
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
 import { groupPlannedMeals, isPlannedMeal, plannedMealKey, type PlannedMealRow } from '~/utils/plannedMealRows'
 import { surplusMeals } from '~/utils/preparedDishes'
+import { recipeIngredientIds } from '~/utils/recipeBases'
+import { baseStockLedger } from '~/utils/baseStock'
 import { mealDay } from '~/utils/shoppingList'
 import type { ShoppingCatalog } from '~/utils/shoppingPlan'
 import { storeNameKey, type StoreColor } from '~/utils/stores'
@@ -154,7 +156,19 @@ export function useGroceryList() {
 
   /** Sans recettes ni ingrédients chargés, un recalcul viderait la liste : les gestes attendent le catalogue. */
   const isCatalogReady = computed(() => !recipes.pending.value && !ingredients.pending.value)
-  const catalog = (): ShoppingCatalog => ({ recipesById: recipesById.value, ingredientsById: ingredientsById.value })
+  // Les bases déjà en stock (bocal de pickles…) ne font pas acheter leurs ingrédients : seule la part manquante compte.
+  // La répartition couvre les repas de la période en plus de ceux du stock, pour connaître les bases de chacun (ajustées
+  // ou ajoutées sur le repas) même sans bocal.
+  const { stocks: baseStocks, meals: baseStockMeals, todayKey } = useBaseStocks()
+  const baseCoverage = computed(() => {
+    const byId = new Map([...baseStockMeals.value, ...meals.value].map(meal => [meal.id, meal]))
+    return baseStockLedger(baseStocks.value, [...byId.values()], recipesById.value, ingredientsById.value, todayKey.value).coverage
+  })
+  const catalog = (): ShoppingCatalog => ({
+    recipesById: recipesById.value,
+    ingredientsById: ingredientsById.value,
+    baseCoverage: baseCoverage.value,
+  })
 
   const formatParts = (parts: number) => `${parts.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} part${parts > 1 ? 's' : ''}`
 
@@ -244,9 +258,8 @@ export function useGroceryList() {
     for (const draft of drafts) {
       if (draft.ingredientId) ids.add(draft.ingredientId)
       const recipe = draft.recipeId ? recipesById.value.get(draft.recipeId) : undefined
-      for (const line of recipe?.ingredients ?? []) {
-        if (line.ingredientRef) ids.add(line.ingredientRef.id)
-      }
+      // Ingrédients des bases compris : ils s'achètent avec le plat.
+      if (recipe) for (const id of recipeIngredientIds(recipe, recipesById.value)) ids.add(id)
     }
     return ids
   }

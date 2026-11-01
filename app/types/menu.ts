@@ -1,4 +1,4 @@
-import type { MealType } from './meal'
+import type { MealBaseAdjustment, MealType } from './meal'
 import type { DishStorage } from './preparedDish'
 
 /** Macros en grammes : d'un jour, ou moyenne par jour d'une semaine. */
@@ -81,4 +81,8 @@ export interface MenuEntry {
   carbohydrates: number
   protein: number
   fat: number
+  /** Bases mangées autrement que prévu par la recette, déjà comptées dans les macros. Ex : « Mayonnaise +20 g ». */
+  baseAdjustmentLabel?: string
+  /** Ces mêmes bases, telles qu'enregistrées sur le repas : la fiche de la recette les montre à la place des quantités prévues. */
+  baseAdjustments?: MealBaseAdjustment[]
 }

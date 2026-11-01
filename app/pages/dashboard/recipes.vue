@@ -3,10 +3,13 @@ import { useCollection, useFirestore, useCurrentUser } from 'vuefire'
 import { collection, query, orderBy, addDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore'
 import type { Recipe, RecipeDraft, RecipeIngredientLine } from '~/types/recipe'
 import type { Ingredient } from '~/types/ingredient'
-import { RECIPE_TYPES, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { RECIPE_TYPES, isBaseRecipe, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
+import { baseKey, lineBaseId, lineSourceKey, refId } from '~/utils/recipeLineSource'
+import { formatRecipeTitles } from '~/utils/recipeUsage'
 import { matchesSearch } from '~/utils/search'
 import { recipeTagKey, recipeTagVocabulary } from '~/utils/recipeTags'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
+import { recipeIngredientIds, recipesUsingBase, withRecipeBases } from '~/utils/recipeBases'
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
 import { sortList, type SortState } from '~/utils/listSort'
 import { DEFAULT_RECIPE_SORT, RECIPE_MENU_SORT_OPTIONS, recipeSortValue, type RecipeSortKey } from '~/utils/recipeSort'
@@ -52,7 +55,9 @@ const ingredients = useCollection<Ingredient>(() => {
     // )
   )
 })
-const ingredientsById = computed(() => new Map(ingredients.value.map(i => [i.id, i])))
+/** Ingrédients, plus un ingrédient virtuel par recette de base : les lignes de base se résolvent comme les autres. */
+const ingredientsById = computed(() => withRecipeBases(ingredients.value, recipes.value ?? []))
+const recipesById = computed(() => new Map((recipes.value ?? []).map(r => [r.id, r])))
 
 const searchQuery = ref('')
 
@@ -70,9 +75,7 @@ const toggleType = (type: RecipeType) => {
 const ingredientOptions = computed(() => {
   const usedIds = new Set<string>()
   for (const r of recipes.value ?? []) {
-    for (const line of r.ingredients ?? []) {
-      if (line.ingredientRef?.id) usedIds.add(line.ingredientRef.id)
-    }
+    for (const id of recipeIngredientIds(r, recipesById.value)) usedIds.add(id)
   }
   return [...usedIds]
     .map(id => ingredientsById.value.get(id))
@@ -136,8 +139,9 @@ const filteredRecipes = computed(() => {
     const matchesBook = selectedBookIds.value.length === 0 || (!!r.bookId && selectedBookIds.value.includes(r.bookId))
     const matchesType = selectedTypes.value.length === 0 || (!!r.type && selectedTypes.value.includes(r.type))
     const matchesIngredients = selectedIngredientIds.value.length === 0 || (() => {
-      const recipeIngredientIds = new Set((r.ingredients ?? []).map(line => line.ingredientRef?.id))
-      return selectedIngredientIds.value.every(id => recipeIngredientIds.has(id))
+      // Les ingrédients des bases comptent : un plat aux pickles d'oignons « contient » de l'oignon.
+      const ids = recipeIngredientIds(r, recipesById.value)
+      return selectedIngredientIds.value.every(id => ids.has(id))
     })()
     const matchesTags = selectedTagKeys.value.length === 0 || (() => {
       const recipeTagKeys = new Set((r.tags ?? []).map(recipeTagKey))
@@ -164,10 +168,15 @@ watch(viewMode, () => {
   if (!sortOptions.some(o => o.key === sort.value.key)) sort.value = { ...DEFAULT_RECIPE_SORT }
 })
 
-/** Macros par part de chaque recette, pour le tri et la vue liste ; `null` quand rien n'est calculable. */
+/**
+ * Macros par part de chaque recette (pour 100 g d'une base), pour le tri et la vue liste ; `null` quand rien n'est
+ * calculable.
+ */
 const recipeMacrosById = computed(() => new Map<string, IngredientMacros | null>(
   (recipes.value ?? []).map((r) => {
-    const macros = macrosForRecipe(r.ingredients, ingredientsById.value, r.persons ?? 1)
+    const macros = isBaseRecipe(r)
+      ? ingredientsById.value.get(baseKey(r.id))?.valuesBy100 ?? { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
+      : macrosForRecipe(r.ingredients, ingredientsById.value, r.persons ?? 1)
     const hasMacros = macros.calories > 0 || macros.protein > 0 || macros.carbohydrates > 0 || macros.fat > 0
     return [r.id, hasMacros ? macros : null]
   })
@@ -237,12 +246,12 @@ const duplicateRecipe = async (recipe: Recipe) => {
 
   // VueFire résout les références : on reconstruit de vraies DocumentReference à partir des ids.
   const ingredientLines: RecipeIngredientLine[] = (ingredients ?? [])
-    .filter(line => line.ingredientRef?.id)
+    .filter(line => lineSourceKey(line))
     .map((line) => {
-      const copy: RecipeIngredientLine = {
-        ingredientRef: doc(db, 'ingredients', line.ingredientRef.id),
-        quantity: line.quantity,
-      }
+      const ingredientId = refId(line.ingredientRef)
+      const copy: RecipeIngredientLine = ingredientId
+        ? { ingredientRef: doc(db, 'ingredients', ingredientId), quantity: line.quantity }
+        : { recipeRef: doc(db, 'recipes', lineBaseId(line)!), quantity: line.quantity }
       if (line.unit) copy.unit = line.unit
       return copy
     })
@@ -291,7 +300,18 @@ const selectRecipe = (recipe: Recipe) => {
 const recipeToDelete = ref<Recipe | null>(null)
 const deleteDialogOpen = ref(false)
 
+/** Une base utilisée par des recettes ne se supprime pas : ces recettes perdraient une partie de leurs ingrédients. */
 const askDeleteRecipe = (recipe: Recipe) => {
+  const usedIn = recipesUsingBase(recipes.value ?? [], recipe.id)
+  if (usedIn.length) {
+    toast.add({
+      title: 'Suppression impossible',
+      description: `« ${recipe.title} » est utilisée dans ${usedIn.length > 1 ? `${usedIn.length} recettes` : 'la recette'} ${formatRecipeTitles(usedIn)}. Retirez-la de ces recettes avant de la supprimer.`,
+      color: 'warning',
+      icon: 'i-lucide-link',
+    })
+    return
+  }
   recipeToDelete.value = recipe
   deleteDialogOpen.value = true
 }

@@ -1,6 +1,7 @@
 import type { Timestamp } from 'firebase/firestore'
 import type { IngredientCategory } from './ingredientCategory'
 import type { IngredientMacros } from '~/utils/ingredientNutrition'
+import type { Recipe } from './recipe'
 
 /**
  * Représente un ingrédient ou aliment.
@@ -31,4 +32,9 @@ export interface Ingredient {
   valuesBy100?: IngredientMacros
   /** Unités ou équivalents (clé = identifiant de référence) */
   units?: Record<string, { label: string; value: number; unit: 'g' | 'ml' }>
+  /**
+   * Présent sur l'ingrédient virtuel qui représente une recette de base (id `recipe:<id>`, voir `withRecipeBases`) :
+   * ses valeurs pour 100 g viennent de la recette et de son rendement. Jamais écrit dans Firestore.
+   */
+  baseRecipe?: Recipe
 }

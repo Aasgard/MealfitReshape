@@ -63,7 +63,8 @@ const candidates = computed(() => {
   const line = props.line
   if (!line || sourceIssue.value) return []
   return [...props.ingredientsById.values()]
-    .filter(i => i.id !== original.value?.id && matchesSearch(i.label, search.value))
+    // Les bases (ingrédients virtuels) ne remplacent pas un ingrédient : hors du périmètre du remplacement.
+    .filter(i => !i.baseRecipe && i.id !== original.value?.id && matchesSearch(i.label, search.value))
     .map((ingredient) => {
       const swap = canReplaceWith(ingredient) ? swapForLine(line, original.value, ingredient) : null
       return {

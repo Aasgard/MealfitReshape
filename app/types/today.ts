@@ -52,6 +52,11 @@ export type TodayCookingRecipe = {
   persons?: number
   /** Parts cuisinées en plus pour le stock, et où elles seront rangées. */
   surplus?: { parts: number, storage: DishStorage }
+  /**
+   * Recette de base (pickles, sauce) à préparer avant les plats qui l'utilisent, faute d'assez en stock : grammes à
+   * préparer et plats qui l'attendent. `parts` vaut alors ces grammes rapportés au rendement (pour la fiche).
+   */
+  base?: { grams: number, for: string[] }
 }
 
 /** Un repas d'un plat à sortir du congélateur, tel que listé dans la confirmation. */

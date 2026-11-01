@@ -121,6 +121,9 @@ const ringLength = computed(() =>
               <UIcon v-if="entry.storage" :name="dishStorageOf(entry.storage).icon" class="size-4 shrink-0 text-primary sm:size-3.5" :title="`Stock · ${dishStorageOf(entry.storage).label}`" aria-hidden="true" />
               <span v-if="entry.storage" class="sr-only">Du stock :</span>
               <span class="truncate">{{ entry.label }}</span>
+              <!-- Bases mangées autrement que prévu (« Mayonnaise +20 g ») : déjà dans les kcal. -->
+              <UIcon v-if="entry.baseAdjustmentLabel" name="i-lucide-cooking-pot" class="size-4 shrink-0 text-primary sm:size-3.5" :title="entry.baseAdjustmentLabel" aria-hidden="true" />
+              <span v-if="entry.baseAdjustmentLabel" class="sr-only">, {{ entry.baseAdjustmentLabel }}</span>
             </p>
             <!-- « 1 part · 153 kcal · G20 P5 L3 » (sans quantité pour des macros saisies à la main). -->
             <p class="truncate text-xs tabular-nums text-dimmed">

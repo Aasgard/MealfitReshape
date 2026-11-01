@@ -1,12 +1,13 @@
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
-import type { Meal, MealSource, MealType, ScannedProduct, StockMealSource } from '~/types/meal'
+import type { Meal, MealBaseAdjustment, MealSource, MealType, ScannedProduct, StockMealSource } from '~/types/meal'
 import type { MenuEntry, MenuMealTypeRow, MenuMemberRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
 import { macrosForQuantity, scaleMacros, type IngredientMacros } from './ingredientNutrition'
 import { dayKeyOf, DAYS_PER_WEEK } from './menuWeek'
 import { formatParts, PARTS_EPSILON } from './preparedDishes'
 import { macrosForRecipe } from './recipeNutrition'
+import { baseAdjustmentDelta, baseAdjustmentLabel } from './mealBaseAdjustments'
 import { mealDay } from './shoppingList'
 
 /** Ligne "Hors plan" du calendrier : repas hors objectif, comptés comme dérapages. */
@@ -78,12 +79,35 @@ function draftFromMacros(label: string, macros: IngredientMacros, extra: Partial
   }
 }
 
-/** Repas pour `parts` parts d'une recette (une part = `persons` de la recette). */
-export function buildRecipeDraft(recipe: Recipe, parts: number, ingredientsById: Map<string, Ingredient>): MenuEntryDraft {
+/**
+ * Repas pour `parts` parts d'une recette (une part = `persons` de la recette). Les bases mangées autrement que prévu
+ * (`baseAdjustments`) corrigent les macros de leur écart.
+ */
+export function buildRecipeDraft(
+  recipe: Recipe,
+  parts: number,
+  ingredientsById: Map<string, Ingredient>,
+  baseAdjustments?: MealBaseAdjustment[]
+): MenuEntryDraft {
   // macrosForRecipe divise le total par `persons` : passer persons / parts donne total * parts / persons, sans double arrondi.
-  const macros = macrosForRecipe(recipe.ingredients, ingredientsById, (recipe.persons ?? 1) / parts)
+  const recipeMacros = macrosForRecipe(recipe.ingredients, ingredientsById, (recipe.persons ?? 1) / parts)
+  const delta = baseAdjustmentDelta(recipe, parts, baseAdjustments, ingredientsById)
+  const macros = {
+    calories: Math.max(0, recipeMacros.calories + delta.calories),
+    protein: Math.max(0, recipeMacros.protein + delta.protein),
+    carbohydrates: Math.max(0, recipeMacros.carbohydrates + delta.carbohydrates),
+    fat: Math.max(0, recipeMacros.fat + delta.fat),
+  }
   const quantityLabel = `${formatQuantity(parts)} part${parts > 1 ? 's' : ''}`
-  return draftFromMacros(recipe.title, macros, { recipeId: recipe.id, parts, recipeParts: recipe.persons ?? 1, quantityLabel })
+  const adjustmentLabel = baseAdjustmentLabel(recipe, parts, baseAdjustments, ingredientsById)
+  return draftFromMacros(recipe.title, macros, {
+    recipeId: recipe.id,
+    parts,
+    recipeParts: recipe.persons ?? 1,
+    quantityLabel,
+    ...(adjustmentLabel ? { baseAdjustmentLabel: adjustmentLabel } : {}),
+    ...(baseAdjustments?.length ? { baseAdjustments } : {}),
+  })
 }
 
 /** Repas pour `quantity` grammes d'un ingrédient (`unitId` `null`) ou `quantity` fois l'une de ses unités ; `null` si non calculable. */
@@ -131,7 +155,12 @@ export function mealSourceOf(meal: Meal): MealSource {
         ...(meal.comment ? { comment: meal.comment } : {}),
       }
     case 'RECIPE':
-      return { category: 'RECIPE', recipeId: meal.recipeId, value: meal.value }
+      return {
+        category: 'RECIPE',
+        recipeId: meal.recipeId,
+        value: meal.value,
+        ...(meal.baseAdjustments?.length ? { baseAdjustments: meal.baseAdjustments } : {}),
+      }
     case 'INGREDIENT':
       return { category: 'INGREDIENT', ingredientId: meal.ingredientId, unitId: meal.unitId ?? null, quantity: meal.quantity }
     case 'RAW':
@@ -152,7 +181,7 @@ function draftFromMeal(meal: Meal, recipesById: Map<string, Recipe>, ingredients
   switch (meal.category) {
     case 'RECIPE': {
       const recipe = recipesById.get(meal.recipeId)
-      return recipe ? buildRecipeDraft(recipe, meal.value, ingredientsById) : null
+      return recipe ? buildRecipeDraft(recipe, meal.value, ingredientsById, meal.baseAdjustments) : null
     }
     case 'INGREDIENT': {
       const ingredient = ingredientsById.get(meal.ingredientId)

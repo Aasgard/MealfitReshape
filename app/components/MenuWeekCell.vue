@@ -100,6 +100,9 @@ const onAdd = (event: DraggableEvent<MenuEntry>) => {
           <UIcon v-if="entry.storage" :name="dishStorageOf(entry.storage).icon" class="size-3 shrink-0 text-primary" :title="`Stock · ${dishStorageOf(entry.storage).label}`" aria-hidden="true" />
           <span v-if="entry.storage" class="sr-only">Du stock :</span>
           <span class="truncate" :title="entry.label">{{ entry.label }}</span>
+          <!-- Bases mangées autrement que prévu (« Mayonnaise +20 g ») : déjà dans les kcal. -->
+          <UIcon v-if="entry.baseAdjustmentLabel" name="i-lucide-cooking-pot" class="size-3 shrink-0 text-primary" :title="entry.baseAdjustmentLabel" aria-hidden="true" />
+          <span v-if="entry.baseAdjustmentLabel" class="sr-only">, {{ entry.baseAdjustmentLabel }}</span>
           <span v-if="companions[entry.id]" class="sr-only">{{ companionsLabel(companions[entry.id]!) }}</span>
         </p>
         <!--

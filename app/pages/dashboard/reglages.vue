@@ -277,9 +277,12 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
 
             <div class="flex flex-col gap-4 border-t border-default px-4 py-4 sm:px-5">
               <div class="flex flex-col gap-0.5">
-                <p class="text-sm font-medium text-highlighted">
-                  Répartition des kcal du jour
-                </p>
+                <div class="flex items-center gap-1.5">
+                  <p class="text-sm font-medium text-highlighted">
+                    Répartition des kcal du jour
+                  </p>
+                  <NotWiredHint text="Pas encore raccordé : l'accueil et le profil appliquent toujours 30 / 40 / 30 %." />
+                </div>
                 <p class="text-xs text-dimmed">
                   Chaque repas reçoit sa part de l'objectif du jour.
                 </p>
@@ -347,11 +350,15 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
             </div>
 
             <div class="divide-y divide-default border-t border-default">
-              <SettingRow label="Objectif pour la collation" hint="Sinon, la collation compte dans le total du jour, sans anneau.">
+              <SettingRow
+                label="Objectif pour la collation"
+                hint="Sinon, la collation compte dans le total du jour, sans anneau."
+                not-wired="Pas encore raccordé : la collation n'a jamais d'objectif dans l'app."
+              >
                 <USwitch v-model="settings.snackHasTarget" aria-label="Donner un objectif à la collation" />
               </SettingRow>
 
-              <SettingRow label="Repas atteint à ±" for="tol-meal">
+              <SettingRow label="Repas atteint à ±" for="tol-meal" not-wired="Pas encore raccordé : l'app applique toujours ± 10 %.">
                 <template #hint>
                   <template v-if="toleranceExample">
                     Déjeuner atteint entre <span class="tabular-nums">{{ formatNumber(toleranceExample.low) }}</span> et <span class="tabular-nums">{{ formatNumber(toleranceExample.high) }}</span> kcal
@@ -371,7 +378,7 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
                 />
               </SettingRow>
 
-              <SettingRow label="Journée atteinte à ±" for="tol-day">
+              <SettingRow label="Journée atteinte à ±" for="tol-day" not-wired="Pas encore raccordé : l'app applique toujours ± 5 %.">
                 <template #hint>
                   <template v-if="dayToleranceExample">
                     Entre <span class="tabular-nums">{{ formatNumber(dayToleranceExample.low) }}</span> et <span class="tabular-nums">{{ formatNumber(dayToleranceExample.high) }}</span> kcal, macros comprises
@@ -415,7 +422,7 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
               <SavedHint :stamp="saved.menus" />
             </header>
             <div class="border-t border-default">
-              <SettingRow label="Parts par défaut" hint="Proposé quand vous ajoutez une recette à la semaine." for="portions">
+              <SettingRow label="Parts par défaut" hint="Proposé quand vous ajoutez une recette à la semaine." for="portions" not-wired>
                 <UInputNumber
                   id="portions"
                   v-model="settings.householdPortions"
@@ -439,7 +446,11 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
             </header>
 
             <div class="divide-y divide-default border-t border-default">
-              <SettingRow label="Jour de courses" stack>
+              <SettingRow
+                label="Jour de courses"
+                stack
+                not-wired="Pas encore raccordé : la liste de courses part toujours d'aujourd'hui, sur 7 jours (modifiable dans la liste)."
+              >
                 <template #hint>
                   Période proposée : <span class="tabular-nums">{{ shoppingPeriod }}</span>
                 </template>
@@ -455,9 +466,12 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
               <div class="flex flex-col gap-3 px-4 py-3.5 sm:px-5">
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex flex-col gap-0.5">
-                    <p class="text-sm font-medium text-highlighted">
-                      Ordre des rayons
-                    </p>
+                    <div class="flex items-center gap-1.5">
+                      <p class="text-sm font-medium text-highlighted">
+                        Ordre des rayons
+                      </p>
+                      <NotWiredHint />
+                    </div>
                     <p class="text-xs text-dimmed text-pretty">
                       Rangez-les dans l'ordre de votre parcours en magasin : la liste suivra.
                     </p>
@@ -527,7 +541,10 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
 
               <div class="flex flex-col gap-3 px-4 py-3.5 sm:px-5">
                 <div class="flex flex-col gap-0.5">
-                  <label for="pantry" class="text-sm font-medium text-highlighted">Garde-manger permanent</label>
+                  <div class="flex items-center gap-1.5">
+                    <label for="pantry" class="text-sm font-medium text-highlighted">Garde-manger permanent</label>
+                    <NotWiredHint />
+                  </div>
                   <p class="text-xs text-dimmed text-pretty">
                     Toujours à la maison : ces articles arrivent déjà marqués « à la maison » dans chaque liste.
                   </p>
@@ -541,16 +558,23 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
                 />
               </div>
 
-              <SettingRow label="Arrondir à la pièce" hint="« 520 g de courgette » devient « 3 pièces (520 g) ».">
+              <SettingRow
+                label="Arrondir à la pièce"
+                hint="« 520 g de courgette » devient « 3 pièces (520 g) »."
+                not-wired="Pas encore raccordé : la liste arrondit toujours à la pièce supérieure, pour les ingrédients qui ont une unité « Pièce ». Désactiver ici ne change rien."
+              >
                 <USwitch v-model="settings.roundUpPieces" aria-label="Arrondir à la pièce supérieure" />
               </SettingRow>
 
               <div class="flex flex-col gap-3 px-4 py-3.5 sm:px-5">
                 <div class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div class="flex flex-col gap-0.5">
-                    <p class="text-sm font-medium text-highlighted">
-                      Format de copie
-                    </p>
+                    <div class="flex items-center gap-1.5">
+                      <p class="text-sm font-medium text-highlighted">
+                        Format de copie
+                      </p>
+                      <NotWiredHint />
+                    </div>
                     <p class="text-xs text-dimmed">
                       Ce que colle le bouton « Copier » de la liste.
                     </p>
@@ -604,9 +628,12 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
             <div class="divide-y divide-default border-t border-default">
               <div class="flex flex-col gap-3 px-4 py-3.5 sm:px-5">
                 <div class="flex flex-col gap-0.5">
-                  <p class="text-sm font-medium text-highlighted">
-                    Zones de mensurations
-                  </p>
+                  <div class="flex items-center gap-1.5">
+                    <p class="text-sm font-medium text-highlighted">
+                      Zones de mensurations
+                    </p>
+                    <NotWiredHint />
+                  </div>
                   <p class="text-xs text-dimmed">
                     Seules les zones cochées sont proposées à la saisie et sur la silhouette. Il en faut au moins une.
                   </p>
@@ -621,7 +648,11 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
                 />
               </div>
 
-              <SettingRow label="Projection sur le graphique de poids" hint="La courbe en pointillés issue de votre objectif.">
+              <SettingRow
+                label="Projection sur le graphique de poids"
+                hint="La courbe en pointillés issue de votre objectif."
+                not-wired="Appliqué au graphique de poids, mais pas enregistré : revient à la valeur par défaut au rechargement de la page."
+              >
                 <USwitch v-model="settings.showGoalProjection" aria-label="Afficher la projection de l'objectif" />
               </SettingRow>
             </div>

@@ -10,6 +10,8 @@ withDefaults(defineProps<{
   /** Id du contrôle, pour relier le libellé. */
   for?: string
   stack?: boolean
+  /** Réglage pas encore raccordé : une prise débranchée suit le libellé (`true` : texte par défaut de `NotWiredHint`). */
+  notWired?: string | boolean
 }>(), {
   stack: false,
 })
@@ -21,8 +23,11 @@ withDefaults(defineProps<{
     :class="stack ? 'grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center' : 'grid-cols-[minmax(0,1fr)_auto] items-center'"
   >
     <div class="flex min-w-0 flex-col gap-0.5">
-      <label v-if="$props.for" :for="$props.for" class="text-sm font-medium text-highlighted">{{ label }}</label>
-      <span v-else class="text-sm font-medium text-highlighted">{{ label }}</span>
+      <div class="flex items-center gap-1.5">
+        <label v-if="$props.for" :for="$props.for" class="text-sm font-medium text-highlighted">{{ label }}</label>
+        <span v-else class="text-sm font-medium text-highlighted">{{ label }}</span>
+        <NotWiredHint v-if="notWired" :text="typeof notWired === 'string' ? notWired : undefined" />
+      </div>
       <p v-if="hint || $slots.hint" class="text-xs text-muted text-pretty">
         <slot name="hint">
           {{ hint }}

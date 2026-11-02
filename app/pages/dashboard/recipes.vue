@@ -61,7 +61,13 @@ const recipesById = computed(() => new Map((recipes.value ?? []).map(r => [r.id,
 
 const searchQuery = ref('')
 
-const typeOptions = RECIPE_TYPES.map(t => ({ value: t, label: recipeTypeLabel(t), icon: recipeTypeIcon(t) ?? undefined }))
+/** `shortLabel` : libellé des boutons sous sm, où les cinq types doivent tenir sur une ligne. */
+const typeOptions = RECIPE_TYPES.map(t => ({
+  value: t,
+  label: recipeTypeLabel(t),
+  shortLabel: t === 'BREAKFAST' ? 'Pet. Déj.' : recipeTypeLabel(t),
+  icon: recipeTypeIcon(t) ?? undefined
+}))
 /** Une recette doit être de l'un des types sélectionnés ; aucun = tous les types. */
 const selectedTypes = ref<RecipeType[]>([])
 
@@ -429,19 +435,24 @@ const confirmDeleteRecipe = () => {
             <div class="flex flex-col lg:flex-row lg:items-center gap-3 2xl:shrink-0">
               <!-- Boutons bascule, comme dans la fenêtre d'ajout d'un repas ; plusieurs types peuvent être actifs à la fois. -->
               <!-- p-0.5 : boutons sm (28 px) + 4 px = 32 px, la hauteur des champs ; les lignes de filtres et de tri tombent ainsi au même endroit que sur la page Ingrédients. -->
-              <div role="group" aria-label="Filtrer par type de plat" class="flex flex-wrap gap-1 rounded-lg bg-elevated p-0.5 lg:shrink-0 lg:flex-nowrap">
+              <!-- Une seule ligne partout : sous sm, icônes et libellés complets ne tiennent pas, les boutons n'y gardent qu'un libellé court (« Pet. Déj. »). -->
+              <div role="group" aria-label="Filtrer par type de plat" class="flex flex-nowrap gap-1 rounded-lg bg-elevated p-0.5 lg:shrink-0">
                 <UButton
                   v-for="option in typeOptions"
                   :key="option.value"
-                  :label="option.label"
-                  :icon="option.icon"
                   :color="selectedTypes.includes(option.value) ? 'primary' : 'neutral'"
                   :variant="selectedTypes.includes(option.value) ? 'solid' : 'outline'"
                   size="sm"
+                  :aria-label="option.label"
+                  :title="option.label"
                   :aria-pressed="selectedTypes.includes(option.value)"
-                  class="flex-1 justify-center lg:flex-none"
+                  class="flex-1 min-w-0 justify-center px-1.5 sm:px-2.5 lg:flex-none"
                   @click="toggleType(option.value)"
-                />
+                >
+                  <UIcon v-if="option.icon" :name="option.icon" class="hidden sm:inline-flex size-4 shrink-0" aria-hidden="true" />
+                  <span class="truncate sm:hidden">{{ option.shortLabel }}</span>
+                  <span class="hidden sm:inline truncate">{{ option.label }}</span>
+                </UButton>
               </div>
               <div class="flex flex-col sm:flex-row gap-3 lg:min-w-0 lg:flex-1 2xl:flex-none">
                 <USelectMenu

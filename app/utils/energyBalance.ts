@@ -67,8 +67,8 @@ export interface EnergyBalanceInput {
   weighIns: WeighIn[]
   /** Fiche corporelle sans le poids, pris à chaque semaine. */
   body: Omit<BodyModelInput, 'weightKg'>
-  /** Objectif kcal du jour ; `null` : pas de besoins définis, l'objectif vaut l'entretien (rien de prévu). */
-  targetKcal: number | null
+  /** Objectif kcal en vigueur un jour (`yyyy-MM-dd`) ; `null` : pas de besoins définis, l'objectif vaut l'entretien (rien de prévu). */
+  targetKcalOn: (day: string) => number | null
 }
 
 const dayKey = (date: Date) => date.toISOString().slice(0, 10)
@@ -120,7 +120,8 @@ export function buildEnergyWeeks(input: EnergyBalanceInput): EnergyWeek[] {
       const model = resolveBodyModel({ ...input.body, weightKg })
       const maintenanceKcal = totalEnergyExpenditure(model)
       const kcalPerKg = energyPerKgAtStart(model)
-      const targetKcal = input.targetKcal ?? maintenanceKcal
+      // Moyenne des objectifs des jours saisis : un objectif changé en cours de semaine ne compte qu'à partir de son jour.
+      const targetKcal = logged.reduce((sum, day) => sum + (input.targetKcalOn(day) ?? maintenanceKcal), 0) / logged.length
       const eatenKcal = logged.reduce((sum, day) => sum + input.eatenByDay.get(day)!, 0) / logged.length
       const parts = {
         planned: maintenanceKcal - targetKcal,

@@ -3,7 +3,7 @@ import { addDays, addWeeks, differenceInCalendarWeeks, isSameWeek, parseISO, sta
 import type { Meal, MealBaseAdjustment, MealSource, MealType } from '~/types/meal'
 import type { MenuEntry, MenuMemberRow, MenuPerson } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
-import { DAILY_TARGETS } from '~/utils/dailyTargets'
+import type { DailyTargets } from '~/utils/dailyTargets'
 import { buildDays, dayKeyOf, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
 import { usedSurplusMeals } from '~/utils/preparedDishes'
 import { buildEntriesByDay, buildMemberDays, consumedOfDay, distributedRecipeMealIds, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
@@ -128,9 +128,18 @@ const distributedMealIds = computed(() => {
 /** Repas de toutes les semaines chargées, par jour (date ISO) : le calendrier continu en montre trois. */
 const entries = computed(() => buildEntriesByDay(meals.value, recipesById.value, ingredientsById.value, distributedMealIds.value))
 /** Moyennes par jour complet de la semaine affichée (voir `summarizeMenuWeek`). */
-const summary = computed(() =>
-  summarizeMenuWeek(entries.value, buildDays(selectedWeekStart.value).map(day => day.key))
-)
+const selectedWeekDayKeys = computed(() => buildDays(selectedWeekStart.value).map(day => day.key))
+const summary = computed(() => summarizeMenuWeek(entries.value, selectedWeekDayKeys.value))
+
+/** Besoins en vigueur chaque jour (voir `targetsOn`) : un objectif changé en cours de semaine ne vaut qu'à partir de son jour. */
+const profile = useProfile()
+const targetsOn = (dayKey: string) => profile.targetsOn(dayKey)
+/** Objectif de la moyenne de la semaine : la moyenne des besoins de ses jours. */
+const weekTargets = computed<DailyTargets>(() => {
+  const days = selectedWeekDayKeys.value.map(targetsOn)
+  const average = (key: keyof DailyTargets) => days.reduce((sum, t) => sum + t[key], 0) / days.length
+  return { calories: average('calories'), carbohydrates: average('carbohydrates'), protein: average('protein'), fat: average('fat') }
+})
 
 /** Une ligne par autre membre : tous ses repas de chaque jour, et ses kcal du jour. */
 const memberRows = computed<MenuMemberRow[]>(() => otherMembers.value.map(member => ({
@@ -207,7 +216,7 @@ const editingSource = computed(() => editingMeal.value ? mealSourceOf(editingMea
 const addDayBudget = computed(() => {
   const target = addTarget.value
   if (!target || target.memberId || target.mealTypeKey === UNCOUNTED_MEAL_KEY) return null
-  return { consumed: consumedOfDay(entries.value[target.dayKey] ?? {}, editingMeal.value?.id), targets: DAILY_TARGETS }
+  return { consumed: consumedOfDay(entries.value[target.dayKey] ?? {}, editingMeal.value?.id), targets: targetsOn(target.dayKey) }
 })
 
 const addContextLabel = computed(() => {
@@ -522,7 +531,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           class="shrink-0"
           title="Moyenne / jour"
           state-key="menus-week-summary-open"
-          :targets="DAILY_TARGETS"
+          :targets="weekTargets"
           :eaten-kcal="summary.averageKcal"
           :extra-kcal="summary.averageExtraKcal"
           :macros="summary.macros"
@@ -550,7 +559,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :days="days"
             :meal-types="mealTypes"
             :entries="entries"
-            :targets="DAILY_TARGETS"
+            :targets-on="targetsOn"
             :copied-entry-id="copiedMeal?.id"
             :continuous="isContinuous"
             :members="memberRows"

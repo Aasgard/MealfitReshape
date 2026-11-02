@@ -82,7 +82,7 @@ const weeks = computed<EnergyWeek[]>(() => {
     weighIns: props.points,
     body,
     // Même objectif que les résumés de l'accueil et des Menus, pour que les kcal restantes soient les mêmes.
-    targetKcal: DAILY_TARGETS.calories,
+    targetKcalOn: day => profile.targetsOn(day).calories,
   })
   const first = all.findIndex(w => w.energy || w.actualKg !== null)
   return first === -1 ? [] : all.slice(first)

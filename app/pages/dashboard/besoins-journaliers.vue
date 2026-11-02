@@ -79,6 +79,8 @@ function applyAsTarget() {
   if (calculated.direction !== 'maintain') profile.goal.calorieDeltaPercent = calculated.percent
   profile.goal.proteinPerKg = calculated.proteinPerKg
   profile.goal.proteinBasis = calculated.proteinBasis
+  // Besoins calculés : l'objectif quitte la saisie manuelle.
+  profile.goal.manualTargets = null
   if (usesTargetWeight.value && targetWeightValue.value !== null) profile.goal.targetWeightKg = targetWeightValue.value
   // Nouveau sens ou nouveau poids visé : l'objectif repart d'aujourd'hui (voir `saveGoal`).
   const restart = profile.goal.direction !== before.direction || profile.goal.targetWeightKg !== before.targetWeightKg
@@ -93,7 +95,7 @@ function applyAsTarget() {
   confirmTargetOpen.value = false
   toast.add({
     title: 'Objectif mis à jour',
-    description: `${formatNumber(lastResult.value.calories)} kcal par jour enregistrées dans votre profil.`,
+    description: `${formatNumber(lastResult.value.calories)} kcal par jour, en vigueur à partir d'aujourd'hui dans toute l'app.`,
     color: 'success',
     icon: 'i-lucide-check',
     actions: [{ label: 'Voir le profil', color: 'neutral', variant: 'outline', onClick: () => { navigateTo('/dashboard/profil') } }],
@@ -789,7 +791,7 @@ function handleChartPointerLeave() {
       <UModal
         v-model:open="confirmTargetOpen"
         title="Définir comme objectif ?"
-        description="Ces valeurs remplacent les besoins du jour de votre profil."
+        description="Ces valeurs remplacent les besoins du jour de votre profil à partir d'aujourd'hui : l'accueil, les Menus et le suivi de poids compteront dessus, les jours passés gardent les leurs."
         :ui="{ footer: 'justify-end' }"
       >
         <template #body>

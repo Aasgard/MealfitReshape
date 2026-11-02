@@ -1,6 +1,6 @@
 import { differenceInYears, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { ActivityKey, SexKey, UserBody, UserGoal, UserTargets } from '~/types/user'
+import type { ActivityKey, SexKey, UserBody, UserDoc, UserGoal, UserGoalHistoryEntry, UserTargets } from '~/types/user'
 import type { DailyTargets } from './dailyTargets'
 import { dayReaching, rateForCalories, resolveBodyModel, simulateWeight, totalEnergyExpenditure, type BodyModel } from './weightProjection'
 import type { WeightGoal } from './weightTrend'
@@ -121,8 +121,12 @@ export function percentForDirection(direction: Exclude<GoalDirection, 'maintain'
   return GOAL_CALORIE_PERCENTS[direction].includes(current) ? current : GOAL_DEFAULT_CALORIE_PERCENT[direction]
 }
 
-/** Calories par jour pour un objectif : dépense ∓ le pourcentage choisi. */
-export function goalCalories(expenditureKcal: number, goal: Pick<ProfileGoal, 'direction' | 'calorieDeltaPercent'>): number {
+/** Calories par jour pour un objectif : dépense ∓ le pourcentage choisi, ou les kcal saisies à la main. */
+export function goalCalories(
+  expenditureKcal: number,
+  goal: Pick<ProfileGoal, 'direction' | 'calorieDeltaPercent'> & { manualTargets?: DailyTargets | null },
+): number {
+  if (goal.manualTargets) return goal.manualTargets.calories
   if (goal.direction === 'maintain') return expenditureKcal
   const sign = goal.direction === 'loss' ? -1 : 1
   return expenditureKcal * (1 + (sign * goal.calorieDeltaPercent) / 100)
@@ -151,6 +155,8 @@ export interface ProfileGoal {
   /** Point de départ de l'objectif (voir `UserGoal`), format `yyyy-MM-dd`. */
   startDate: string | null
   startWeightKg: number | null
+  /** Besoins du jour saisis à la main (voir `UserGoal`) ; `null` : calculés depuis le pourcentage et les g/kg. */
+  manualTargets: DailyTargets | null
 }
 
 export interface ProfileTargets extends DailyTargets {
@@ -180,6 +186,62 @@ export function targetsToStored(values: DailyTargets, source: UserTargets['sourc
     fat: Math.round(values.fat),
     source,
   }
+}
+
+/**
+ * Objectif en vigueur à partir du jour `from` (`yyyy-MM-dd`), jusqu'à la période suivante : l'objectif et les besoins
+ * du jour. Une partie `null` n'était pas définie à cette date (seules les périodes reprises d'avant l'historique en ont) :
+ * celle de la période précédente vaut toujours.
+ */
+export type GoalPeriod = { from: string, goal: ProfileGoal | null, targets: ProfileTargets | null }
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/
+const dayOf = (date: Date) => format(date, 'yyyy-MM-dd')
+const byFrom = (a: GoalPeriod, b: GoalPeriod) => a.from.localeCompare(b.from)
+
+/**
+ * Historique des objectifs (`users.goalHistory`), du plus ancien au plus récent, complété sans rien perdre de ce que
+ * le document contenait avant lui : les jours de l'ancien `targetsByDate` qu'il n'a pas repris et, tant qu'il est vide,
+ * l'objectif et les besoins actuels à leur date d'enregistrement (`updatedAt`). Une fois écrites, ces périodes y entrent
+ * (voir `recordToday` dans `useProfile`).
+ */
+export function goalHistoryFromStored(stored: UserDoc, updatedAt: { goal: Date | null, targets: Date | null }): GoalPeriod[] {
+  const periods = new Map<string, GoalPeriod>()
+  const at = (from: string) => periods.get(from) ?? periods.set(from, { from, goal: null, targets: null }).get(from)!
+
+  for (const [from, values] of Object.entries(stored.targetsByDate ?? {})) {
+    if (DAY_KEY.test(from)) at(from).targets = targetsFromStored({ ...values, source: stored.targets?.source }, parseISO(from))
+  }
+
+  const entries = Object.entries(stored.goalHistory ?? {}).filter(([from]) => DAY_KEY.test(from))
+  if (!entries.length) {
+    if (stored.goal && updatedAt.goal) at(dayOf(updatedAt.goal)).goal = goalFromStored(stored.goal)
+    if (stored.targets && updatedAt.targets) at(dayOf(updatedAt.targets)).targets = targetsFromStored(stored.targets, updatedAt.targets)
+  }
+  for (const [from, entry] of entries) {
+    periods.set(from, {
+      from,
+      goal: entry.goal ? goalFromStored(entry.goal) : null,
+      targets: entry.targets ? targetsFromStored(entry.targets, parseISO(from)) : null,
+    })
+  }
+  return [...periods.values()].sort(byFrom)
+}
+
+/** Période de l'app → entrée stockée de `users.goalHistory`. */
+export function goalPeriodToStored(period: GoalPeriod): UserGoalHistoryEntry {
+  return {
+    goal: period.goal ? goalToStored(period.goal) : null,
+    targets: period.targets ? targetsToStored(period.targets, period.targets.source) : null,
+  }
+}
+
+/**
+ * `goal` ou `targets` en vigueur le jour `day` (`yyyy-MM-dd`) : celui de la dernière période qui le définit, à cette
+ * date ou avant. `null` avant la première : rien n'était encore défini.
+ */
+export function goalPartOn<K extends 'goal' | 'targets'>(history: GoalPeriod[], key: K, day: string): GoalPeriod[K] | null {
+  return history.findLast(period => period.from <= day && period[key] !== null)?.[key] ?? null
 }
 
 const DEFAULT_ACTIVITY = ACTIVITY_LEVELS[2]!
@@ -213,6 +275,15 @@ export function goalFromStored(stored: Partial<UserGoal>): ProfileGoal {
     proteinBasis: stored.proteinBasis === 'target' ? 'target' : 'current',
     startDate: typeof stored.startDate === 'string' ? stored.startDate : null,
     startWeightKg: finiteOrNull(stored.startWeightKg),
+    // Absent (objectif enregistré avant la saisie manuelle) ou sans kcal : besoins calculés.
+    manualTargets: stored.manualTargets && (finiteOrNull(stored.manualTargets.calories) ?? 0) > 0
+      ? {
+          calories: stored.manualTargets.calories,
+          carbohydrates: finiteOrNull(stored.manualTargets.carbohydrates) ?? 0,
+          protein: finiteOrNull(stored.manualTargets.protein) ?? 0,
+          fat: finiteOrNull(stored.manualTargets.fat) ?? 0,
+        }
+      : null,
   }
 }
 
@@ -229,8 +300,17 @@ export function goalToStored(goal: ProfileGoal): Omit<UserGoal, 'updatedAt'> {
     proteinBasis: goal.proteinBasis,
     startDate: goal.startDate,
     startWeightKg: goal.startWeightKg,
+    manualTargets: goal.manualTargets ? targetsValues(goal.manualTargets) : null,
   }
 }
+
+/** Valeurs arrondies de besoins du jour, sans origine ni date. */
+export const targetsValues = (t: DailyTargets): DailyTargets => ({
+  calories: Math.round(t.calories),
+  carbohydrates: Math.round(t.carbohydrates),
+  protein: Math.round(t.protein),
+  fat: Math.round(t.fat),
+})
 
 /** Fiche de l'app → fiche stockée (sans `updatedAt`, posé à l'écriture). */
 export function bodyToStored(body: BodyProfile): Omit<UserBody, 'updatedAt'> {

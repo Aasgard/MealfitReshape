@@ -40,6 +40,11 @@ export type UserGoal = {
   startDate: string | null
   /** `null` si aucun poids n'était connu au départ. */
   startWeightKg: number | null
+  /**
+   * Besoins du jour saisis à la main : ils remplacent le calcul (pourcentage et g/kg), et leurs kcal servent aussi à la
+   * projection du poids. `null` ou absent : besoins calculés.
+   */
+  manualTargets?: { calories: number, carbohydrates: number, protein: number, fat: number } | null
   updatedAt?: Timestamp
 }
 
@@ -58,6 +63,15 @@ export type UserTargets = {
   updatedAt?: Timestamp
 }
 
+/**
+ * Objectif en vigueur à partir d'un jour (`users.goalHistory`) : l'objectif et les besoins du jour tels qu'ils étaient
+ * ce jour-là. `null` : pas encore défini à cette date.
+ */
+export type UserGoalHistoryEntry = {
+  goal: Omit<UserGoal, 'updatedAt'> | null
+  targets: Omit<UserTargets, 'updatedAt'> | null
+}
+
 /** Document `users/{uid}`. */
 export type UserDoc = {
   account?: {
@@ -67,6 +81,14 @@ export type UserDoc = {
   body?: UserBody
   goal?: UserGoal
   targets?: UserTargets
+  /**
+   * Historique des objectifs, par jour d'entrée en vigueur (`yyyy-MM-dd`) : chaque enregistrement de `goal` ou de
+   * `targets` y écrit aussi le jour même, si bien qu'un jour passé garde l'objectif qui valait alors. `goal` et
+   * `targets` restent l'objectif en cours.
+   */
+  goalHistory?: Record<string, UserGoalHistoryEntry>
+  /** Ancien historique des seuls besoins : lu tant que `goalHistory` n'existe pas, puis repris dedans. */
+  targetsByDate?: Record<string, Pick<UserTargets, 'calories' | 'carbohydrates' | 'protein' | 'fat'>>
   /**
    * Foyer du compte : les règles de sécurité y vérifient que lui et le créateur d'un récipient en sont membres. Peut être
    * périmé (compte retiré du foyer) sans rien ouvrir : les règles relisent toujours `memberIds`.

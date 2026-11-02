@@ -9,7 +9,7 @@ import type { Recipe } from '~/types/recipe'
 import type { Workout } from '~/types/workout'
 import type { MealSlot, TodayCookingDay, TodayCookingPortion, TodayCookingRecipe, TodayMealRow, TodayThawDish } from '~/types/today'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
-import { DAILY_TARGETS, OUT_OF_PLAN_MEALS, PLANNED_MEALS } from '~/utils/dailyTargets'
+import { OUT_OF_PLAN_MEALS, plannedMeals } from '~/utils/dailyTargets'
 import { compareGroceryLines, groceryLineFromItem, MISC_AISLE, type GroceryLine } from '~/utils/groceryList'
 import { buildDayEntries, consumedOfDay, mealSourceOf, MENU_MEAL_TYPES, summarizeDay, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 import { COOKING_DAYS, recipesToCook, type RecipeToCookPortion } from '~/utils/recipesToCook'
@@ -278,14 +278,16 @@ const dayEntries = computed(() => {
 })
 const daySummary = computed(() => summarizeDay(dayEntries.value))
 
-const ALL_MEAL_SLOTS = [...PLANNED_MEALS, ...OUT_OF_PLAN_MEALS]
+/** Besoins en vigueur le jour affiché : un jour passé garde ceux d'alors (voir `targetsOn`). */
+const dayTargets = computed(() => profile.targetsOn(selectedDayKey.value))
+const allMealSlots = computed(() => [...plannedMeals(dayTargets.value.calories), ...OUT_OF_PLAN_MEALS])
 
 /** Repas rangés dans le panneau "Autres repas" (fermé par défaut) tant qu'ils sont vides. */
 const COLLAPSED_WHEN_EMPTY: MealType[] = ['SNACK', 'EXCESS']
 /** Repas toujours rangés dans le panneau. */
 const ALWAYS_COLLAPSED: MealType[] = ['NOTCOUNT']
 
-const allMealRows = computed(() => ALL_MEAL_SLOTS.map((slot): TodayMealRow => {
+const allMealRows = computed(() => allMealSlots.value.map((slot): TodayMealRow => {
   const entries = dayEntries.value[slot.mealType] ?? []
   return { ...slot, kcal: entries.reduce((total, entry) => total + entry.kcal, 0), entries }
 }))
@@ -682,7 +684,7 @@ const addTarget = ref<MealSlot | null>(null)
 const editingMeal = ref<Meal | null>(null)
 const editingSource = computed(() => editingMeal.value ? mealSourceOf(editingMeal.value) : null)
 
-const findMealSlot = (mealType: MealType) => ALL_MEAL_SLOTS.find(slot => slot.mealType === mealType) ?? null
+const findMealSlot = (mealType: MealType) => allMealSlots.value.find(slot => slot.mealType === mealType) ?? null
 
 const openAddModal = (mealType: MealType) => {
   editingMeal.value = null
@@ -711,7 +713,7 @@ const addContextLabel = computed(() => {
 /** Contenu du jour affiché (hors repas modifié) et objectifs, pour le filtre « Dans mes objectifs » ; aucun pour la ligne « Non compté ». */
 const addDayBudget = computed(() => {
   if (!addTarget.value || addTarget.value.mealType === UNCOUNTED_MEAL_KEY) return null
-  return { consumed: consumedOfDay(dayEntries.value, editingMeal.value?.id), targets: DAILY_TARGETS }
+  return { consumed: consumedOfDay(dayEntries.value, editingMeal.value?.id), targets: dayTargets.value }
 })
 
 const submitAddedMeal = async (source: MealSource) => {
@@ -910,7 +912,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             </Transition>
 
             <CalorieSummary
-              :targets="DAILY_TARGETS"
+              :targets="dayTargets"
               :eaten-kcal="daySummary.kcal"
               :extra-kcal="daySummary.extraKcal"
               :macros="daySummary.macros"

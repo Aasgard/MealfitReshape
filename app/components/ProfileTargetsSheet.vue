@@ -199,10 +199,11 @@ function stopEdit() {
   nextTick(() => document.getElementById('targets-edit')?.focus())
 }
 
+/** Saisie manuelle de l'objectif, comme dans la section Objectif : elle reste en place aux enregistrements suivants. */
 function save() {
   submitted.value = true
   if (!draftValues.value) return
-  profile.setTargets(draftValues.value, 'manual').catch((error: any) => {
+  profile.saveGoal({ ...profile.goal, manualTargets: targetsValues(draftValues.value) }).saved.catch((error: any) => {
     toast.add({
       title: 'Erreur',
       description: `Les besoins du jour n'ont pas pu être enregistrés : ${error.message || 'une erreur est survenue'}.`,
@@ -227,7 +228,7 @@ const KCAL_FIELD = { key: 'calories' as const, label: 'Énergie', unit: 'kcal' }
           {{ sourceLabel }}
         </p>
         <p v-else-if="editing" class="text-xs text-muted">
-          Ces valeurs servent d'objectif pour chaque journée.
+          Ces valeurs deviennent votre objectif à partir d'aujourd'hui ; les jours passés gardent le leur.
         </p>
       </div>
       <UButton

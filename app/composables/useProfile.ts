@@ -1,9 +1,9 @@
 import { format } from 'date-fns'
-import { doc, getDoc, serverTimestamp, setDoc, type DocumentReference, type Timestamp } from 'firebase/firestore'
+import { doc, FieldPath, getDoc, serverTimestamp, setDoc, type DocumentReference, type Timestamp } from 'firebase/firestore'
 import { useCurrentUser, useDocument, useFirestore } from 'vuefire'
-import type { UserDoc } from '~/types/user'
-import type { DailyTargets } from '~/utils/dailyTargets'
-import type { BodyProfile, GoalDirection, ProfileGoal, ProfileTargets } from '~/utils/profile'
+import type { UserDoc, UserGoalHistoryEntry } from '~/types/user'
+import { DAILY_TARGETS, type DailyTargets } from '~/utils/dailyTargets'
+import type { BodyProfile, GoalDirection, GoalPeriod, ProfileGoal, ProfileTargets } from '~/utils/profile'
 
 /** Parties du document `users` tenues par le profil, chacune enregistrée en entier. */
 type ProfilePart = 'body' | 'goal' | 'targets'
@@ -20,6 +20,10 @@ export function useProfile() {
   const body = useState<BodyProfile>('profile-body', emptyBody)
   const goal = useState<ProfileGoal>('profile-goal', emptyGoal)
   const targets = useState<ProfileTargets | null>('profile-targets', () => null)
+  /** Objectifs successifs (`users.goalHistory`, ou repris du document tant qu'il n'existe pas), du plus ancien au plus récent. */
+  const goalHistory = useState<GoalPeriod[]>('profile-goal-history', () => [])
+  /** Jours déjà dans `goalHistory` côté Firestore ; les autres périodes (reprises du document) y sont écrites au prochain enregistrement. */
+  const storedHistoryDays = useState<string[]>('profile-goal-history-days', () => [])
 
   /** Dernier enregistrement de chaque partie ; `null` tant qu'elle n'a jamais été enregistrée. */
   const updatedAt = useState<Record<ProfilePart, Date | null>>('profile-updated-at', () => ({ body: null, goal: null, targets: null }))
@@ -51,6 +55,10 @@ export function useProfile() {
       next.targets = stamp(data?.targets)
       targets.value = data?.targets ? targetsFromStored(data.targets, next.targets!) : null
     }
+    if (data?.goalHistory || data?.targetsByDate || data?.goal || data?.targets || clearMissing) {
+      goalHistory.value = goalHistoryFromStored(data ?? {}, next)
+      storedHistoryDays.value = Object.keys(data?.goalHistory ?? {})
+    }
     updatedAt.value = next
   }
 
@@ -78,17 +86,20 @@ export function useProfile() {
   })()
 
   /**
-   * Écrit des parties du document `users` en une seule écriture (même `updatedAt` serveur pour toutes) ;
-   * hors ligne, la promesse n'aboutit qu'à la synchronisation.
+   * Écrit des parties du document `users` en une seule écriture (même `updatedAt` serveur pour toutes), et les jours
+   * de `goalHistory` donnés ; hors ligne, la promesse n'aboutit qu'à la synchronisation.
    */
-  function saveParts(parts: Partial<Record<ProfilePart, object>>) {
+  function saveParts(parts: Partial<Record<ProfilePart, object>>, history: Record<string, UserGoalHistoryEntry> = {}) {
     const uid = user.value?.uid
     if (!uid) return Promise.reject(new Error('Vous devez être connecté.'))
     const fields = Object.keys(parts) as ProfilePart[]
-    const data = Object.fromEntries(fields.map(field => [field, { ...parts[field], updatedAt: serverTimestamp() }]))
+    const data: Record<string, object> = Object.fromEntries(fields.map(field => [field, { ...parts[field], updatedAt: serverTimestamp() }]))
+    const days = Object.keys(history)
+    if (days.length) data.goalHistory = history
     // `mergeFields` remplace chaque partie en entier (un champ abandonné, comme l'ancien `goal.rateKgPerWeek`, disparaît)
-    // sans toucher au reste du document (`account`, les autres parties).
-    return setDoc(doc(db, 'users', uid), data, { mergeFields: fields })
+    // sans toucher au reste du document (`account`, les autres parties) ; dans l'historique, seuls les jours écrits changent.
+    const mergeFields = [...fields.map(field => new FieldPath(field)), ...days.map(day => new FieldPath('goalHistory', day))]
+    return setDoc(doc(db, 'users', uid), data, { mergeFields })
   }
 
   /** Enregistre la fiche corporelle en entier. */
@@ -116,10 +127,32 @@ export function useProfile() {
   }
 
   /**
-   * Besoins du jour tirés de la fiche et de l'objectif, comme le calculateur : dépense ∓ le pourcentage, protéines
-   * au g/kg choisi sur le poids de référence, puis la même répartition (`splitMacros`). `null` si la fiche est incomplète.
+   * Met l'objectif en cours (l'objectif, si `withGoal`, et les besoins) en vigueur à partir d'aujourd'hui, sans toucher
+   * aux jours d'avant, et renvoie les jours d'historique à écrire. Les périodes reprises du document (objectif d'avant
+   * l'historique, ancien `targetsByDate`) y sont écrites aussi, à leur date : rien de ce qui valait avant n'est perdu.
+   */
+  function recordToday(withGoal: boolean) {
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const period: GoalPeriod = { from: today, goal: withGoal ? { ...goal.value } : null, targets: targets.value }
+    const earlier = goalHistory.value.filter(p => p.from < today)
+    const written = [...earlier.filter(p => !storedHistoryDays.value.includes(p.from)), period]
+    goalHistory.value = [...earlier, period]
+    storedHistoryDays.value = goalHistory.value.map(p => p.from)
+    return Object.fromEntries(written.map(p => [p.from, goalPeriodToStored(p)]))
+  }
+
+  /**
+   * Besoins en vigueur le jour `day` (`yyyy-MM-dd`), pour l'accueil, les Menus et le suivi de poids. Avant les premiers
+   * besoins définis, ceux par défaut (`DAILY_TARGETS`), qui valaient alors dans toute l'app.
+   */
+  const targetsOn = (day: string): DailyTargets => goalPartOn(goalHistory.value, 'targets', day) ?? DAILY_TARGETS
+
+  /**
+   * Besoins du jour de l'objectif : ceux saisis à la main, sinon tirés de la fiche, comme le calculateur (dépense ∓ le
+   * pourcentage, protéines au g/kg choisi sur le poids de référence, puis `splitMacros`). `null` si la fiche est incomplète.
    */
   function targetsFromProfile(): DailyTargets | null {
+    if (goal.value.manualTargets) return goal.value.manualTargets
     const model = bodyModel.value
     const weight = proteinBasisWeightKg(goal.value, currentWeightKg.value)
     if (!model || !weight) return null
@@ -135,11 +168,10 @@ export function useProfile() {
     // Le point de départ reste celui enregistré : seul `restart` le déplace.
     goal.value = { ...next, startDate: goal.value.startDate, startWeightKg: goal.value.startWeightKg }
     const values = targetsFromProfile()
-    const saved = saveParts({
-      goal: goalToSave(restart),
-      ...(values ? { targets: replaceTargets(values, 'profile') } : {}),
-    })
-    return { targetsUpdated: values !== null, saved }
+    const stored = values ? replaceTargets(values, goal.value.manualTargets ? 'manual' : 'profile') : null
+    const parts = { goal: goalToSave(restart), ...(stored ? { targets: stored } : {}) }
+    const saved = saveParts(parts, recordToday(true))
+    return { targetsUpdated: stored !== null, saved }
   }
 
   /**
@@ -148,7 +180,9 @@ export function useProfile() {
    */
   function setTargets(values: DailyTargets, source: ProfileTargets['source'], { goal: withGoal }: { goal?: { restart: boolean } } = {}) {
     const stored = replaceTargets(values, source)
-    return saveParts({ targets: stored, ...(withGoal ? { goal: goalToSave(withGoal.restart) } : {}) })
+    const parts = { targets: stored, ...(withGoal ? { goal: goalToSave(withGoal.restart) } : {}) }
+    // Sans objectif jamais enregistré, la période n'en a pas.
+    return saveParts(parts, recordToday(!!withGoal || updatedAt.value.goal !== null))
   }
 
   /** Besoins calculés (profil ou calculateur), alors que la fiche corporelle ou l'objectif ont changé depuis. */
@@ -190,6 +224,8 @@ export function useProfile() {
     bodyUpdatedAt,
     goal,
     targets,
+    targetsOn,
+    goalHistory,
     targetsRevision,
     previousTargets,
     targetsStale,

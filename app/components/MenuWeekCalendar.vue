@@ -15,8 +15,8 @@ const props = withDefaults(defineProps<{
   mealTypes: MenuMealTypeRow[]
   /** Repas/aliments par jour (date ISO) puis par type de repas : entries[dayKey][mealTypeKey]. */
   entries?: Record<string, Record<string, MenuEntry[]>>
-  /** Objectifs du jour, pour la couleur des kcal en en-tête de colonne. */
-  targets: DailyTargets
+  /** Objectifs en vigueur un jour donné (date ISO), pour la couleur des kcal en en-tête de colonne. */
+  targetsOn: (dayKey: string) => DailyTargets
   /** Repas actuellement copié : mis en évidence, et les boutons "+" indiquent qu'ils vont le coller. */
   copiedEntryId?: string
   /** Mobile, tablette : colonnes de largeur fixe, défilement aimanté par jour, d'une semaine à l'autre. */
@@ -152,12 +152,13 @@ const statusClassOf = (value: number, target: number) =>
  */
 const dayTotals = computed<Record<string, MenuDayTotals>>(() => Object.fromEntries(props.days.map((day) => {
   const { kcal, macros } = summarizeDay(props.entries[day.key] ?? {})
+  const targets = props.targetsOn(day.key)
   const macroItems = ([['G', 'carbohydrates'], ['P', 'protein'], ['L', 'fat']] as const).map(([letter, key]) => ({
     letter,
     value: macros[key],
-    statusClass: statusClassOf(macros[key], props.targets[key]),
+    statusClass: statusClassOf(macros[key], targets[key]),
   }))
-  return [day.key, { kcal, macroItems, statusClass: statusClassOf(kcal, props.targets.calories) }]
+  return [day.key, { kcal, macroItems, statusClass: statusClassOf(kcal, targets.calories) }]
 })))
 
 /**

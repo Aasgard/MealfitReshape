@@ -24,7 +24,7 @@ export function splitMacros(calories: number, proteinGrams: number): DailyTarget
   }
 }
 
-/** Objectifs journaliers fixes (kcal et grammes), en attendant qu'ils viennent du profil de l'utilisateur. */
+/** Objectifs journaliers par défaut (kcal et grammes), tant qu'aucun besoin n'est défini dans le profil (voir `targetsOn`). */
 export const DAILY_TARGETS: DailyTargets = {
   calories: 1531,
   carbohydrates: 188,
@@ -42,9 +42,9 @@ export const MEAL_KCAL_SHARES: { mealType: 'BREAKFAST' | 'LUNCH' | 'DINER', labe
   { mealType: 'DINER', label: 'Dîner', share: 0.3 },
 ]
 
-/** Les 4 repas du plan, avec leur part de l'objectif journalier (voir `MEAL_KCAL_SHARES`). */
-export const PLANNED_MEALS: MealSlot[] = [
-  ...MEAL_KCAL_SHARES.map(({ mealType, label, share }) => ({ mealType, label, targetKcal: Math.round(DAILY_TARGETS.calories * share) })),
+/** Les 4 repas du plan, avec leur part de l'objectif journalier `calories` (voir `MEAL_KCAL_SHARES`). */
+export const plannedMeals = (calories: number): MealSlot[] => [
+  ...MEAL_KCAL_SHARES.map(({ mealType, label, share }) => ({ mealType, label, targetKcal: Math.round(calories * share) })),
   { mealType: 'SNACK', label: 'Collation' },
 ]
 

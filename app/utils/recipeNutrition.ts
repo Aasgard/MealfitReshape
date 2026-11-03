@@ -1,6 +1,6 @@
 import type { Ingredient } from '~/types/ingredient'
 import type { RecipeIngredientLine } from '~/types/recipe'
-import { gramsForUnit, scaleMacros, type IngredientMacros } from './ingredientNutrition'
+import { gramsForUnit, ingredientUnit, scaleMacros, type IngredientMacros } from './ingredientNutrition'
 import { lineSourceKey } from './recipeLineSource'
 
 const EMPTY_MACROS: IngredientMacros = { calories: 0, protein: 0, carbohydrates: 0, fat: 0 }
@@ -59,11 +59,15 @@ export function describeRecipeLine(
     return { label: ingredient.label, quantityLabel: `${formatLineQuantity(quantity, true)} g` }
   }
 
-  const unit = ingredient.units?.[line.unit]
+  const unit = ingredientUnit(ingredient, line.unit)
   if (!unit) return null
 
-  const quantityLabel = `${formatLineQuantity(quantity, false)} × ${unit.label}`
   const isPlainMeasure = ['g', 'ml'].includes(unit.label.trim().toLowerCase())
+  // « 200 ml » plutôt que « 200 × ml » pour une mesure simple de 1 g ou 1 ml.
+  if (isPlainMeasure && unit.value === 1) {
+    return { label: ingredient.label, quantityLabel: `${formatLineQuantity(quantity, true)} ${unit.label.trim()}` }
+  }
+  const quantityLabel = `${formatLineQuantity(quantity, false)} × ${unit.label}`
   if (isPlainMeasure || !(unit.value > 0)) return { label: ingredient.label, quantityLabel }
 
   return {

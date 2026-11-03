@@ -20,18 +20,38 @@ export function scaleMacros(macros: IngredientMacros, factor: number): Ingredien
   }
 }
 
+/** Id de l'unité « ml » offerte d'office à un ingrédient qui a une densité, sans être écrite dans `units`. */
+export const ML_UNIT_ID = '__ml__'
+
+type IngredientUnit = NonNullable<Ingredient['units']>[string]
+
+const hasDensity = (ing: Ingredient) => !!ing.density && ing.density > 0
+
+/** Unité `unitId` de l'ingrédient : l'une de ses `units`, ou le ml d'office (`ML_UNIT_ID`) s'il a une densité. */
+export function ingredientUnit(ing: Ingredient, unitId: string): IngredientUnit | undefined {
+  const unit = ing.units?.[unitId]
+  if (unit) return unit
+  return unitId === ML_UNIT_ID && hasDensity(ing) ? { label: 'ml', value: 1, unit: 'ml' } : undefined
+}
+
+/** Le ml d'office s'ajoute aux unités proposées, sauf si l'ingrédient en a déjà une de 1 ml. */
+export function offersMlUnit(ing: Ingredient | null | undefined): boolean {
+  if (!ing || !hasDensity(ing)) return false
+  return !Object.values(ing.units ?? {}).some(u => u.unit === 'ml' && u.value === 1)
+}
+
 /**
- * Résout la masse en grammes d'une unité de l'ingrédient (`ing.units[unitId]`),
+ * Résout la masse en grammes d'une unité de l'ingrédient (voir `ingredientUnit`),
  * convertie depuis le `ml` via `ing.density` si besoin. `null` si l'unité est
  * introuvable ou si la conversion ml → g est impossible faute de densité.
  */
 export function gramsForUnit(ing: Ingredient, unitId: string): number | null {
-  const unit = ing.units?.[unitId]
+  const unit = ingredientUnit(ing, unitId)
   if (!unit || unit.value <= 0) return null
 
   if (unit.unit === 'ml') {
-    if (!ing.density || ing.density <= 0) return null
-    return unit.value * ing.density
+    if (!hasDensity(ing)) return null
+    return unit.value * ing.density!
   }
   return unit.value
 }

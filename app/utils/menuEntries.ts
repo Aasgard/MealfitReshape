@@ -3,7 +3,7 @@ import type { Ingredient } from '~/types/ingredient'
 import type { Meal, MealBaseAdjustment, MealSource, MealType, ScannedProduct, StockMealSource } from '~/types/meal'
 import type { MenuEntry, MenuMealTypeRow, MenuMemberRow, MenuWeekEntries, MenuWeekMacroBalance } from '~/types/menu'
 import type { Recipe } from '~/types/recipe'
-import { macrosForQuantity, scaleMacros, type IngredientMacros } from './ingredientNutrition'
+import { ingredientUnit, macrosForQuantity, scaleMacros, type IngredientMacros } from './ingredientNutrition'
 import { dayKeyOf, DAYS_PER_WEEK } from './menuWeek'
 import { formatParts, PARTS_EPSILON } from './preparedDishes'
 import { macrosForRecipe } from './recipeNutrition'
@@ -115,8 +115,13 @@ export function buildIngredientDraft(ingredient: Ingredient, unitId: string | nu
   const macros = macrosForQuantity(ingredient, unitId, quantity)
   if (!macros) return null
 
-  const unitLabel = unitId == null ? undefined : ingredient.units?.[unitId]?.label
-  const quantityLabel = unitLabel ? `${formatQuantity(quantity)} × ${unitLabel}` : `${formatQuantity(quantity)} g`
+  const unit = unitId == null ? undefined : ingredientUnit(ingredient, unitId)
+  // « 200 ml » plutôt que « 200 × ml » pour une mesure simple de 1 ml.
+  const quantityLabel = !unit
+    ? `${formatQuantity(quantity)} g`
+    : unit.label.trim().toLowerCase() === 'ml' && unit.value === 1
+      ? `${formatQuantity(quantity)} ml`
+      : `${formatQuantity(quantity)} × ${unit.label}`
   return draftFromMacros(ingredient.label, macros, { ingredientId: ingredient.id, quantityLabel })
 }
 

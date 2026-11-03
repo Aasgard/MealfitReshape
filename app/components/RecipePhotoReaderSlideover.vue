@@ -4,6 +4,7 @@ import type { Ingredient } from '~/types/ingredient'
 import type { RecipeDraft } from '~/types/recipe'
 import type { CatalogBook, CatalogIngredient, RecipeReading } from '#shared/types/recipeReading'
 import { cropImage, resizeImage } from '~/utils/imageResize'
+import { ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 
 /**
@@ -108,7 +109,11 @@ function catalogForReading(): CatalogIngredient[] {
   return props.ingredients.map(i => ({
     id: i.id,
     label: i.label,
-    units: Object.entries(i.units ?? {}).map(([id, u]) => ({ id, label: u.label, value: u.value, unit: u.unit })),
+    // Avec une densité, les millilitres de la recette se reprennent tels quels plutôt que convertis en grammes.
+    units: [
+      ...Object.entries(i.units ?? {}).map(([id, u]) => ({ id, label: u.label, value: u.value, unit: u.unit })),
+      ...(offersMlUnit(i) ? [{ id: ML_UNIT_ID, label: 'ml', value: 1, unit: 'ml' as const }] : []),
+    ],
   }))
 }
 

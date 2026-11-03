@@ -1,7 +1,7 @@
 import { format } from 'date-fns'
 import type { Ingredient } from '~/types/ingredient'
 import type { Meal } from '~/types/meal'
-import { gramsForUnit } from './ingredientNutrition'
+import { gramsForUnit, ingredientUnit } from './ingredientNutrition'
 
 /** Besoin d'un ingrédient un jour donné : le jour où il est cuisiné (recette) ou mangé (aliment seul). */
 export interface ShoppingNeed {
@@ -42,7 +42,7 @@ export function ingredientAmount(ingredient: Ingredient, unitId: string | null, 
   if (unitId == null) return { grams: quantity, milliliters: 0 }
   const unitGrams = gramsForUnit(ingredient, unitId)
   if (unitGrams != null) return { grams: unitGrams * quantity, milliliters: 0 }
-  const unit = ingredient.units?.[unitId]
+  const unit = ingredientUnit(ingredient, unitId)
   if (unit?.unit === 'ml' && unit.value > 0) return { grams: 0, milliliters: unit.value * quantity }
   return null
 }

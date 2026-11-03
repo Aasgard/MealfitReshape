@@ -6,7 +6,7 @@ import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, buildStockDraft, type MenuEntryDraft } from '~/utils/menuEntries'
 import { compareDishes, dishStorageOf, formatDishDay, formatParts, isDishPlanned, isDishStale, PARTS_EPSILON } from '~/utils/preparedDishes'
-import { gramsForUnit } from '~/utils/ingredientNutrition'
+import { gramsForUnit, ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
 import { isBaseRecipe, MEAL_RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { recipeIngredientIds } from '~/utils/recipeBases'
@@ -724,12 +724,17 @@ const toggleIngredientSeasonOnly = () => {
   if (ingredientSeasonOnly.value && selectedIngredient.value && !isIngredientSeasonCompatible(selectedIngredient.value)) ingredientId.value = undefined
 }
 
+/** Champs de recherche des menus déroulants : en `type="search"` pour qu'Android n'y propose pas sa barre de mots de passe (voir `NAME_FIELD_BASE`). */
+const SEARCH_INPUT_ATTRS = { type: 'search', enterkeyhint: 'search', spellcheck: 'false', 'data-form-type': 'other', 'data-lpignore': 'true', ui: { base: NAME_FIELD_BASE } } as const
+
 const selectedRecipe = computed(() => props.recipes.find(r => r.id === recipeId.value))
 const selectedIngredient = computed(() => ingredientId.value ? props.ingredientsById.get(ingredientId.value) : undefined)
 
+/** Un ingrédient qui a une densité se saisit aussi en millilitres, proposés en tête (unité par défaut). */
 const unitOptions = computed(() => {
   const options = [{ value: GRAMS_UNIT, label: 'Grammes (g)' }]
   const ingredient = selectedIngredient.value
+  if (offersMlUnit(ingredient)) options.unshift({ value: ML_UNIT_ID, label: 'Millilitres (ml)' })
   for (const [key, u] of Object.entries(ingredient?.units ?? {})) {
     // Une unité en ml sans densité ne se convertit pas en grammes : inutilisable pour les macros.
     if (gramsForUnit(ingredient!, key) == null) continue
@@ -738,13 +743,15 @@ const unitOptions = computed(() => {
   return options
 })
 
-/** Grammes par défaut (100 g, base des valeurs nutritionnelles) ; 1 pour une unité (« 1 tranche »). */
+const isPlainMeasure = (value: string) => value === GRAMS_UNIT || value === ML_UNIT_ID
+
+/** 100 g ou 100 ml par défaut (base des valeurs nutritionnelles) ; 1 pour une unité (« 1 tranche »). */
 const onIngredientChange = () => {
-  unit.value = GRAMS_UNIT
+  unit.value = unitOptions.value[0]!.value
   quantity.value = '100'
 }
 const onUnitChange = () => {
-  quantity.value = unit.value === GRAMS_UNIT ? '100' : '1'
+  quantity.value = isPlainMeasure(unit.value) ? '100' : '1'
 }
 
 const quantityValue = computed(() => parsePositiveNumber(quantity.value))
@@ -1134,7 +1141,7 @@ const onSubmit = () => {
                       value-key="value"
                       multiple
                       placeholder="Tous les ingrédients et tags"
-                      :search-input="{ placeholder: 'Rechercher un ingrédient ou un tag...' }"
+                      :search-input="{ ...SEARCH_INPUT_ATTRS, placeholder: 'Rechercher un ingrédient ou un tag...' }"
                       aria-label="Filtrer par ingrédient ou par tag"
                       class="flex-1 min-w-0"
                       @update:model-value="onRecipeFilterChange"
@@ -1170,6 +1177,12 @@ const onSubmit = () => {
               <div class="flex items-center gap-2">
                 <UInput
                   v-model="recipeSearch"
+                  type="search"
+                  enterkeyhint="search"
+                  autocomplete="off"
+                  spellcheck="false"
+                  data-form-type="other"
+                  data-lpignore="true"
                   icon="i-lucide-search"
                   placeholder="Rechercher une recette..."
                   aria-label="Rechercher une recette"
@@ -1368,7 +1381,7 @@ const onSubmit = () => {
                 v-model="baseToAdd"
                 :items="addableBases"
                 value-key="id"
-                :search-input="{ placeholder: 'Rechercher une base...' }"
+                :search-input="{ ...SEARCH_INPUT_ATTRS, placeholder: 'Rechercher une base...' }"
                 icon="i-lucide-plus"
                 size="xs"
                 variant="ghost"
@@ -1402,7 +1415,7 @@ const onSubmit = () => {
                 :items="ingredientOptions"
                 value-key="id"
                 placeholder="Choisir un aliment..."
-                :search-input="{ placeholder: 'Rechercher...' }"
+                :search-input="{ ...SEARCH_INPUT_ATTRS, placeholder: 'Rechercher...' }"
                 icon="i-lucide-carrot"
                 class="min-w-0 flex-1"
                 @update:model-value="onIngredientChange"
@@ -1427,7 +1440,7 @@ const onSubmit = () => {
           </UFormField>
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Quantité" :error="quantityError">
-              <UInput v-model="quantity" type="text" inputmode="decimal" placeholder="100" size="md" variant="outline" class="w-full" />
+              <UInput v-model="quantity" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="100" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
             <UFormField label="Unité">
               <USelectMenu
@@ -1486,7 +1499,7 @@ const onSubmit = () => {
           />
 
           <UFormField label="Libellé" :error="labelError">
-            <UInput v-model="label" size="md" variant="outline" class="w-full" />
+            <UInput v-model="label" type="search" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" autocapitalize="sentences" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
 
           <UFormField label="Quantité mangée" :error="productQuantityError">
@@ -1507,13 +1520,18 @@ const onSubmit = () => {
               </div>
               <UInput
                 v-model="productQuantity"
-                type="text"
+                type="search"
                 inputmode="decimal"
+                enterkeyhint="done"
+                autocomplete="off"
+                spellcheck="false"
+                data-form-type="other"
+                data-lpignore="true"
                 placeholder="100"
                 size="md"
                 variant="outline"
                 class="w-full"
-                :ui="{ base: 'tabular-nums', trailing: 'pe-3' }"
+                :ui="{ base: `${NAME_FIELD_BASE} tabular-nums`, trailing: 'pe-3' }"
               >
                 <template #trailing>
                   <span class="text-sm text-muted">{{ product.unit }}</span>
@@ -1532,20 +1550,20 @@ const onSubmit = () => {
             Estimation de Claude, indicative : ajustez les valeurs si besoin.
           </p>
           <UFormField label="Libellé" :error="labelError">
-            <UInput v-model="label" placeholder="ex : Restaurant, barre protéinée..." size="md" variant="outline" class="w-full" />
+            <UInput v-model="label" type="search" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" autocapitalize="sentences" placeholder="ex : Restaurant, barre protéinée..." size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
           <UFormField label="Calories (kcal)" :error="kcalError">
-            <UInput v-model="kcal" type="text" inputmode="decimal" placeholder="ex : 450" size="md" variant="outline" class="w-full" />
+            <UInput v-model="kcal" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 450" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
           </UFormField>
           <div class="grid grid-cols-3 gap-4">
             <UFormField label="Glucides (g)" :error="carbohydratesError">
-              <UInput v-model="carbohydrates" type="text" inputmode="decimal" placeholder="0" size="md" variant="outline" class="w-full" />
+              <UInput v-model="carbohydrates" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="0" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
             <UFormField label="Protéines (g)" :error="proteinError">
-              <UInput v-model="protein" type="text" inputmode="decimal" placeholder="0" size="md" variant="outline" class="w-full" />
+              <UInput v-model="protein" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="0" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
             <UFormField label="Lipides (g)" :error="fatError">
-              <UInput v-model="fat" type="text" inputmode="decimal" placeholder="0" size="md" variant="outline" class="w-full" />
+              <UInput v-model="fat" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="0" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
           </div>
         </template>

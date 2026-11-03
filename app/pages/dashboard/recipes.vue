@@ -425,11 +425,18 @@ const confirmDeleteRecipe = () => {
           <div class="flex flex-col 2xl:flex-row 2xl:items-center gap-3">
             <UInput
               v-model="searchQuery"
+              type="search"
+              enterkeyhint="search"
+              autocomplete="off"
+              spellcheck="false"
+              data-form-type="other"
+              data-lpignore="true"
               icon="i-lucide-search"
               size="md"
               variant="outline"
               placeholder="Rechercher une recette..."
               class="w-full 2xl:flex-1 2xl:min-w-0"
+              :ui="{ base: NAME_FIELD_BASE }"
             />
             <!-- Types puis menus ingrédients et tags : sur une ligne à partir de lg ; en dessous, les deux menus partagent la leur (dès sm). -->
             <div class="flex flex-col lg:flex-row lg:items-center gap-3 2xl:shrink-0">

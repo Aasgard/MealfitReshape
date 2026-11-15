@@ -10,8 +10,11 @@ const props = withDefaults(defineProps<{
   recipe: Recipe
   /** Ingrédients résolus (id document → Ingredient) pour calculer les macros cumulées de la recette. */
   ingredientsById?: Map<string, Ingredient>
+  /** Le compte connecté peut modifier et supprimer la recette ; sinon seul « Dupliquer » reste. */
+  editable?: boolean
 }>(), {
   ingredientsById: () => new Map(),
+  editable: false,
 })
 
 const emit = defineEmits<{
@@ -42,13 +45,13 @@ const hasMacros = computed(() =>
   macros.value.calories > 0 || macros.value.protein > 0 || macros.value.carbohydrates > 0 || macros.value.fat > 0
 )
 
-const actionItems = computed(() => [
-  [
-    { label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit') },
-    { label: 'Dupliquer', icon: 'i-lucide-copy', onSelect: () => emit('duplicate') },
-  ],
-  [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => emit('delete') }],
-])
+const duplicateItem = { label: 'Dupliquer', icon: 'i-lucide-copy', onSelect: () => emit('duplicate') }
+const actionItems = computed(() => (props.editable
+  ? [
+      [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit') }, duplicateItem],
+      [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => emit('delete') }],
+    ]
+  : [[duplicateItem]]))
 </script>
 
 <template>

@@ -23,6 +23,7 @@ const db = useFirestore()
 const user = useCurrentUser()
 const toast = useToast()
 const photos = useRecipePhotos()
+const { canEdit } = useCatalogRights()
 
 const recipes = useCollection<Recipe>(() => {
   const uid = user.value?.uid
@@ -564,6 +565,7 @@ const confirmDeleteRecipe = () => {
             v-model:sort="sort"
             :recipes="filteredRecipes"
             :macros-by-id="recipeMacrosById"
+            :can-edit="canEdit"
             :loading="recipesLoading"
             @select="selectRecipe"
             @edit="editRecipe"
@@ -597,6 +599,7 @@ const confirmDeleteRecipe = () => {
                 :key="recipe.id"
                 :recipe="recipe"
                 :ingredients-by-id="ingredientsById"
+                :editable="canEdit(recipe)"
                 @select="selectRecipe(recipe)"
                 @edit="editRecipe(recipe)"
                 @duplicate="duplicateRecipe(recipe)"

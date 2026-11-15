@@ -376,6 +376,7 @@ const printRecipe = async () => {
  */
 const editedRecipe = ref<Recipe | null>(null)
 const formOpen = ref(false)
+const { canEdit } = useCatalogRights()
 
 const editRecipe = async () => {
   if (!shown.value) return
@@ -423,7 +424,7 @@ const editRecipe = async () => {
           </template>
         </UPopover>
         <UButton
-          v-if="shown"
+          v-if="shown && canEdit(shown)"
           icon="i-lucide-pencil"
           color="neutral"
           variant="ghost"

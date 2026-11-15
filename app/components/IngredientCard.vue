@@ -6,6 +6,8 @@ import { isIngredientInSeason } from '~/utils/ingredientSeason'
 const props = defineProps<{
   ingredient: Ingredient
   ownedByUser: boolean
+  /** Le compte connecté peut modifier et supprimer l'ingrédient ; sinon la carte n'a pas de menu d'actions. */
+  editable: boolean
 }>()
 
 const emit = defineEmits<{
@@ -51,7 +53,7 @@ const actionItems = computed(() => [
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
           <UBadge v-if="ownedByUser" label="Privé" variant="subtle" size="sm" />
-          <UDropdownMenu :items="actionItems" :ui="{ content: 'w-40' }">
+          <UDropdownMenu v-if="editable" :items="actionItems" :ui="{ content: 'w-40' }">
             <UButton
               icon="i-lucide-ellipsis-vertical"
               color="neutral"

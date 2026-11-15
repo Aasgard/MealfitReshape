@@ -94,4 +94,9 @@ export type UserDoc = {
    * périmé (compte retiré du foyer) sans rien ouvrir : les règles relisent toujours `memberIds`.
    */
   householdId?: string
+  /**
+   * Modifie et supprime toutes les recettes et tous les ingrédients ; sans ce champ (ou à `false`), seulement les siens
+   * (voir `useCatalogRights`). Posé par `scripts/set-admins.cjs`, jamais par l'app.
+   */
+  admin?: boolean
 }

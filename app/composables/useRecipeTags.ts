@@ -19,6 +19,7 @@ export interface RecipeTagRenameResult {
 export function useRecipeTags() {
   const db = useFirestore()
   const user = useCurrentUser()
+  const { canEdit } = useCatalogRights()
 
   const recipes = useCollection<Recipe>(() => (user.value ? collection(db, 'recipes') : null))
 
@@ -35,19 +36,22 @@ export function useRecipeTags() {
     if (!label) throw new Error('Le nouveau nom est vide.')
     const keys = new Set([fromKey, recipeTagKey(label)])
 
-    const changes = (recipes.value ?? [])
-      .map(r => ({ id: r.id, before: r.tags ?? [], tags: renameInRecipeTags(r.tags ?? [], keys, label) }))
-      .filter((c): c is { id: string, before: string[], tags: string[] } => c.tags !== null)
+    const tagged = (recipes.value ?? [])
+      .map(r => ({ id: r.id, before: r.tags ?? [], tags: renameInRecipeTags(r.tags ?? [], keys, label), editable: canEdit(r) }))
+      .filter((c): c is { id: string, before: string[], tags: string[], editable: boolean } => c.tags !== null)
+    // Les recettes que le compte ne peut pas modifier gardent l'ancien nom, comme un refus de Firestore.
+    const changes = tagged.filter(c => c.editable)
+    const skipped = tagged.length - changes.length
 
     const results = await Promise.allSettled(changes.map(c => updateDoc(doc(db, 'recipes', c.id), { tags: c.tags })))
     const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-    const denied = rejected.filter(r => (r.reason as { code?: string })?.code === 'permission-denied').length
+    const denied = skipped + rejected.filter(r => (r.reason as { code?: string })?.code === 'permission-denied').length
     const done = changes.filter((_, i) => results[i]!.status === 'fulfilled')
 
     return {
       updated: done.length,
       denied,
-      failed: rejected.length - denied,
+      failed: rejected.length - (denied - skipped),
       undo: async () => {
         await Promise.all(done.map(c => updateDoc(doc(db, 'recipes', c.id), { tags: c.before })))
       },

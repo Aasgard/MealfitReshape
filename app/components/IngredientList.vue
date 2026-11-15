@@ -16,6 +16,8 @@ import { ingredientPieceUnit } from '~/utils/ingredientNutrition'
 const props = defineProps<{
   ingredients: Ingredient[]
   isOwned: (ingredient: Ingredient) => boolean
+  /** Le compte connecté peut modifier et supprimer l'ingrédient ; sinon la ligne n'a pas de menu d'actions. */
+  canEdit: (ingredient: Ingredient) => boolean
   loading?: boolean
 }>()
 
@@ -180,7 +182,9 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 12 : 0 
             </td>
 
             <td class="pl-1 pr-2 py-2" @click.stop>
-              <ListActionsButton :label="`Actions pour ${ingredient.label}`" @click="openActions(ingredient, $event)" />
+              <ListActionsButton v-if="canEdit(ingredient)" :label="`Actions pour ${ingredient.label}`" @click="openActions(ingredient, $event)" />
+              <!-- Sans actions, la place du bouton est gardée : les colonnes restent alignées d'une ligne à l'autre. -->
+              <span v-else class="block size-6" aria-hidden="true" />
             </td>
           </tr>
         </template>
@@ -261,7 +265,8 @@ const skeletonRows = computed(() => Array.from({ length: props.loading ? 12 : 0 
         </button>
 
         <div class="flex items-center pl-1 pr-2">
-          <ListActionsButton :label="`Actions pour ${ingredient.label}`" @click="openActions(ingredient, $event)" />
+          <ListActionsButton v-if="canEdit(ingredient)" :label="`Actions pour ${ingredient.label}`" @click="openActions(ingredient, $event)" />
+          <span v-else class="block size-6" aria-hidden="true" />
         </div>
       </li>
     </template>

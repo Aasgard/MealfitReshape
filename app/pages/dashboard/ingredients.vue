@@ -77,9 +77,11 @@ const selectedVisibilityOption = computed(() =>
 const seasonOnly = ref(false)
 const unitsOnly = ref(false)
 
-/** Un ingrédient sans `owner` appartient au catalogue public : il n'est ni privé, ni modifiable. */
+/** Un ingrédient sans `owner` appartient au catalogue public : il n'est pas privé. */
 const isOwnedByUser = (ingredient: Ingredient) =>
   !!ingredient.owner && ingredient.owner === user.value?.uid
+/** Modifier et supprimer : les siens, ou tout pour un admin. */
+const { canEdit } = useCatalogRights()
 
 /** Ingrédients masqués immédiatement pendant le délai d'annulation d'une suppression (voir confirmDeleteIngredient). */
 const pendingDeleteIds = ref(new Set<string>())
@@ -427,6 +429,7 @@ const confirmDeleteIngredient = () => {
             v-model:sort="sort"
             :ingredients="displayedIngredients"
             :is-owned="isOwnedByUser"
+            :can-edit="canEdit"
             :loading="ingredientsLoading"
             @select="selectIngredient"
             @edit="openEditForm"
@@ -464,6 +467,7 @@ const confirmDeleteIngredient = () => {
                 :key="ingredient.id"
                 :ingredient="ingredient"
                 :owned-by-user="isOwnedByUser(ingredient)"
+                :editable="canEdit(ingredient)"
                 @select="selectIngredient(ingredient)"
                 @edit="openEditForm(ingredient)"
                 @delete="askDeleteIngredient(ingredient)"
@@ -480,7 +484,7 @@ const confirmDeleteIngredient = () => {
   <IngredientDetailSlideover
     v-model:open="slideoverOpen"
     :ingredient="selectedIngredient"
-    :editable="!!selectedIngredient && isOwnedByUser(selectedIngredient)"
+    :editable="!!selectedIngredient && canEdit(selectedIngredient)"
     @edit="openEditFromDetail"
   />
 

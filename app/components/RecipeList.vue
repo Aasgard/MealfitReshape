@@ -18,6 +18,8 @@ const props = defineProps<{
   recipes: Recipe[]
   /** Macros par part, par id de recette ; `null` = valeurs non calculables. */
   macrosById: Map<string, IngredientMacros | null>
+  /** Le compte connecté peut modifier et supprimer la recette ; sinon seul « Dupliquer » reste. */
+  canEdit: (recipe: Recipe) => boolean
   loading?: boolean
 }>()
 
@@ -77,11 +79,10 @@ const actionsTarget = shallowRef<Recipe | null>(null)
 const actionItems = computed(() => {
   const recipe = actionsTarget.value
   if (!recipe) return []
+  const duplicateItem = { label: 'Dupliquer', icon: 'i-lucide-copy', onSelect: () => emit('duplicate', recipe) }
+  if (!props.canEdit(recipe)) return [[duplicateItem]]
   return [
-    [
-      { label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit', recipe) },
-      { label: 'Dupliquer', icon: 'i-lucide-copy', onSelect: () => emit('duplicate', recipe) },
-    ],
+    [{ label: 'Modifier', icon: 'i-lucide-pencil', onSelect: () => emit('edit', recipe) }, duplicateItem],
     [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => emit('delete', recipe) }],
   ]
 })

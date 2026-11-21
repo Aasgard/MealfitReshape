@@ -46,6 +46,14 @@ const props = withDefaults(defineProps<{
   pending: false,
 })
 
+/** Objectifs arrondis : une moyenne de besoins ou des grammes tirés des kcal tombent rarement juste. */
+const roundedTargets = computed<DailyTargets>(() => ({
+  calories: Math.round(props.targets.calories),
+  carbohydrates: Math.round(props.targets.carbohydrates),
+  protein: Math.round(props.targets.protein),
+  fat: Math.round(props.targets.fat),
+}))
+
 const hasNoCompleteDay = computed(() => props.completeDays === 0)
 
 /** Rythme affiché, en centièmes de kg/sem (arrondi comme le chiffre). */
@@ -78,19 +86,19 @@ const burnedTitle = computed(() => {
   return props.burnedKcal === null ? 'Séance sans kcal renseignées' : 'Aucune séance ce jour-là : 0 kcal dépensée'
 })
 
-const remainingKcal = computed(() => props.targets.calories - netKcal.value)
+const remainingKcal = computed(() => roundedTargets.value.calories - netKcal.value)
 const isOver = computed(() => remainingKcal.value < 0)
 /** Bleu tant que l'objectif n'est pas atteint, vert à ± 5 %, orange au-delà ; sur le bilan net. */
-const kcalStatus = computed(() => targetStatus(netKcal.value, props.targets.calories, DAILY_TARGET_TOLERANCE))
+const kcalStatus = computed(() => targetStatus(netKcal.value, roundedTargets.value.calories, DAILY_TARGET_TOLERANCE))
 /** Seuil qu'aurait atteint le mangé sans la séance : couleur de la part que la séance retire de l'arc. */
-const grossKcalStatus = computed(() => targetStatus(props.eatenKcal, props.targets.calories, DAILY_TARGET_TOLERANCE))
+const grossKcalStatus = computed(() => targetStatus(props.eatenKcal, roundedTargets.value.calories, DAILY_TARGET_TOLERANCE))
 
 // Jauge : arc de 270° (ouvert vers le bas) tracé avec un cercle dont on ne garde que 75 % du pourtour.
 const GAUGE_RADIUS = 80
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_RADIUS
 const GAUGE_ARC = GAUGE_CIRCUMFERENCE * 0.75
 
-const shareOfTarget = (kcal: number) => Math.max(0, Math.min(1, kcal / props.targets.calories))
+const shareOfTarget = (kcal: number) => Math.max(0, Math.min(1, kcal / roundedTargets.value.calories))
 const plannedShare = computed(() => shareOfTarget(props.eatenKcal - props.extraKcal))
 /** Le "En plus" prolonge l'arc du plan ; ensemble, ils ne dépassent jamais la jauge. */
 const extraShare = computed(() => Math.min(shareOfTarget(props.extraKcal), 1 - plannedShare.value))
@@ -110,7 +118,7 @@ const hasBurnedTail = computed(() => burned.value > 0 && netLength.value < plann
  * principal (plein), en part de l'objectif (+20 % = un cinquième de l'arc, plein à +100 % et au-delà). Il reste dans la
  * bande : rien ne passe sous le chiffre central.
  */
-const overflowShare = computed(() => Math.min(1, Math.max(0, netKcal.value - props.targets.calories) / props.targets.calories))
+const overflowShare = computed(() => Math.min(1, Math.max(0, netKcal.value - roundedTargets.value.calories) / roundedTargets.value.calories))
 const overflowLength = computed(() => overflowShare.value * GAUGE_ARC)
 const overflowStroke = computed(() => `color-mix(in oklch, ${TARGET_STATUS_COLOR[kcalStatus.value]} 60%, black)`)
 
@@ -124,7 +132,7 @@ const macroRows = computed(() => ([
   { key: 'fat', label: 'Lipides', colorClass: 'bg-amber-500' },
 ] as const).map(({ key, label, colorClass }) => {
   const eaten = props.macros[key]
-  const target = props.targets[key]
+  const target = roundedTargets.value[key]
   return {
     key,
     label,
@@ -264,18 +272,18 @@ const macroRows = computed(() => ([
             </p>
             <p class="text-xs tabular-nums">
               <span class="font-semibold text-highlighted">{{ eatenKcal }}</span>
-              <span class="text-dimmed"> / {{ targets.calories }}</span>
+              <span class="text-dimmed"> / {{ roundedTargets.calories }}</span>
             </p>
           </div>
         </div>
 
         <!-- lg+ : kcal mangées / objectif, « En plus », puis la dépense en séance (accueil), au format des chiffres de la dernière colonne. -->
         <div class="hidden flex-col justify-center whitespace-nowrap lg:flex" :class="showBurned ? 'gap-y-3' : 'gap-y-4'">
-          <p class="flex items-baseline gap-1" :title="`${eatenKcal} kcal mangées sur un objectif de ${targets.calories} kcal`">
+          <p class="flex items-baseline gap-1" :title="`${eatenKcal} kcal mangées sur un objectif de ${roundedTargets.calories} kcal`">
             <UIcon name="i-lucide-flame" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />
             <span class="sr-only">Mangées :</span>
             <span class="text-xl font-bold tabular-nums text-highlighted">{{ eatenKcal }}</span>
-            <span class="text-sm text-muted"><span class="tabular-nums">/ {{ targets.calories }}</span> kcal</span>
+            <span class="text-sm text-muted"><span class="tabular-nums">/ {{ roundedTargets.calories }}</span> kcal</span>
           </p>
           <p class="flex items-baseline gap-1" :title="`${extraKcal} kcal en plus (hors plan)`">
             <UIcon name="i-lucide-candy-off" class="size-4 shrink-0 self-center text-highlighted" aria-hidden="true" />

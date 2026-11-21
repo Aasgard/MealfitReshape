@@ -6,7 +6,7 @@ import type { Recipe } from '~/types/recipe'
 import type { DailyTargets } from '~/utils/dailyTargets'
 import { buildDays, dayKeyOf, DAYS_PER_WEEK, formatWeekLabel, shortDayLabel, WEEK_STARTS_ON, weekId } from '~/utils/menuWeek'
 import { usedSurplusMeals } from '~/utils/preparedDishes'
-import { buildEntriesByDay, buildMemberDays, consumedOfDay, distributedRecipeMealIds, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
+import { buildEntriesByDay, buildMemberDays, consumedOfDay, distributedRecipeMealIds, isCompleteDay, MENU_MEAL_TYPES, mealSourceOf, mealsOfWeek, summarizeMenuWeek, UNCOUNTED_MEAL_KEY } from '~/utils/menuEntries'
 
 useSeoMeta({
   title: 'Dashboard - Menus de la semaine - Mealfit',
@@ -134,10 +134,14 @@ const summary = computed(() => summarizeMenuWeek(entries.value, selectedWeekDayK
 /** Besoins en vigueur chaque jour (voir `targetsOn`) : un objectif changé en cours de semaine ne vaut qu'à partir de son jour. */
 const profile = useProfile()
 const targetsOn = (dayKey: string) => profile.targetsOn(dayKey)
-/** Objectif de la moyenne de la semaine : la moyenne des besoins de ses jours. */
+/**
+ * Objectif de la moyenne de la semaine : la moyenne (arrondie) des besoins de ses jours complets, les seuls que compte la
+ * moyenne des kcal mangées ; toute la semaine tant qu'aucun jour n'est complet.
+ */
 const weekTargets = computed<DailyTargets>(() => {
-  const days = selectedWeekDayKeys.value.map(targetsOn)
-  const average = (key: keyof DailyTargets) => days.reduce((sum, t) => sum + t[key], 0) / days.length
+  const completeKeys = selectedWeekDayKeys.value.filter(key => isCompleteDay(entries.value[key]))
+  const days = (completeKeys.length ? completeKeys : selectedWeekDayKeys.value).map(targetsOn)
+  const average = (key: keyof DailyTargets) => Math.round(days.reduce((sum, t) => sum + t[key], 0) / days.length)
   return { calories: average('calories'), carbohydrates: average('carbohydrates'), protein: average('protein'), fat: average('fat') }
 })
 

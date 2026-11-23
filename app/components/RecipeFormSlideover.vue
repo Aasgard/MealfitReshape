@@ -456,10 +456,22 @@ function unitOptionsForRow(row: IngredientRow) {
   const ingredient = row.ingredientId ? ingredientsById.value.get(row.ingredientId) : undefined
   const options = Object.entries(ingredient?.units ?? {})
     .sort(([, a], [, b]) => a.value - b.value)
-    .map(([key, u]) => ({ value: key, label: `${u.label} (${u.value} ${u.unit})` }))
-  if (offersMlUnit(ingredient)) options.unshift({ value: ML_UNIT_ID, label: 'Millilitres (ml)' })
-  options.push({ value: GRAMS_UNIT, label: 'Grammes (g)' })
+    .map(([key, u]) => ({ value: key, label: `${u.label} (${u.value} ${u.unit})`, short: shortUnitLabel(u.label) }))
+  if (offersMlUnit(ingredient)) options.unshift({ value: ML_UNIT_ID, label: 'Millilitres (ml)', short: 'ml' })
+  options.push({ value: GRAMS_UNIT, label: 'Grammes (g)', short: 'g' })
   return options
+}
+
+const SHORT_UNIT_LABELS: Record<string, string> = { 'cuillere a cafe': 'C.a.C', 'cuillere a soupe': 'C.a.S' }
+
+/** Libellé court du champ fermé (la liste ouverte garde le libellé complet) : « C.a.S » pour une cuillère à soupe. */
+function shortUnitLabel(label: string) {
+  const key = label.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase().replace(/\s+/g, ' ')
+  return SHORT_UNIT_LABELS[key] ?? label
+}
+
+function selectedUnitShortLabel(row: IngredientRow) {
+  return unitOptionsForRow(row).find(o => o.value === row.unit)?.short ?? ''
 }
 
 /**
@@ -885,8 +897,13 @@ async function handleSubmit() {
                   :search-input="false"
                   aria-label="Unité"
                   class="min-w-0 flex-1 sm:w-28 sm:flex-none"
+                  :content="{ align: 'start' }"
+                  :ui="{ content: 'w-max min-w-(--reka-combobox-trigger-width) max-w-72' }"
                   @update:model-value="markRowReviewed(row)"
-                />
+                >
+                  <!-- Champ fermé : libellé court (g, ml, C.a.S) ; la liste ouverte, plus large que le champ, garde les libellés entiers. -->
+                  <span class="truncate">{{ selectedUnitShortLabel(row) }}</span>
+                </USelectMenu>
                 <UButton
                   icon="i-lucide-trash-2"
                   color="neutral"

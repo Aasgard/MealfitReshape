@@ -75,6 +75,8 @@ const selectedVisibilityOption = computed(() =>
   visibilityOptions.find(o => o.value === selectedVisibility.value) ?? visibilityOptions[0]!
 )
 const seasonOnly = ref(false)
+/** Le récapitulatif de saison (fenêtre du layout) se rouvre d'ici. */
+const { open: seasonRecapOpen } = useSeasonRecap()
 const unitsOnly = ref(false)
 
 /** Un ingrédient sans `owner` appartient au catalogue public : il n'est pas privé. */
@@ -359,6 +361,16 @@ const confirmDeleteIngredient = () => {
                       :aria-pressed="seasonOnly"
                       class="w-full justify-center sm:w-auto"
                       @click="seasonOnly = !seasonOnly"
+                    />
+                  </UTooltip>
+                  <UTooltip text="Ce qui change ce mois-ci" class="flex-1 sm:flex-none">
+                    <UButton
+                      color="neutral"
+                      variant="outline"
+                      icon="i-lucide-calendar-sync"
+                      aria-label="Fruits et légumes qui arrivent ou s'en vont ce mois-ci"
+                      class="w-full justify-center sm:w-auto"
+                      @click="seasonRecapOpen = true"
                     />
                   </UTooltip>
                   <UTooltip text="Filtrer les ingrédients avec unités" class="flex-1 sm:flex-none">

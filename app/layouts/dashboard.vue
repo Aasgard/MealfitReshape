@@ -215,5 +215,6 @@ function isActive(to: string) {
     <slot />
 
     <KitchenTimerDock />
+    <SeasonRecapModal />
   </UDashboardGroup>
 </template>

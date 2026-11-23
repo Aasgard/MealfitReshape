@@ -99,4 +99,9 @@ export type UserDoc = {
    * (voir `useCatalogRights`). Posé par `scripts/set-admins.cjs`, jamais par l'app.
    */
   admin?: boolean
+  /**
+   * Dernier mois (`yyyy-MM`) dont le récapitulatif de saison a été montré, sur n'importe quel appareil : la fenêtre
+   * ne s'ouvre d'elle-même qu'une fois par mois. Absent au premier usage, il est posé sans rien montrer.
+   */
+  seasonRecapSeenMonth?: string
 }

@@ -15,7 +15,7 @@ import { baseGrams, plannedBases, type PlannedBase } from '~/utils/mealBaseAdjus
 import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
 import { matchesSearch } from '~/utils/search'
 import { recipeTagKey, recipeTagVocabulary } from '~/utils/recipeTags'
-import { isIngredientInSeason } from '~/utils/ingredientSeason'
+import { isIngredientSeasonCompatible, isRecipeInSeason as isRecipeInSeasonFor } from '~/utils/ingredientSeason'
 import { isCompletePer100, readingsForQuantity, scannedProductFromOff, scannedProductLabel, type OffProductDetails, type ScannedProductDraft } from '~/utils/offNutrition'
 
 /**
@@ -596,21 +596,8 @@ const targetFit = (recipe: Recipe): TargetFit => {
 }
 const fitsRemaining = (recipe: Recipe) => targetFit(recipe) !== 'over'
 
-/** Vrai si l'aliment n'est pas hors saison : sans mois renseignés, faute d'information, il n'est pas écarté. */
-function isIngredientSeasonCompatible(ingredient: Ingredient) {
-  return !ingredient.activeMonths?.length || isIngredientInSeason(ingredient)
-}
-
-/**
- * Vrai si aucun aliment de la recette n'est hors saison ce mois-ci. Un aliment sans mois renseignés, ou introuvable,
- * ne compte pas comme hors saison : faute d'information, il n'écarte pas la recette.
- */
-const isRecipeInSeason = (recipe: Recipe) =>
-  // Les ingrédients des bases comptent : des pickles de tomates sont hors saison avec les tomates.
-  [...recipeIngredientIds(recipe, recipesById.value)].every((id) => {
-    const ingredient = props.ingredientsById.get(id)
-    return !ingredient || isIngredientSeasonCompatible(ingredient)
-  })
+/** Vrai si aucun aliment de la recette (bases comprises) n'est hors saison ce mois-ci : voir `isRecipeInSeason` dans les utilitaires. */
+const isRecipeInSeason = (recipe: Recipe) => isRecipeInSeasonFor(recipe, recipesById.value, props.ingredientsById)
 
 const matchesRecipeFilters = (recipe: Recipe) => {
   if (recipeTypeFilter.value.length && !(recipe.type && recipeTypeFilter.value.includes(recipe.type))) return false

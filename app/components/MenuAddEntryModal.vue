@@ -6,7 +6,7 @@ import type { Recipe } from '~/types/recipe'
 import { useIngredientCategoriesStore } from '~/stores/ingredientCategories'
 import { buildIngredientDraft, buildManualDraft, buildRecipeDraft, buildStockDraft, type MenuEntryDraft } from '~/utils/menuEntries'
 import { compareDishes, dishStorageOf, formatDishDay, formatParts, isDishPlanned, isDishStale, PARTS_EPSILON } from '~/utils/preparedDishes'
-import { gramsForUnit, ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
+import { gramsForUnit, ingredientUnitGroups, ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
 import { isBaseRecipe, MEAL_RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
 import { recipeBaseIds, recipeIngredientIds } from '~/utils/recipeBases'
@@ -753,17 +753,23 @@ const SEARCH_INPUT_ATTRS = { type: 'search', enterkeyhint: 'search', spellcheck:
 const selectedRecipe = computed(() => props.recipes.find(r => r.id === recipeId.value))
 const selectedIngredient = computed(() => ingredientId.value ? props.ingredientsById.get(ingredientId.value) : undefined)
 
-/** Un ingrédient qui a une densité se saisit aussi en millilitres, proposés en tête (unité par défaut). */
+/**
+ * Ordre des unités, la première étant celle par défaut (voir `ingredientUnitGroups`) : les pièces propres à l'aliment
+ * (pièce, tranche, gousse), les mesures de liquide (c. à soupe…), les millilitres d'un ingrédient qui a une densité,
+ * puis les grammes.
+ */
 const unitOptions = computed(() => {
-  const options = [{ value: GRAMS_UNIT, label: 'Grammes (g)' }]
   const ingredient = selectedIngredient.value
-  if (offersMlUnit(ingredient)) options.unshift({ value: ML_UNIT_ID, label: 'Millilitres (ml)' })
-  for (const [key, u] of Object.entries(ingredient?.units ?? {})) {
+  const { pieces, liquids } = ingredientUnitGroups(ingredient)
+  const own = [...pieces, ...liquids]
     // Une unité en ml sans densité ne se convertit pas en grammes : inutilisable pour les macros.
-    if (gramsForUnit(ingredient!, key) == null) continue
-    options.push({ value: key, label: `${u.label} (${u.value} ${u.unit})` })
-  }
-  return options
+    .filter(([key]) => gramsForUnit(ingredient!, key) != null)
+    .map(([key, u]) => ({ value: key, label: `${u.label} (${u.value} ${u.unit})` }))
+  return [
+    ...own,
+    ...(offersMlUnit(ingredient) ? [{ value: ML_UNIT_ID, label: 'Millilitres (ml)' }] : []),
+    { value: GRAMS_UNIT, label: 'Grammes (g)' },
+  ]
 })
 
 const isPlainMeasure = (value: string) => value === GRAMS_UNIT || value === ML_UNIT_ID
@@ -771,7 +777,7 @@ const isPlainMeasure = (value: string) => value === GRAMS_UNIT || value === ML_U
 /** 100 g ou 100 ml par défaut (base des valeurs nutritionnelles) ; 1 pour une unité (« 1 tranche »). */
 const onIngredientChange = () => {
   unit.value = unitOptions.value[0]!.value
-  quantity.value = '100'
+  onUnitChange()
 }
 const onUnitChange = () => {
   quantity.value = isPlainMeasure(unit.value) ? '100' : '1'

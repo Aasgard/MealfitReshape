@@ -34,6 +34,19 @@ export function ingredientUnit(ing: Ingredient, unitId: string): IngredientUnit 
   return unitId === ML_UNIT_ID && hasDensity(ing) ? { label: 'ml', value: 1, unit: 'ml' } : undefined
 }
 
+/**
+ * Unités propres de l'ingrédient, réparties pour les sélecteurs : les pièces (pièce, tranche, gousse : en grammes), puis
+ * les mesures de liquide (c. à soupe, c. à café : en ml), chacune de la plus petite à la plus grande. Les sélecteurs
+ * les proposent dans cet ordre, avant le ml d'office et les grammes.
+ */
+export function ingredientUnitGroups(ing: Ingredient | null | undefined) {
+  const entries = Object.entries(ing?.units ?? {}).sort(([, a], [, b]) => a.value - b.value)
+  return {
+    pieces: entries.filter(([, u]) => u.unit !== 'ml'),
+    liquids: entries.filter(([, u]) => u.unit === 'ml'),
+  }
+}
+
 /** Le ml d'office s'ajoute aux unités proposées, sauf si l'ingrédient en a déjà une de 1 ml. */
 export function offersMlUnit(ing: Ingredient | null | undefined): boolean {
   if (!ing || !hasDensity(ing)) return false

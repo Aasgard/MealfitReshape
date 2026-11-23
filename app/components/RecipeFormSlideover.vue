@@ -10,7 +10,7 @@ import { RECIPE_TYPES, recipeTypeIcon, recipeTypeLabel, type RecipeType } from '
 import { RECIPE_DIFFICULTIES, recipeDifficultyLabel, type RecipeDifficulty } from '~/utils/recipeDifficulty'
 import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput'
 import { macrosForRecipe } from '~/utils/recipeNutrition'
-import { ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
+import { ingredientUnitGroups, ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
 import { baseIdOfKey, baseKey, lineBaseId, lineSourceKey } from '~/utils/recipeLineSource'
 import { basesContaining, linesGrams, recipesUsingBase, withRecipeBases } from '~/utils/recipeBases'
 import { formatRecipeTitles } from '~/utils/recipeUsage'
@@ -449,15 +449,16 @@ function onIngredientRowIngredientChange(row: IngredientRow) {
 }
 
 /**
- * La première option est l'unité proposée par défaut : les millilitres pour un ingrédient qui a une densité, puis les
- * unités propres à l'ingrédient, la plus petite (en g/ml) en tête, et enfin les grammes.
+ * La première option est l'unité proposée par défaut (voir `ingredientUnitGroups`) : les pièces propres à l'ingrédient
+ * (pièce, tranche, gousse), les mesures de liquide (c. à soupe…), les millilitres pour un ingrédient qui a une densité,
+ * et enfin les grammes.
  */
 function unitOptionsForRow(row: IngredientRow) {
   const ingredient = row.ingredientId ? ingredientsById.value.get(row.ingredientId) : undefined
-  const options = Object.entries(ingredient?.units ?? {})
-    .sort(([, a], [, b]) => a.value - b.value)
+  const { pieces, liquids } = ingredientUnitGroups(ingredient)
+  const options = [...pieces, ...liquids]
     .map(([key, u]) => ({ value: key, label: `${u.label} (${u.value} ${u.unit})`, short: shortUnitLabel(u.label) }))
-  if (offersMlUnit(ingredient)) options.unshift({ value: ML_UNIT_ID, label: 'Millilitres (ml)', short: 'ml' })
+  if (offersMlUnit(ingredient)) options.push({ value: ML_UNIT_ID, label: 'Millilitres (ml)', short: 'ml' })
   options.push({ value: GRAMS_UNIT, label: 'Grammes (g)', short: 'g' })
   return options
 }

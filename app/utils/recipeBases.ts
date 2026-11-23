@@ -160,6 +160,19 @@ export function recipeIngredientIds(recipe: Recipe, recipesById: Map<string, Rec
   return ids
 }
 
+/** Ids des bases d'une recette, celles imbriquées dans ses bases comprises (filtre « contient… »). */
+export function recipeBaseIds(recipe: Recipe, recipesById: Map<string, Recipe>, path: Set<string> = new Set()): Set<string> {
+  const ids = new Set<string>()
+  for (const line of recipe.ingredients ?? []) {
+    const baseId = lineBaseId(line)
+    const base = baseId ? recipesById.get(baseId) : undefined
+    if (!base || path.has(base.id) || base.id === recipe.id) continue
+    ids.add(base.id)
+    for (const id of recipeBaseIds(base, recipesById, new Set([...path, recipe.id]))) ids.add(id)
+  }
+  return ids
+}
+
 /** Recettes qui utilisent directement la base. */
 export const recipesUsingBase = (recipes: Recipe[], baseId: string): Recipe[] =>
   recipes.filter(r => r.id !== baseId && (r.ingredients ?? []).some(line => lineBaseId(line) === baseId))

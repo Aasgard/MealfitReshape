@@ -9,7 +9,7 @@ import { compareDishes, dishStorageOf, formatDishDay, formatParts, isDishPlanned
 import { gramsForUnit, ML_UNIT_ID, offersMlUnit } from '~/utils/ingredientNutrition'
 import { parseNonNegativeNumber, parsePositiveNumber } from '~/utils/numberInput'
 import { isBaseRecipe, MEAL_RECIPE_TYPES, recipeTypeLabel, type RecipeType } from '~/utils/recipeType'
-import { recipeIngredientIds } from '~/utils/recipeBases'
+import { recipeBaseIds, recipeIngredientIds } from '~/utils/recipeBases'
 import { baseKey } from '~/utils/recipeLineSource'
 import { baseGrams, plannedBases, type PlannedBase } from '~/utils/mealBaseAdjustments'
 import { DAILY_TARGET_TOLERANCE, type DailyTargets } from '~/utils/dailyTargets'
@@ -508,8 +508,28 @@ const recipeIngredientFilterOptions = computed(() => {
 })
 
 /**
- * Ingrédients et tags dans un même menu : deux groupes titrés, les tags du foyer en tête (du plus au moins utilisé),
- * puis les ingrédients. Les valeurs sont préfixées pour qu'un tag et un ingrédient de même nom ne se confondent pas.
+ * Bases présentes dans au moins une recette, imbriquées comprises. Leur valeur de filtre est la clé de l'ingrédient
+ * virtuel (`recipe:<id>`), cherchée parmi les contenus de chaque recette (voir `recipeContentIds`).
+ */
+const recipeBaseFilterOptions = computed(() => {
+  const usedIds = new Set(mealRecipes.value.flatMap(r => [...recipeBaseIds(r, recipesById.value)]))
+  return [...usedIds]
+    .map(id => recipesById.value.get(id))
+    .filter((r): r is Recipe => !!r)
+    .map(r => ({ id: baseKey(r.id), label: r.title }))
+    .sort(byLabel)
+})
+
+/** Ingrédients du catalogue et bases (clés `recipe:<id>`) d'une recette, ceux des bases compris. */
+const recipeContentIds = (recipe: Recipe) => new Set([
+  ...recipeIngredientIds(recipe, recipesById.value),
+  ...[...recipeBaseIds(recipe, recipesById.value)].map(baseKey),
+])
+
+/**
+ * Ingrédients, bases et tags dans un même menu : groupes titrés, les tags du foyer en tête (du plus au moins utilisé),
+ * puis les ingrédients et les bases maison. Les valeurs sont préfixées pour qu'un tag et un ingrédient de même nom ne
+ * se confondent pas ; une base passe par le filtre des ingrédients, sous sa clé `recipe:<id>`.
  */
 const TAG_VALUE_PREFIX = 'tag:'
 const INGREDIENT_VALUE_PREFIX = 'ingredient:'
@@ -519,9 +539,12 @@ const recipeContentFilterItems = computed(() => {
     .map(t => ({ value: TAG_VALUE_PREFIX + t.key, label: t.label, icon: 'i-lucide-tag', count: t.count }))
   const ingredients = recipeIngredientFilterOptions.value
     .map(i => ({ value: INGREDIENT_VALUE_PREFIX + i.id, label: i.label, icon: 'i-lucide-carrot' }))
+  const bases = recipeBaseFilterOptions.value
+    .map(b => ({ value: INGREDIENT_VALUE_PREFIX + b.id, label: b.label, icon: 'i-lucide-cooking-pot' }))
   return [
     ...(tags.length ? [[{ type: 'label' as const, label: 'Tags' }, ...tags]] : []),
     ...(ingredients.length ? [[{ type: 'label' as const, label: 'Ingrédients' }, ...ingredients]] : []),
+    ...(bases.length ? [[{ type: 'label' as const, label: 'Bases maison' }, ...bases]] : []),
   ]
 })
 
@@ -598,7 +621,7 @@ const matchesRecipeFilters = (recipe: Recipe) => {
     if (!recipeTagFilter.value.every(key => recipeTagKeys.has(key))) return false
   }
   if (!recipeIngredientFilter.value.length) return true
-  const ids = recipeIngredientIds(recipe, recipesById.value)
+  const ids = recipeContentIds(recipe)
   return recipeIngredientFilter.value.every(id => ids.has(id))
 }
 
@@ -1141,8 +1164,8 @@ const onSubmit = () => {
                       value-key="value"
                       multiple
                       placeholder="Tous les ingrédients et tags"
-                      :search-input="{ ...SEARCH_INPUT_ATTRS, placeholder: 'Rechercher un ingrédient ou un tag...' }"
-                      aria-label="Filtrer par ingrédient ou par tag"
+                      :search-input="{ ...SEARCH_INPUT_ATTRS, placeholder: 'Rechercher un ingrédient, une base ou un tag...' }"
+                      aria-label="Filtrer par ingrédient, par base ou par tag"
                       class="flex-1 min-w-0"
                       @update:model-value="onRecipeFilterChange"
                     >

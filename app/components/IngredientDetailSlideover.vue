@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Ingredient } from '~/types/ingredient'
 import { categoryIconName } from '~/utils/categoryIcon'
-import { ingredientUnitEntries, macrosForUnit } from '~/utils/ingredientNutrition'
+import { ingredientUnitEntries, macrosForUnit, OPTIONAL_NUTRIENTS } from '~/utils/ingredientNutrition'
 
 /** Fiche d'un ingrédient : catégorie, valeurs pour 100 g, unités équivalentes, saisonnalité, magasins du foyer. */
 const props = withDefaults(defineProps<{
@@ -32,6 +32,11 @@ const unitRows = computed(() => {
     scaled: macrosForUnit(ing, v.id),
   }))
 })
+
+/** Sel, fibres, fer, calcium : seulement ceux qui sont renseignés. */
+const extraValues = computed(() => OPTIONAL_NUTRIENTS
+  .filter(({ key }) => props.ingredient?.valuesBy100?.[key] != null)
+  .map(n => ({ ...n, value: props.ingredient!.valuesBy100![n.key]!.toLocaleString('fr-FR', { maximumFractionDigits: 2 }) })))
 
 const isAllYear = computed(() => (props.ingredient?.activeMonths?.length ?? 0) === 12)
 
@@ -76,6 +81,14 @@ const sectionTitle = 'text-sm font-semibold text-highlighted'
             Macros aux 100 g
           </h3>
           <IngredientMacroSummary :macros="ingredient.valuesBy100" />
+          <dl v-if="extraValues.length" class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dimmed">
+            <div v-for="extra in extraValues" :key="extra.key" class="flex items-baseline gap-1">
+              <dt>{{ extra.label }}</dt>
+              <dd class="font-medium tabular-nums text-highlighted">
+                {{ extra.value }}<span class="font-normal text-dimmed"> {{ extra.unit }}</span>
+              </dd>
+            </div>
+          </dl>
         </section>
 
         <!-- Unités / équivalents, et la densité qui convertit les ml en grammes -->

@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 import { doc, FieldPath, getDoc, serverTimestamp, setDoc, type DocumentReference, type Timestamp } from 'firebase/firestore'
 import { useCurrentUser, useDocument, useFirestore } from 'vuefire'
 import type { UserDoc, UserGoalHistoryEntry } from '~/types/user'
+import { calciumReference } from '~/utils/calcium'
 import { DAILY_TARGETS, type DailyTargets } from '~/utils/dailyTargets'
 import type { BodyProfile, GoalDirection, GoalPeriod, ProfileGoal, ProfileTargets } from '~/utils/profile'
 
@@ -34,6 +35,9 @@ export function useProfile() {
   /** Fiche précédente, pour montrer l'écart après une mise à jour. */
   const previousTargets = useState<ProfileTargets | null>('profile-previous-targets', () => null)
 
+  /** Objectif de calcium saisi à la main (`users.nutrientTargets.calcium`), `null` : référence calculée. */
+  const manualCalciumTarget = useState<number | null>('profile-manual-calcium-target', () => null)
+
   /**
    * Applique les parties présentes dans `data` ; `clearMissing` vide aussi les absentes (lecture complète du document).
    * Une écriture que le serveur n'a pas encore confirmée a un `updatedAt` nul : elle date de maintenant, le même instant
@@ -54,6 +58,9 @@ export function useProfile() {
     if (data?.targets || clearMissing) {
       next.targets = stamp(data?.targets)
       targets.value = data?.targets ? targetsFromStored(data.targets, next.targets!) : null
+    }
+    if (data || clearMissing) {
+      manualCalciumTarget.value = data?.nutrientTargets?.calcium ?? null
     }
     if (data?.goalHistory || data?.targetsByDate || data?.goal || data?.targets || clearMissing) {
       goalHistory.value = goalHistoryFromStored(data ?? {}, next)
@@ -212,6 +219,24 @@ export function useProfile() {
       })
     : null))
 
+  /** Référence selon l'âge de la fiche (voir `calciumReference`). */
+  const calciumReferenceTarget = computed(() => calciumReference(age.value))
+  /** Objectif de calcium du jour, en mg : celui saisi à la main, sinon la référence. */
+  const calciumTarget = computed(() => manualCalciumTarget.value ?? calciumReferenceTarget.value)
+
+  /** Écrit un champ de premier niveau du document `users` sans toucher au reste. */
+  function saveUserField(data: Partial<UserDoc>) {
+    const ref = userRef()
+    if (!ref) return Promise.reject(new Error('Vous devez être connecté.'))
+    return setDoc(ref, data, { mergeFields: Object.keys(data) })
+  }
+
+  /** Objectif de calcium saisi à la main ; `null` revient à la référence calculée. */
+  function setManualCalciumTarget(mg: number | null) {
+    manualCalciumTarget.value = mg
+    return saveUserField({ nutrientTargets: { calcium: mg } })
+  }
+
   /** Change le sens de l'objectif ; un pourcentage qui n'est pas proposé pour ce sens reprend celui par défaut. */
   function setGoalDirection(direction: GoalDirection) {
     goal.value.direction = direction
@@ -239,12 +264,42 @@ export function useProfile() {
     saveGoal,
     setGoalDirection,
     setTargets,
+    calciumTarget,
+    calciumReferenceTarget,
+    manualCalciumTarget,
+    setManualCalciumTarget,
   })
 }
 
-/** Réglages de l'application (repas, menus, courses, suivi). Maquette : état en mémoire. */
+/** Clé du navigateur où le suivi du calcium est retenu, seul réglage gardé d'une visite à l'autre (sur cet appareil). */
+const TRACK_CALCIUM_KEY = 'mealfit-track-calcium'
+
+/**
+ * Réglages de l'application (repas, menus, courses, suivi). Maquette : état en mémoire, sauf `trackCalcium`, retenu
+ * dans le navigateur (jamais dans Firestore).
+ */
 export function useAppSettings() {
   const settings = useState('app-settings', defaultSettings)
+  const restored = useState('app-settings-restored', () => false)
+
+  if (import.meta.client && !restored.value) {
+    restored.value = true
+    try {
+      settings.value.trackCalcium = localStorage.getItem(TRACK_CALCIUM_KEY) === '1'
+    }
+    catch {
+      // Stockage indisponible (navigation privée, données bloquées) : le réglage vaut pour la visite.
+    }
+    // Scope détaché : l'état est partagé, le suivi ne doit pas s'arrêter avec le premier composant qui l'a lancé.
+    effectScope(true).run(() => watch(() => settings.value.trackCalcium, (on) => {
+      try {
+        localStorage.setItem(TRACK_CALCIUM_KEY, on ? '1' : '0')
+      }
+      catch {
+        // Idem : rien à retenir.
+      }
+    }))
+  }
 
   function reset() {
     settings.value = defaultSettings()

@@ -439,6 +439,8 @@ export interface AppSettings {
   exportFormat: ExportFormat
   trackedZones: MeasurementZoneKey[]
   showGoalProjection: boolean
+  /** Barre du calcium sous les macros (résumé de l'accueil, moyenne de Menus). Retenu dans le navigateur. */
+  trackCalcium: boolean
 }
 
 /** Rayons de la maquette des réglages : sous-ensemble des catégories du catalogue (mêmes libellés, ordre et icônes que le seed). */
@@ -477,6 +479,7 @@ export function defaultSettings(): AppSettings {
     exportFormat: 'todoist',
     trackedZones: MEASUREMENT_ZONES.map(z => z.key),
     showGoalProjection: true,
+    trackCalcium: false,
   }
 }
 

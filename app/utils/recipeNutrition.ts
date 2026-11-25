@@ -88,7 +88,7 @@ export function macrosForRecipe(
   ingredientsById: Map<string, Ingredient>,
   persons = 1
 ): IngredientMacros {
-  const total = { ...EMPTY_MACROS }
+  const total: IngredientMacros = { ...EMPTY_MACROS }
   for (const line of lines ?? []) {
     const lineMacros = macrosForRecipeLine(line, ingredientsById)
     if (!lineMacros) continue
@@ -97,6 +97,8 @@ export function macrosForRecipe(
     total.protein += lineMacros.protein
     total.carbohydrates += lineMacros.carbohydrates
     total.fat += lineMacros.fat
+    // Seules les lignes au calcium renseigné comptent ; sans aucune, la recette n'en a pas.
+    if (lineMacros.calcium != null) total.calcium = (total.calcium ?? 0) + lineMacros.calcium
   }
   return scaleMacros(total, 1 / (persons > 0 ? persons : 1))
 }

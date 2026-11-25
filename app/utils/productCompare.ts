@@ -1,9 +1,9 @@
 import type { Ingredient } from '~/types/ingredient'
-import type { IngredientMacros } from '~/utils/ingredientNutrition'
+import type { MacroKey } from '~/utils/ingredientNutrition'
 import { isPer100Ml, readEnergy, readNutrient } from '~/utils/offNutrition'
 import type { NutrientReading, OffProduct, OffProductDetails } from '~/utils/offNutrition'
 
-export type CompareKey = keyof IngredientMacros
+export type CompareKey = MacroKey
 
 /** Valeur pour 100 ; `null` = non renseignée (jamais remplacée par 0). `prefix` : ≈, <, ≤… d'Open Food Facts. */
 export type CompareValue = { value: number, prefix: string } | null

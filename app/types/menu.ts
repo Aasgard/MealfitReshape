@@ -6,6 +6,8 @@ export interface MenuWeekMacroBalance {
   protein: number
   carbohydrates: number
   fat: number
+  /** Calcium en mg, des seuls aliments où il est renseigné. */
+  calcium?: number
 }
 
 /** Un jour affiché en en-tête de colonne du calendrier. */
@@ -81,6 +83,8 @@ export interface MenuEntry {
   carbohydrates: number
   protein: number
   fat: number
+  /** Calcium en mg ; absent quand aucun aliment du repas ne le renseigne. */
+  calcium?: number
   /** Bases mangées autrement que prévu par la recette, déjà comptées dans les macros. Ex : « Mayonnaise +20 g ». */
   baseAdjustmentLabel?: string
   /** Ces mêmes bases, telles qu'enregistrées sur le repas : la fiche de la recette les montre à la place des quantités prévues. */

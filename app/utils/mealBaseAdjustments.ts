@@ -47,6 +47,7 @@ const add = (a: IngredientMacros, b: IngredientMacros, sign = 1): IngredientMacr
   protein: a.protein + sign * b.protein,
   carbohydrates: a.carbohydrates + sign * b.carbohydrates,
   fat: a.fat + sign * b.fat,
+  ...(a.calcium != null || b.calcium != null ? { calcium: (a.calcium ?? 0) + sign * (b.calcium ?? 0) } : {}),
 })
 
 /**

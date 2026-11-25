@@ -59,6 +59,7 @@ export function summarizeMenuWeek(entries: MenuWeekEntries, dayKeys: string[]): 
       protein: perDay(day => day.macros.protein),
       carbohydrates: perDay(day => day.macros.carbohydrates),
       fat: perDay(day => day.macros.fat),
+      calcium: perDay(day => day.macros.calcium ?? 0),
     },
   }
 }
@@ -76,6 +77,7 @@ function draftFromMacros(label: string, macros: IngredientMacros, extra: Partial
     carbohydrates: Math.round(macros.carbohydrates),
     protein: Math.round(macros.protein),
     fat: Math.round(macros.fat),
+    ...(macros.calcium != null ? { calcium: Math.round(macros.calcium) } : {}),
   }
 }
 
@@ -97,6 +99,9 @@ export function buildRecipeDraft(
     protein: Math.max(0, recipeMacros.protein + delta.protein),
     carbohydrates: Math.max(0, recipeMacros.carbohydrates + delta.carbohydrates),
     fat: Math.max(0, recipeMacros.fat + delta.fat),
+    ...(recipeMacros.calcium != null || delta.calcium != null
+      ? { calcium: Math.max(0, (recipeMacros.calcium ?? 0) + (delta.calcium ?? 0)) }
+      : {}),
   }
   const quantityLabel = `${formatQuantity(parts)} part${parts > 1 ? 's' : ''}`
   const adjustmentLabel = baseAdjustmentLabel(recipe, parts, baseAdjustments, ingredientsById)
@@ -176,6 +181,7 @@ export function mealSourceOf(meal: Meal): MealSource {
         protein: meal.protein,
         fat: meal.fat,
         carbohydrates: meal.carbohydrates,
+        ...(meal.calcium != null ? { calcium: meal.calcium } : {}),
         ...(meal.product ? { product: meal.product } : {}),
       }
   }
@@ -272,7 +278,7 @@ export type DaySummary = {
 
 /** Totaux d'une journée : "Non compté" exclu, "En plus" compris (et détaillé à part). */
 export function summarizeDay(entries: Record<string, MenuEntry[]>): DaySummary {
-  const summary: DaySummary = { kcal: 0, extraKcal: 0, macros: { carbohydrates: 0, protein: 0, fat: 0 } }
+  const summary: DaySummary = { kcal: 0, extraKcal: 0, macros: { carbohydrates: 0, protein: 0, fat: 0, calcium: 0 } }
   for (const [mealKey, list] of Object.entries(entries)) {
     if (mealKey === UNCOUNTED_MEAL_KEY) continue
 
@@ -281,6 +287,8 @@ export function summarizeDay(entries: Record<string, MenuEntry[]>): DaySummary {
       summary.macros.carbohydrates += entry.carbohydrates
       summary.macros.protein += entry.protein
       summary.macros.fat += entry.fat
+      // Un repas sans calcium connu n'y ajoute rien, sans le signaler (seuls les aliments renseignés comptent).
+      summary.macros.calcium = (summary.macros.calcium ?? 0) + (entry.calcium ?? 0)
       if (mealKey === EXTRA_MEAL_KEY) summary.extraKcal += entry.kcal
     }
   }

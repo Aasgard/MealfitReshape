@@ -1,15 +1,42 @@
 import type { Ingredient } from '~/types/ingredient'
 import { normalizeForSearch } from '~/utils/search'
 
-/** Macros pour une portion d’ingrédient (unité ou masse totale). */
-export interface IngredientMacros {
+/**
+ * Valeurs nutritionnelles facultatives d'un ingrédient, pour 100 g dans `valuesBy100` : absentes tant qu'elles ne sont
+ * pas renseignées (un 0 est un vrai zéro). Sel et fibres en grammes, fer et calcium en milligrammes.
+ */
+export interface OptionalNutrients {
+  salt?: number
+  fiber?: number
+  iron?: number
+  calcium?: number
+}
+
+export type OptionalNutrientKey = keyof OptionalNutrients
+
+/** Ordre d'affichage, libellé et unité des valeurs facultatives. */
+export const OPTIONAL_NUTRIENTS: { key: OptionalNutrientKey, label: string, unit: 'g' | 'mg' }[] = [
+  { key: 'fiber', label: 'Fibres', unit: 'g' },
+  { key: 'salt', label: 'Sel', unit: 'g' },
+  { key: 'iron', label: 'Fer', unit: 'mg' },
+  { key: 'calcium', label: 'Calcium', unit: 'mg' },
+]
+
+/**
+ * Macros pour une portion d’ingrédient (unité ou masse totale). Le calcium suit les macros dans les calculs (recettes,
+ * repas, stock) quand il est connu ; un aliment sans calcium renseigné ne compte simplement pas dans le total.
+ */
+export interface IngredientMacros extends OptionalNutrients {
   calories: number
   protein: number
   carbohydrates: number
   fat: number
 }
 
-/** Multiplie chaque macro par `factor` et arrondit (sauf facteur 1, retourné tel quel). */
+/** Les quatre macros, sans les valeurs facultatives. */
+export type MacroKey = 'calories' | 'protein' | 'carbohydrates' | 'fat'
+
+/** Multiplie chaque macro (et le calcium, s'il est connu) par `factor` et arrondit (sauf facteur 1, retourné tel quel). */
 export function scaleMacros(macros: IngredientMacros, factor: number): IngredientMacros {
   const v = (n: number) => (factor === 1 ? n : Math.round(n * factor))
   return {
@@ -17,6 +44,8 @@ export function scaleMacros(macros: IngredientMacros, factor: number): Ingredien
     protein: v(macros.protein),
     carbohydrates: v(macros.carbohydrates),
     fat: v(macros.fat),
+    // Omis plutôt qu'`undefined` : ces macros peuvent être écrites telles quelles dans Firestore (parts du stock).
+    ...(macros.calcium != null ? { calcium: v(macros.calcium) } : {}),
   }
 }
 

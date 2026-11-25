@@ -771,8 +771,9 @@ const percentHint = computed(() => {
             </section>
           </div>
 
-          <div class="order-first lg:order-none lg:sticky lg:top-0">
+          <div class="order-first flex flex-col gap-6 lg:order-none lg:sticky lg:top-0">
             <ProfileTargetsSheet />
+            <ProfileCalciumTarget />
           </div>
         </div>
       </div>

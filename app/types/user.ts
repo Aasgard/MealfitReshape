@@ -104,4 +104,10 @@ export type UserDoc = {
    * ne s'ouvre d'elle-même qu'une fois par mois. Absent au premier usage, il est posé sans rien montrer.
    */
   seasonRecapSeenMonth?: string
+  /**
+   * Objectifs saisis à la main pour ces nutriments (mg/jour) ; absent ou `null` : la référence calculée depuis la fiche
+   * corporelle (voir `calciumReference`). Hors `goalHistory` : ils ne dépendent pas de l'objectif de poids.
+   */
+  nutrientTargets?: { calcium?: number | null }
 }
+

@@ -45,6 +45,7 @@ export function withRecipeBases(ingredients: Ingredient[], recipes: Recipe[]): M
           protein: (total.protein * 100) / yieldGrams,
           carbohydrates: (total.carbohydrates * 100) / yieldGrams,
           fat: (total.fat * 100) / yieldGrams,
+          ...(total.calcium != null ? { calcium: (total.calcium * 100) / yieldGrams } : {}),
         }
       : undefined
 

@@ -38,7 +38,7 @@ function track(section: SectionId, source: () => unknown, valid: () => boolean =
   }, { deep: true })
 }
 
-track('repas', () => [settings.value.mealShares, settings.value.snackHasTarget, settings.value.mealTolerance, settings.value.dayTolerance], () => mealSharesTotal(settings.value) === 100)
+track('repas', () => [settings.value.mealShares, settings.value.snackHasTarget, settings.value.mealTolerance, settings.value.dayTolerance, settings.value.trackCalcium], () => mealSharesTotal(settings.value) === 100)
 track('menus', () => settings.value.householdPortions)
 track('courses', () => [settings.value.shoppingDay, settings.value.aisleOrder, settings.value.pantry, settings.value.roundUpPieces, settings.value.exportFormat])
 track('suivi', () => [settings.value.trackedZones, settings.value.showGoalProjection])
@@ -396,6 +396,15 @@ const zoneItems = computed(() => MEASUREMENT_ZONES.map(zone => ({
                   class="w-28"
                   :format-options="{ style: 'unit', unit: 'percent' }"
                 />
+              </SettingRow>
+
+              <SettingRow label="Suivre le calcium" for="track-calcium">
+                <template #hint>
+                  Une barre sous les macros, dans le résumé de l'accueil et la moyenne des Menus. Objectif
+                  <span class="tabular-nums">{{ formatNumber(profile.calciumTarget) }}</span> mg/jour, à régler dans le
+                  <ULink to="/dashboard/profil" class="underline underline-offset-2 hover:text-highlighted">profil</ULink>.
+                </template>
+                <USwitch id="track-calcium" v-model="settings.trackCalcium" />
               </SettingRow>
             </div>
           </section>

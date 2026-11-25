@@ -90,6 +90,7 @@ watch(upcomingMeals.error, (error) => {
 
 const { weighIns, error: weighInsError, promise: weighInsLoaded, saveWeighIn } = useWeighIns()
 const profile = useProfile()
+const { settings } = useAppSettings()
 watch(weighInsError, (error) => {
   if (!error) return
   toast.add({ title: 'Erreur', description: `Impossible de charger les pesées : ${error.message}`, color: 'error' })
@@ -918,6 +919,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               :macros="daySummary.macros"
               :weight-progress="weightProgress"
               :burned-kcal="burnedKcal"
+              :calcium-target="settings.trackCalcium ? profile.calciumTarget : null"
               show-burned
               :pending="isFutureSelected"
             />

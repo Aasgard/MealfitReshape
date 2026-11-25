@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MenuWeekMacroBalance } from '~/types/menu'
+import { calciumStatus } from '~/utils/calcium'
 import { DAILY_TARGET_TOLERANCE, TARGET_STATUS_COLOR, TARGET_STATUS_TEXT_CLASS, targetStatus, type DailyTargets } from '~/utils/dailyTargets'
 import type { WeightProgress } from '~/utils/weightTrend'
 
@@ -35,7 +36,13 @@ const props = withDefaults(defineProps<{
   completeDays?: number | null
   /** Accueil, jour à venir : sur mobile, les chiffres sous la jauge cèdent la place à un picto d'attente. */
   pending?: boolean
+  /**
+   * Objectif de calcium (mg) quand son suivi est activé dans les Réglages : une 4e barre sous les macros, avec le calcium
+   * de `macros` (seuls les aliments où il est renseigné). Absent : pas de barre.
+   */
+  calciumTarget?: number | null
 }>(), {
+  calciumTarget: null,
   weightProgress: null,
   burnedKcal: undefined,
   showBurned: false,
@@ -126,23 +133,39 @@ const overflowStroke = computed(() => `color-mix(in oklch, ${TARGET_STATUS_COLOR
 const centerText = computed(() => `${isOver.value ? '+' : ''}${Math.abs(remainingKcal.value)}`)
 const centerSizeClass = computed(() => (centerText.value.length > 4 ? 'text-2xl' : 'text-3xl'))
 
-const macroRows = computed(() => ([
-  { key: 'carbohydrates', label: 'Glucides', colorClass: 'bg-green-500' },
-  { key: 'protein', label: 'Protéines', colorClass: 'bg-red-700' },
-  { key: 'fat', label: 'Lipides', colorClass: 'bg-amber-500' },
-] as const).map(({ key, label, colorClass }) => {
-  const eaten = props.macros[key]
-  const target = roundedTargets.value[key]
-  return {
-    key,
-    label,
-    colorClass,
+const macroRows = computed(() => {
+  const rows = ([
+    { key: 'carbohydrates', label: 'Glucides', colorClass: 'bg-green-500' },
+    { key: 'protein', label: 'Protéines', colorClass: 'bg-red-700' },
+    { key: 'fat', label: 'Lipides', colorClass: 'bg-amber-500' },
+  ] as const).map(({ key, label, colorClass }) => {
+    const eaten = props.macros[key]
+    const target = roundedTargets.value[key]
+    return {
+      key: key as string,
+      label,
+      colorClass,
+      eaten,
+      target,
+      unit: 'g',
+      width: `${Math.min(1, eaten / target) * 100}%`,
+      statusClass: TARGET_STATUS_TEXT_CLASS[targetStatus(eaten, target, DAILY_TARGET_TOLERANCE)],
+    }
+  })
+  if (!props.calciumTarget) return rows
+  const eaten = Math.round(props.macros.calcium ?? 0)
+  const target = Math.round(props.calciumTarget)
+  return [...rows, {
+    key: 'calcium',
+    label: 'Calcium',
+    colorClass: 'bg-sky-500',
     eaten,
     target,
+    unit: 'mg',
     width: `${Math.min(1, eaten / target) * 100}%`,
-    statusClass: TARGET_STATUS_TEXT_CLASS[targetStatus(eaten, target, DAILY_TARGET_TOLERANCE)],
-  }
-}))
+    statusClass: TARGET_STATUS_TEXT_CLASS[calciumStatus(eaten, target, DAILY_TARGET_TOLERANCE)],
+  }]
+})
 </script>
 
 <template>
@@ -310,7 +333,7 @@ const macroRows = computed(() => ([
             </p>
             <p class="text-xs tabular-nums">
               <span class="font-semibold" :class="macro.statusClass">{{ macro.eaten }}</span>
-              <span class="text-dimmed"> / {{ macro.target }} g</span>
+              <span class="text-dimmed"> / {{ macro.target }} {{ macro.unit }}</span>
             </p>
             <div class="col-span-2 mt-1.5 h-1.5 overflow-hidden rounded-full bg-accented">
               <div class="h-full rounded-full transition-all duration-500" :class="macro.colorClass" :style="{ width: macro.width }" />

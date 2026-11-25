@@ -1,5 +1,5 @@
 import type { ScannedProduct } from '~/types/meal'
-import type { IngredientMacros } from '~/utils/ingredientNutrition'
+import type { IngredientMacros, MacroKey, OptionalNutrientKey } from '~/utils/ingredientNutrition'
 
 /** Sous-ensemble d'une fiche produit Open Food Facts lu pour les valeurs nutritionnelles. */
 export type OffNutritionSource = {
@@ -66,6 +66,8 @@ export type IngredientPrefill = {
   origin?: 'off' | 'estimate'
   /** Catégorie proposée (id) ; absente = à choisir. */
   categoryId?: string
+  /** Valeurs facultatives (sel, fibres, fer, calcium), absentes quand la fiche ne les donne pas. */
+  extras?: Partial<Record<OptionalNutrientKey, string>>
   /** Unités proposées, ex. l'unité « Gousse » employée par la recette lue. */
   units?: { label: string; value: number; unit: 'g' | 'ml' }[]
 }
@@ -93,7 +95,19 @@ export function ingredientPrefillFromOff(code: string, product: OffProduct): Ing
     protein: prefillValue(readNutrient(nutriments, 'proteins'), 1),
     density: isPer100Ml(product) ? '1' : '',
     comment: `EAN ${code}`,
+    extras: offExtras(nutriments),
   }
+}
+
+/** Sel et fibres en g, fer et calcium convertis en mg ; une valeur absente de la fiche n'est pas proposée. */
+function offExtras(nutriments: Record<string, unknown>): Partial<Record<OptionalNutrientKey, string>> {
+  const values: Record<OptionalNutrientKey, number | null> = {
+    salt: readingValue(readNutrient(nutriments, 'salt'), 2),
+    fiber: readingValue(readNutrient(nutriments, 'fiber'), 1),
+    iron: milligramsOf(readNutrient(nutriments, 'iron')),
+    calcium: milligramsOf(readNutrient(nutriments, 'calcium')),
+  }
+  return Object.fromEntries(Object.entries(values).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
 }
 
 /** Fiche produit telle que la renvoie l'API Open Food Facts (sous-ensemble lu par l'app). */
@@ -115,7 +129,7 @@ export type OffResponse = {
 }
 
 /** Valeurs pour 100 d'un produit scanné ; `null` = non renseignée par Open Food Facts (jamais remplacée par 0). */
-export type Per100Readings = Record<keyof IngredientMacros, number | null>
+export type Per100Readings = Record<MacroKey, number | null> & { calcium?: number }
 
 /** Produit scanné avant le choix de la quantité : des valeurs peuvent encore manquer. */
 export type ScannedProductDraft = Omit<ScannedProduct, 'per100' | 'quantity'> & { per100: Per100Readings }
@@ -127,6 +141,13 @@ function positiveAt(value: unknown): number | undefined {
 
 const readingValue = (reading: NutrientReading, digits: number) =>
   reading.kind === 'value' ? Math.round(reading.value * 10 ** digits) / 10 ** digits : null
+
+/** Open Food Facts donne les minéraux en g pour 100 g : convertis en mg (arrondis au mg, au dixième sous 10 mg). */
+export function milligramsOf(reading: NutrientReading): number | null {
+  if (reading.kind !== 'value') return null
+  const mg = reading.value * 1000
+  return mg < 10 ? Math.round(mg * 10) / 10 : Math.round(mg)
+}
 
 /** Libellé de repas d'un produit : « Produit — Marque », comme le nom d'ingrédient créé depuis le scanner. */
 export function scannedProductLabel(product: Pick<ScannedProduct, 'name' | 'brand'>): string {
@@ -140,6 +161,7 @@ export function scannedProductFromOff(code: string, product: OffProductDetails):
   const imageUrl = product.image_front_small_url || product.image_small_url || product.image_front_url || product.image_url
   const serving = positiveAt(product.serving_quantity)
   const pack = positiveAt(product.product_quantity)
+  const calcium = milligramsOf(readNutrient(nutriments, 'calcium'))
   return {
     ean: code,
     name: (product.product_name_fr || product.product_name || '').trim(),
@@ -151,6 +173,7 @@ export function scannedProductFromOff(code: string, product: OffProductDetails):
       carbohydrates: readingValue(readNutrient(nutriments, 'carbohydrates'), 1),
       protein: readingValue(readNutrient(nutriments, 'proteins'), 1),
       fat: readingValue(readNutrient(nutriments, 'fat'), 1),
+      ...(calcium != null ? { calcium } : {}),
     },
     ...(serving ? { serving } : {}),
     // Un emballage d'une seule portion ne donne pas un second raccourci identique.
@@ -166,10 +189,11 @@ export function readingsForQuantity(per100: Per100Readings, quantity: number): P
     carbohydrates: scale(per100.carbohydrates),
     protein: scale(per100.protein),
     fat: scale(per100.fat),
+    ...(per100.calcium != null ? { calcium: Math.round((per100.calcium * quantity) / 100) } : {}),
   }
 }
 
 /** Les quatre valeurs sont connues : le produit peut servir de repas tel quel. */
 export function isCompletePer100(per100: Per100Readings): per100 is IngredientMacros {
-  return Object.values(per100).every(v => v != null)
+  return [per100.calories, per100.carbohydrates, per100.protein, per100.fat].every(v => v != null)
 }

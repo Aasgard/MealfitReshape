@@ -10,6 +10,7 @@ import { parsePositiveNumber, parseNonNegativeNumber } from '~/utils/numberInput
 import { categoryIconName } from '~/utils/categoryIcon'
 import { recipesUsingIngredient, formatRecipeTitles } from '~/utils/recipeUsage'
 import { ingredientPrefillFromOff } from '~/utils/offNutrition'
+import { OPTIONAL_NUTRIENTS, type OptionalNutrientKey } from '~/utils/ingredientNutrition'
 import type { IngredientPrefill, OffProductDetails } from '~/utils/offNutrition'
 
 /**
@@ -66,6 +67,10 @@ const calories = ref('')
 const protein = ref('')
 const carbohydrates = ref('')
 const fat = ref('')
+/** Valeurs facultatives pour 100 g (sel, fibres, fer, calcium), en texte comme les saisies. */
+const extras = reactive<Record<OptionalNutrientKey, string>>({ salt: '', fiber: '', iron: '', calcium: '' })
+/** Bloc « Autres valeurs » : ouvert d'office quand l'une d'elles est renseignée. */
+const extrasOpen = ref(false)
 const activeMonths = ref<number[]>([])
 const unitRows = ref<UnitRow[]>([])
 const comment = ref('')
@@ -81,6 +86,7 @@ function resetForm() {
   protein.value = ing?.valuesBy100 ? String(ing.valuesBy100.protein) : ''
   carbohydrates.value = ing?.valuesBy100 ? String(ing.valuesBy100.carbohydrates) : ''
   fat.value = ing?.valuesBy100 ? String(ing.valuesBy100.fat) : ''
+  setExtras(ing?.valuesBy100)
   activeMonths.value = ing?.activeMonths ? [...ing.activeMonths] : []
   unitRows.value = ing?.units
     ? Object.entries(ing.units).map(([key, v]) => ({ key, label: v.label, value: String(v.value), unit: v.unit }))
@@ -96,12 +102,18 @@ function resetForm() {
     protein.value = prefill.value.protein
     carbohydrates.value = prefill.value.carbohydrates
     fat.value = prefill.value.fat
+    setExtras(prefill.value.extras)
     comment.value = prefill.value.comment
     if (prefill.value.categoryId) categoryId.value = prefill.value.categoryId
     if (prefill.value.units?.length) {
       unitRows.value = prefill.value.units.map(u => ({ key: generateFirestoreId(), label: u.label, value: String(u.value), unit: u.unit }))
     }
   }
+}
+
+function setExtras(values: Partial<Record<OptionalNutrientKey, number | string>> | undefined) {
+  for (const { key } of OPTIONAL_NUTRIENTS) extras[key] = values?.[key] != null ? String(values[key]) : ''
+  extrasOpen.value = OPTIONAL_NUTRIENTS.some(({ key }) => extras[key] !== '')
 }
 
 const prefill = computed(() => (isEditMode.value ? null : props.prefill))
@@ -129,6 +141,7 @@ function applyScannedProduct(code: string, product: OffProductDetails) {
   protein.value = scanned.protein
   carbohydrates.value = scanned.carbohydrates
   fat.value = scanned.fat
+  setExtras(scanned.extras)
   const currentComment = comment.value.trim()
   comment.value = !currentComment || /^EAN \d+$/.test(currentComment) ? scanned.comment : `${currentComment}\n${scanned.comment}`
 }
@@ -210,9 +223,17 @@ const densityError = computed(() => {
   return parsePositiveNumber(density.value) === null ? 'Nombre invalide' : undefined
 })
 
+const extrasStarted = computed(() => OPTIONAL_NUTRIENTS.some(({ key }) => extras[key].trim() !== ''))
+
+/** Une valeur facultative ne s'enregistre qu'avec les quatre macros : elle les rend donc requises. */
 const macrosStarted = computed(() =>
-  [calories.value, protein.value, carbohydrates.value, fat.value].some(v => v.trim() !== '')
+  [calories.value, protein.value, carbohydrates.value, fat.value].some(v => v.trim() !== '') || extrasStarted.value
 )
+
+function extraFieldError(key: OptionalNutrientKey) {
+  if (!submitted.value || !extras[key].trim()) return undefined
+  return parseNonNegativeNumber(extras[key]) === null ? 'Nombre invalide' : undefined
+}
 
 function macroFieldError(raw: string) {
   if (!submitted.value) return undefined
@@ -242,6 +263,7 @@ const isValid = computed(() => {
   if (macrosStarted.value && [calories.value, protein.value, carbohydrates.value, fat.value].some(v => parseNonNegativeNumber(v) === null)) {
     return false
   }
+  if (OPTIONAL_NUTRIENTS.some(({ key }) => extras[key].trim() && parseNonNegativeNumber(extras[key]) === null)) return false
   if (unitRows.value.some(r => !r.label.trim() || parsePositiveNumber(r.value) === null)) return false
   return true
 })
@@ -288,6 +310,10 @@ async function handleSubmit() {
         protein: parseNonNegativeNumber(protein.value)!,
         carbohydrates: parseNonNegativeNumber(carbohydrates.value)!,
         fat: parseNonNegativeNumber(fat.value)!,
+        // Une valeur facultative vidée disparaît : `valuesBy100` est remplacé en entier.
+        ...Object.fromEntries(OPTIONAL_NUTRIENTS
+          .filter(({ key }) => extras[key].trim())
+          .map(({ key }) => [key, parseNonNegativeNumber(extras[key])!])),
       }
     } else if (isEditMode.value) {
       // L'utilisateur a vidé les 4 champs alors que l'ingrédient avait des valeurs : on les retire.
@@ -379,6 +405,20 @@ async function handleSubmit() {
               <UInput v-model="fat" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" placeholder="ex : 0.2" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
             </UFormField>
           </div>
+
+          <UCollapsible v-model:open="extrasOpen" class="mt-3">
+            <button type="button" class="flex cursor-pointer items-center gap-1 text-xs text-dimmed hover:text-muted focus-visible:outline-2 focus-visible:outline-primary">
+              <UIcon name="i-lucide-chevron-right" class="size-3.5 transition-transform duration-200" :class="extrasOpen && 'rotate-90'" aria-hidden="true" />
+              Autres valeurs (facultatif)
+            </button>
+            <template #content>
+              <div class="grid grid-cols-2 gap-4 pt-3">
+                <UFormField v-for="nutrient in OPTIONAL_NUTRIENTS" :key="nutrient.key" :label="`${nutrient.label} (${nutrient.unit})`" :error="extraFieldError(nutrient.key)">
+                  <UInput v-model="extras[nutrient.key]" type="search" inputmode="decimal" enterkeyhint="done" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true" size="md" variant="outline" class="w-full" :ui="{ base: NAME_FIELD_BASE }" />
+                </UFormField>
+              </div>
+            </template>
+          </UCollapsible>
         </div>
 
         <!-- Disponibilité par mois -->

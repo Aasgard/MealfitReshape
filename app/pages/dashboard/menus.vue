@@ -133,6 +133,7 @@ const summary = computed(() => summarizeMenuWeek(entries.value, selectedWeekDayK
 
 /** Besoins en vigueur chaque jour (voir `targetsOn`) : un objectif changé en cours de semaine ne vaut qu'à partir de son jour. */
 const profile = useProfile()
+const { settings } = useAppSettings()
 const targetsOn = (dayKey: string) => profile.targetsOn(dayKey)
 /**
  * Objectif de la moyenne de la semaine : la moyenne (arrondie) des besoins de ses jours complets, les seuls que compte la
@@ -540,6 +541,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :extra-kcal="summary.averageExtraKcal"
           :macros="summary.macros"
           :complete-days="summary.completeDays"
+          :calcium-target="settings.trackCalcium ? profile.calciumTarget : null"
         />
 
         <!-- Semaines jusqu'à celle affichée : macros empilées et kcal moyennes, repliées par défaut. -->
